@@ -1,0 +1,56 @@
+pluginManagement {
+    repositories {
+        //镜像仓库(阿里云),加速国内访问,放在最前面优先命中
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        //原仓库
+        gradlePluginPortal()
+        mavenCentral()
+        //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
+        //maven { url "https://maven-central-asia.storage-download.googleapis.com/maven2/" }
+        //maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        //镜像仓库(阿里云),加速国内访问,放在最前面优先命中
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        //原仓库
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        maven {
+            url = 'https://jitpack.io'
+            content {
+                includeGroupByRegex("com\\.github.*")
+            }
+        }
+        mavenCentral()
+
+        //镜像仓库,无法连接源仓库自行启用镜像仓库,不要提交修改
+        //maven { url "https://maven-central-asia.storage-download.googleapis.com/maven2/" }
+        //maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+    }
+}
+rootProject.name = 'legado'
+
+include ':app'
+include ':modules:book'
+include ':modules:rhino'
