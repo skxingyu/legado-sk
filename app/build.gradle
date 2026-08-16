@@ -133,6 +133,19 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
+        sk2 {
+            initWith debug
+            if (project.hasProperty("RELEASE_STORE_FILE")) {
+                signingConfig signingConfigs.myConfig
+            }
+            manifestPlaceholders.put("app_name", "阅读SK")
+
+            applicationIdSuffix '.sk2'
+            versionNameSuffix 'sk2'
+            matchingFallbacks = ['debug']
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+        }
     }
     //noinspection GrDeprecatedAPIUsage
     flavorDimensions = ['mode']
