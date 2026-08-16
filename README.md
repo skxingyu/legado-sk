@@ -1,18 +1,14 @@
+<div align="center">
+
+> ⚠️ **本应用主要针对阅读、听书体验做优化更改，按个人喜好开发，不喜勿来。**
+
+</div>
+
 <table align="center">
   <tr>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/1.png" width="100%" alt="界面截图 1" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/2.png" width="100%" alt="界面截图 2" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/3.png" width="100%" alt="界面截图 3" /></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/4.png" width="100%" alt="界面截图 4" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/5.png" width="100%" alt="界面截图 5" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/6.png" width="100%" alt="界面截图 6" /></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/7.png" width="100%" alt="界面截图 7" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/8.png" width="100%" alt="界面截图 8" /></td>
-    <td align="center"><img src="https://github.com/CCSSNE/legadoC/raw/own/docs/9.png" width="100%" alt="界面截图 9" /></td>
+    <td align="center"><img src="docs/photo_2026-08-16_20-07-31.jpg" width="100%" alt="界面截图 1" /></td>
+    <td align="center"><img src="docs/photo_2026-08-16_20-07-32.jpg" width="100%" alt="界面截图 2" /></td>
+    <td align="center"><img src="docs/photo_2026-08-16_20-08-01.jpg" width="100%" alt="界面截图 3" /></td>
   </tr>
 </table>
 
