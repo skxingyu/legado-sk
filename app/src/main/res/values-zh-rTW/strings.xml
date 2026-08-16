@@ -97,7 +97,7 @@
         \u3000\u3000這是一款使用Kotlin全新開發的開源的閱讀軟體，歡迎您的加入。
     </string>
     <string name="app_share_description">
-        閱讀 C\nhttps://github.com/CCSSNE/legadoC
+        閱讀SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">Version %s</string>
     <string name="pt_background_verification">後臺校驗書源</string>
@@ -477,7 +477,6 @@
     <string name="theme">主題</string>
     <string name="theme_mode">主題模式</string>
     <string name="theme_mode_desc">選擇主題模式</string>
-    <string name="join_qq_group">加入QQ群</string>
     <string name="bg_image_per">獲取背景圖片需儲存權限</string>
     <string name="input_book_source_url">輸入書源網址</string>
     <string name="del_file">刪除文件</string>
@@ -956,10 +955,6 @@
     <string name="use_replace">使用取代</string>
     <string name="scope_title">作用於標題</string>
     <string name="scope_content">作用於正文</string>
-    <string name="join_qq_channel">加入QQ頻道</string>
-    <string name="qq_channel_summary">點擊加入閱讀QQ頻道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
-    <string name="telegram_channel_summary">長按複製 QQ 群號</string>
     <string name="menu_refresh_dur">重新整理目前章節</string>
     <string name="menu_refresh_after">重新整理之後章節</string>
     <string name="menu_refresh_all">重新整理全部章節</string>

@@ -20,6 +20,14 @@
 - **新增 `sk2` 构建变体**：`io.legado.app.sk2`（应用名「阅读SK」），可与正式版 `io.legado.app.c` 共存安装，方便测试
 - **启用阿里云镜像仓库**：`settings.gradle` 启用 `maven.aliyun.com` 镜像，加快依赖下载
 
+### 四、品牌与文档（10005）
+
+- 应用名统一为「阅读SK」（正式版 `io.legado.app.c` 桌面名由「阅读 C」改名为「阅读SK」）
+- 「关于」页移除 QQ 群入口与相关文案（不含任何交流群）
+- 「关于」页更新日志改为从本项目仓库（skxingyu/legado-sk）拉取
+- 应用内更新检查源改为本项目仓库的 Releases
+- README 重写为项目介绍 + 主要优化方向说明，并致谢 legadoC / legado 原作者
+
 ### 安装包
 
 | 文件 | 包名 | 说明 |

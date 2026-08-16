@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--App-->
-    <string name="app_name">阅读 C</string>
+    <string name="app_name">阅读SK</string>
     <string name="app_name_a">阅读R·A</string>
     <string name="app_name_s" translatable="false">阅读R Plus</string>
     <string name="receiving_shared_label">阅读R·搜索</string>
@@ -120,7 +120,7 @@
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
     </string>
     <string name="app_share_description">
-        阅读 C\nhttps://github.com/CCSSNE/legadoC
+        阅读SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">Version %s</string>
     <string name="pt_background_verification">Background-verification</string>
@@ -532,7 +532,6 @@
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="join_qq_group">Join QQ group</string>
     <string name="bg_image_per">Set the background image requires storage permission</string>
     <string name="input_book_source_url">Input book source address</string>
     <string name="del_file">Delete file</string>
@@ -1312,13 +1311,6 @@
     <string name="use_replace">Use replace</string>
     <string name="scope_title">Act on the title</string>
     <string name="scope_content">Act on the content</string>
-    <string name="join_qq_channel">Join QQ channel</string>
-    <string name="qq_channel_summary">点击加入阅读QQ频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
-    <string name="telegram_channel_summary">长按复制 QQ 群号</string>
-    <string name="qq_group_url">https://qun.qq.com/universal-share/share?ac=1&amp;authKey=DjJiNVMOKfQWe3Tz2pQhpzCWV79FiKXtG0ApFXK2xrW%2BMjMDk%2BXZT784JjNJq8TY&amp;busi_data=eyJncm91cENvZGUiOiIxMTAxODczMzM4IiwidG9rZW4iOiJOeVdUYWtZaUI1bG9oM21NNkUyUFFuc2hmODY5NUUxVjFkVmMrd0hYeDMyN1dyNXptWlp5UEVPOHA3dDRENGVSIiwidWluIjoiMjgzMTgzNTgzMSJ9&amp;data=kNYZB_IOxrKSE7bIMccDv9yiYlaW0blrCKX2ZIbs1RTo5SoT3tryoyBSOKOq6meXNocy0JYPuZW5qmJDtoCmAA&amp;svctype=4&amp;tempid=h5_group_info</string>
-    <string name="qq_group_number">1101873338</string>
-    <string name="qq_group_number_copied">群号已复制</string>
     <string name="menu_refresh_dur">Refresh the current chapter</string>
     <string name="menu_refresh_after">Refresh the chapter after</string>
     <string name="menu_refresh_all">Refresh all chapters</string>
@@ -1760,11 +1752,11 @@
     <string name="video_setting">视频设置</string>
     <string name="video_setting_summary">自动播放、全屏播放等配置</string>
     <string name="history">历史记录</string>
-    <string name="app_name_sigma">阅读 C</string>
+    <string name="app_name_sigma">阅读SK</string>
     <string name="about_description_sigma">主打优化听书体验</string>
-    <string name="contributors_summary_sigma">https://github.com/CCSSNE/legadoC</string>
+    <string name="contributors_summary_sigma">https://github.com/skxingyu/legado-sk</string>
     <string name="app_share_description_sigma">
-        阅读 C\nhttps://github.com/CCSSNE/legadoC
+        阅读SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="sure_cache_book">是否确认开始缓存？</string>
     <string name="non_printable_set">不可视字符设定</string>

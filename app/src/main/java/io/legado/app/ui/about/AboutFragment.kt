@@ -41,11 +41,6 @@ class AboutFragment : PreferenceFragmentCompat() {
         addPreferencesFromResource(R.xml.about)
         findPreference<Preference>("update_log")?.summary =
             "${getString(R.string.version)} ${appInfo.versionName}"
-        findPreference<io.legado.app.lib.prefs.Preference>("telegram")?.onLongClick {
-            requireContext().sendToClip(getString(R.string.qq_group_number))
-            toastOnUi(R.string.qq_group_number_copied)
-            true
-        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -56,7 +51,6 @@ class AboutFragment : PreferenceFragmentCompat() {
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             "contributors" -> openUrl(R.string.repo_url)
-            "telegram" -> openUrl(R.string.qq_group_url)
             "update_log" -> showUpdateLog()
             "mail" -> requireContext().sendMail(getString(R.string.email))
             "license" -> showMdFile(getString(R.string.license), "LICENSE.md")
@@ -92,7 +86,7 @@ class AboutFragment : PreferenceFragmentCompat() {
         return runCatching {
             val url = UpdateManager.resolveAcceleratedUrl(
                 requireContext(),
-                "https://raw.githubusercontent.com/CCSSNE/legadoC/own/README.md"
+                "https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md"
             )
             okHttpClient.newCallStrResponse(retry = 1) {
                 url(url)

@@ -23,7 +23,7 @@ import java.io.IOException
  */
 object UpdateManager {
 
-    private const val GITHUB_API = "https://api.github.com/repos/CCSSNE/legadoC/releases?per_page=30"
+    private const val GITHUB_API = "https://api.github.com/repos/skxingyu/legado-sk/releases?per_page=30"
     private const val MAX_BODY_LEN = 2000
 
     @Keep
