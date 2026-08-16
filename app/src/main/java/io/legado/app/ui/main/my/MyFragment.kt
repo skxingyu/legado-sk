@@ -251,7 +251,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                 }
 
                 PreferKey.updateCheckOnStart -> {
-                    if (requireContext().getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
+                    if (requireContext().getPrefBoolean(PreferKey.updateCheckOnStart, false)) {
                         val ctx = requireContext()
                         Coroutine.async {
                             UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)

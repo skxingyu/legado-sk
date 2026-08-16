@@ -296,7 +296,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             //版本更新
             upVersion()
             //自动检查更新
-            if (getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
+            if (getPrefBoolean(PreferKey.updateCheckOnStart, false)) {
                 UpdateManager.checkUpdate(this@MainActivity)
             }
             //设置本地密码
