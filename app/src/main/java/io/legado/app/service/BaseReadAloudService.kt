@@ -189,6 +189,15 @@ abstract class BaseReadAloudService : BaseService(),
                 upReadAloudNotification()
                 return
             }
+            if (AppConfig.readAloudHideFloatingInReadBook) {
+                if (isDesktopFloating) removeReadAloudFloatingWindow()
+                if (activity is ReadBookActivity) {
+                    removeReadAloudFloatingWindow()
+                } else {
+                    showAppReadAloudFloatingWindow()
+                }
+                return
+            }
             if (AppConfig.readAloudFloatOnDesktop && canDrawFloatingWindow()) {
                 if (!isDesktopFloating) {
                     removeAppReadAloudFloatingWindow()
@@ -251,6 +260,11 @@ abstract class BaseReadAloudService : BaseService(),
             return
         }
         if (floatingView != null) {
+            return
+        }
+        if (AppConfig.readAloudHideFloatingInReadBook) {
+            if (readBookActivityActive) return
+            showAppReadAloudFloatingWindow()
             return
         }
         if (canDrawFloatingWindow()) {
@@ -709,13 +723,21 @@ abstract class BaseReadAloudService : BaseService(),
         }
         observeEvent<Boolean>(EventBus.READ_BOOK_ACTIVITY_ACTIVE) {
             readBookActivityActive = it
-            if (it) {
-                appFloatingActivity = ReadBookActivity.activeActivity() ?: appFloatingActivity
-                showReadAloudFloatingWindow()
+            if (AppConfig.readAloudHideFloatingInReadBook) {
+                if (it) {
+                    removeReadAloudFloatingWindow()
+                } else if (appFloatingActivity != null) {
+                    showReadAloudFloatingWindow()
+                }
             } else {
-                currentAvoidanceSource = null
-                currentAvoidanceY = 0
-                applyReadAloudFloatingAvoidance(0)
+                if (it) {
+                    appFloatingActivity = ReadBookActivity.activeActivity() ?: appFloatingActivity
+                    showReadAloudFloatingWindow()
+                } else {
+                    currentAvoidanceSource = null
+                    currentAvoidanceY = 0
+                    applyReadAloudFloatingAvoidance(0)
+                }
             }
         }
         observeSharedPreferences { _, key ->
@@ -732,6 +754,10 @@ abstract class BaseReadAloudService : BaseService(),
                     rebuildReadAloudFloatingWindow()
                     upReadAloudNotification()
                     postEvent(PreferKey.readAloudHideFloatingWindow, "")
+                }
+                PreferKey.readAloudHideFloatingInReadBook -> {
+                    rebuildReadAloudFloatingWindow()
+                    postEvent(PreferKey.readAloudHideFloatingInReadBook, "")
                 }
             }
         }

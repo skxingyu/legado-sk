@@ -62,6 +62,14 @@
             android:title="@string/read_aloud_float_on_desktop"
             app:iconSpaceReserved="false" />
 
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="true"
+            android:dependency="readAloudHideFloatingWindow"
+            android:key="readAloudHideFloatingInReadBook"
+            android:summary="@string/read_aloud_hide_floating_in_read_book_summary"
+            android:title="@string/read_aloud_hide_floating_in_read_book"
+            app:iconSpaceReserved="false" />
+
         <io.legado.app.lib.prefs.Preference
             android:title="@string/sys_tts_config"
             android:summary="@string/sys_tts_config_summary"

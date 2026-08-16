@@ -263,6 +263,7 @@ object PreferKey {
     const val readAloudWakeLock = "readAloudWakeLock"
     const val readAloudHideFloatingWindow = "readAloudHideFloatingWindow"
     const val readAloudFloatOnDesktop = "readAloudFloatOnDesktop"
+    const val readAloudHideFloatingInReadBook = "readAloudHideFloatingInReadBook"
     const val readAloudFloatX = "readAloudFloatX"
     const val readAloudFloatY = "readAloudFloatY"
     const val showLastUpdateTime = "showLastUpdateTime"

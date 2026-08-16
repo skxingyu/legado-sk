@@ -183,6 +183,8 @@
     <string name="read_aloud_float_on_desktop_summary">在本 App 外显示朗读控制悬浮窗，需要悬浮窗权限；关闭时仅在阅读页内悬浮。</string>
     <string name="read_aloud_hide_floating_window">隐藏朗读悬浮窗</string>
     <string name="read_aloud_hide_floating_window_summary">不显示朗读控制悬浮窗，仅保留通知栏控制和前台服务通知用于保活。</string>
+    <string name="read_aloud_hide_floating_in_read_book">阅读界面内隐藏悬浮窗</string>
+    <string name="read_aloud_hide_floating_in_read_book_summary">仅在离开小说阅读界面时显示朗读悬浮窗，阅读时不再遮挡内容</string>
     <string name="read_aloud_original_progress">原进度</string>
     <string name="read_aloud_from_current_page">从本页听</string>
     <string name="playing_timer">正在播放（还剩 %d 分钟）</string>
