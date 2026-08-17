@@ -152,6 +152,14 @@ val Context.filletBackground: GradientDrawable
         return UiCorner.rounded(backgroundColor, UiCorner.panelRadius(this))
     }
 
+val Context.dialogSurfaceBackground: GradientDrawable
+    get() {
+        return UiCorner.opaqueRounded(
+            ContextCompat.getColor(this, R.color.dialog_surface),
+            UiCorner.panelRadius(this)
+        )
+    }
+
 fun Context.filletTopBackground(@ColorInt color: Int): GradientDrawable {
     val radius = UiCorner.scaledDp(16f)
     return GradientDrawable().apply {

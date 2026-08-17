@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -11,6 +13,7 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -30,6 +33,7 @@ import java.util.WeakHashMap
 private val preparedDialogWindowAlphas = WeakHashMap<Window, Float>()
 private val dialogBlurGenerations = WeakHashMap<Window, Int>()
 private val movedAlertTitlePanels = WeakHashMap<View, Boolean>()
+private const val NIGHT_DIALOG_DIM_ALPHA = 0.12f
 
 fun AlertDialog.applyTint(): AlertDialog {
     applyAlertSurface()
@@ -298,6 +302,50 @@ fun Dialog.applyAdaptiveDim(
     style: SurfaceStyle = SurfaceStyles.dialog(context)
 ) {
     applyDialogSurfaceBlur(surface, style)
+}
+
+/**
+ * 旧版（0813）对话框暗色遮罩：暗色模式下给宿主 Activity 背景加一层 12% 白色提亮，
+ * 用于「更换书源」等对话框恢复旧观感。
+ */
+fun Dialog.applyAdaptiveDim() {
+    if (AppConfig.isEInkMode) return
+    val isLightBackground = ColorUtils.isColorLight(
+        ContextCompat.getColor(context, R.color.background_card)
+    )
+    if (isLightBackground) return
+    val activity = context.findActivity() ?: return
+    val activityDecor = activity.window.decorView
+    val dimForeground = ColorDrawable(ColorUtils.withAlpha(Color.WHITE, NIGHT_DIALOG_DIM_ALPHA))
+    val dialogDecor = window?.decorView ?: return
+    fun addOverlay() {
+        val dialogWindow = window ?: return
+        val attr = dialogWindow.attributes
+        val hasWindowDim = attr.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0
+        if (!hasWindowDim || attr.dimAmount <= 0f) {
+            return
+        }
+        dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        attr.dimAmount = 0f
+        dialogWindow.attributes = attr
+        dimForeground.setBounds(0, 0, activityDecor.width, activityDecor.height)
+        activityDecor.overlay.add(dimForeground)
+    }
+    dialogDecor.post {
+        if (activityDecor.width > 0 && activityDecor.height > 0) {
+            addOverlay()
+        } else {
+            activityDecor.post { addOverlay() }
+        }
+    }
+    dialogDecor.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) = Unit
+
+        override fun onViewDetachedFromWindow(v: View) {
+            v.removeOnAttachStateChangeListener(this)
+            activityDecor.overlay.remove(dimForeground)
+        }
+    })
 }
 
 private fun Context.findActivity(): Activity? {

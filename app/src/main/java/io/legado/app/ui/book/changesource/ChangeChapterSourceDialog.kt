@@ -53,7 +53,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 
-class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source),
+class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source, useLegacySurfaceStyle = true),
     Toolbar.OnMenuItemClickListener,
     ChangeChapterSourceAdapter.CallBack,
     ChangeChapterTocAdapter.Callback {

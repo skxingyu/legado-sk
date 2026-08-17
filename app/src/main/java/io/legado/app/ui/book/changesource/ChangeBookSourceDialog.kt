@@ -57,7 +57,7 @@ import kotlinx.coroutines.launch
 /**
  * 换源界面
  */
-class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_source),
+class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_source, useLegacySurfaceStyle = true),
     Toolbar.OnMenuItemClickListener,
     ChangeBookSourceAdapter.CallBack {
 
