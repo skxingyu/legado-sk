@@ -54,7 +54,7 @@ dependencyResolutionManagement {
         //maven { url 'https://repo.huaweicloud.com/repository/maven/' }
     }
 }
-rootProject.name = 'legado'
+rootProject.name = 'legado-sk'
 
 include ':app'
 include ':modules:book'
