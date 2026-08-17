@@ -83,7 +83,7 @@ $versionName = '3.26.<MMddHH>' # appC automatically appends c
 ### 产物验证
 
 ```powershell
-$apk = 'D:\AI\audio\legadoC-own\app\build\outputs\apk\app\c\legado_app_<version>.apk'
+$apk = 'D:\code\legado-sk-build\app\build\outputs\apk\app\c\legado_sk_<version>_<code>.apk'
 & "$env:ANDROID_HOME\build-tools\36.0.0\aapt.exe" dump badging $apk
 & "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" verify --print-certs $apk
 ```
