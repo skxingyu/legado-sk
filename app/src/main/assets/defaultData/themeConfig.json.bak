@@ -1,0 +1,78 @@
+[
+  {
+    "accentColor": "#E53935",
+    "backgroundColor": "#F5F5F5",
+    "backgroundImgBlur": 0,
+    "bottomBackground": "#EEEEEE",
+    "isNightTheme": false,
+    "primaryColor": "#F1F2F6",
+    "themeName": "默认",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#AD1457",
+    "backgroundColor": "#F5F5F5",
+    "backgroundImgBlur": 0,
+    "bottomBackground": "#EEEEEE",
+    "isNightTheme": false,
+    "primaryColor": "#03A9F4",
+    "themeName": "典雅蓝",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#E0E0E0",
+    "backgroundColor": "#424242",
+    "backgroundImgBlur": 0,
+    "bottomBackground": "#424242",
+    "isNightTheme": true,
+    "primaryColor": "#303030",
+    "themeName": "黑白",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#FFFFFF",
+    "backgroundColor": "#000000",
+    "backgroundImgBlur": 0,
+    "bottomBackground": "#000000",
+    "isNightTheme": true,
+    "primaryColor": "#000000",
+    "themeName": "A屏黑",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#ff767573",
+    "backgroundColor": "#ffecebe9",
+    "backgroundImgBlur": 0,
+    "bookInfoBackgroundImgBlur": 12,
+    "bottomBackground": "#ffecebe9",
+    "fontScale": 11,
+    "isNightTheme": false,
+    "primaryColor": "#ffecebe9",
+    "themeName": "黑猫慢生活",
+    "titleFontPath": "",
+    "transparentNavBar": true,
+    "uiCornerReplyFollow": false,
+    "uiCornerScale": 1.0,
+    "uiCornerSearchFollow": false,
+    "uiFontPath": "",
+    "uiLayoutAlpha": 100
+  },
+  {
+    "accentColor": "#ff9e9e9e",
+    "backgroundColor": "#ff393a3e",
+    "backgroundImgBlur": 0,
+    "bookInfoBackgroundImgBlur": 12,
+    "bottomBackground": "#ff393a3e",
+    "fontScale": 11,
+    "isNightTheme": true,
+    "primaryColor": "#ff333333",
+    "themeName": "黯夜",
+    "titleFontPath": "",
+    "transparentNavBar": true,
+    "uiCornerReplyFollow": false,
+    "uiCornerScale": 1.0,
+    "uiCornerSearchFollow": false,
+    "uiFontPath": "",
+    "uiLayoutAlpha": 100
+  }
+]

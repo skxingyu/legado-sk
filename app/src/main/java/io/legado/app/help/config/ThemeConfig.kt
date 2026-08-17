@@ -481,9 +481,9 @@ object ThemeConfig {
     fun getDurConfig(context: Context): Config {
         val isNight = AppConfig.isNightTheme
         val name = if (isNight) {
-            context.getPrefString(PreferKey.dNThemeName) ?: ""
+            context.getPrefString(PreferKey.dNThemeName) ?: "黯夜"
         } else {
-            context.getPrefString(PreferKey.dThemeName) ?: ""
+            context.getPrefString(PreferKey.dThemeName) ?: "黑猫慢生活"
         }
         return if (isNight) {
             getNightTheme(context, name)
@@ -494,9 +494,9 @@ object ThemeConfig {
 
     fun getThemeConfig(context: Context, isNightTheme: Boolean): Config {
         val name = if (isNightTheme) {
-            context.getPrefString(PreferKey.dNThemeName) ?: ""
+            context.getPrefString(PreferKey.dNThemeName) ?: "黯夜"
         } else {
-            context.getPrefString(PreferKey.dThemeName) ?: ""
+            context.getPrefString(PreferKey.dThemeName) ?: "黑猫慢生活"
         }
         return if (isNightTheme) {
             getNightTheme(context, name)
