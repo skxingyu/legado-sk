@@ -1155,7 +1155,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var uiLayoutAlpha: Int
         get() = appCtx.getPrefInt(
             PreferKey.uiLayoutAlpha,
-            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 50)
+            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 20)
         ).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.uiLayoutAlpha, value.coerceIn(0, 100))
@@ -1168,13 +1168,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var dialogAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 50).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 20).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
         }
 
     var dialogBlur: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 100).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 50).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogBlur, value.coerceIn(0, 100))
         }
