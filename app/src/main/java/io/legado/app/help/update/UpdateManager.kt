@@ -4,14 +4,11 @@ import android.content.Context
 import androidx.annotation.Keep
 import io.legado.app.R
 import io.legado.app.constant.AppConst
-import io.legado.app.constant.PreferKey
 import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.Download
 import io.legado.app.utils.GSON
-import io.legado.app.utils.getPrefBoolean
-import io.legado.app.utils.getPrefString
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,7 +63,7 @@ object UpdateManager {
         showError: Boolean = false
     ): Boolean {
         return try {
-            val info = withContext(Dispatchers.IO) { fetchLatestRelease(context) }
+            val info = withContext(Dispatchers.IO) { fetchLatestRelease() }
             if (info == null) {
                 if (showUpToDate) withContext(Dispatchers.Main) {
                     context.toastOnUi(R.string.update_none)
@@ -83,8 +80,7 @@ object UpdateManager {
         }
     }
 
-    private suspend fun fetchLatestRelease(context: Context): UpdateInfo? {
-        val includePre = context.getPrefBoolean(PreferKey.updateCheckPre)
+    private suspend fun fetchLatestRelease(): UpdateInfo? {
         val resp = okHttpClient.newCallStrResponse(retry = 1) {
             url(GITHUB_API)
             header("Accept", "application/vnd.github+json")
@@ -92,8 +88,8 @@ object UpdateManager {
         }
         val body = resp.body ?: throw IOException("empty response")
         val releases = GSON.fromJson(body, Array<GitHubRelease>::class.java)?.toList() ?: emptyList()
-        // pre 开关决定是否接受预发布版本
-        val eligible = releases.filter { includePre || !it.prerelease }
+        // 固定排除预发布版本，只接受正式版
+        val eligible = releases.filter { !it.prerelease }
         // versionCode 必须从 APK 资产文件名解析（legado_app_3.26.081303_10539.apk -> 10539），
         // 不能从 tag 解析：tag 是版本名格式（v3.26.081303c），里面的数字是 MMddHH，
         // 提取出来会是 81303 这种假版本号，永远大于真实 versionCode，导致误报"发现新版本"。
@@ -112,7 +108,7 @@ object UpdateManager {
             tagName = best.release.tag_name ?: best.versionCode.toString(),
             versionCode = best.versionCode,
             fileName = best.asset.name ?: "legado-update.apk",
-            downloadUrl = resolveAcceleratedUrl(context, originalUrl),
+            downloadUrl = originalUrl,
             body = best.release.body
         )
     }
@@ -127,34 +123,10 @@ object UpdateManager {
             .find(name)?.groupValues?.get(1)?.toLongOrNull()
     }
 
-    /**
-     * 根据设置的加速源改写下载地址
-     */
-    fun resolveAcceleratedUrl(context: Context, originalUrl: String): String {
-        return when (context.getPrefString(PreferKey.updateAccelerator) ?: "ghfast") {
-            "ghproxy" -> "https://ghproxy.net/" + originalUrl
-            "gh-proxy" -> "https://gh-proxy.com/" + originalUrl
-            "ghfast" -> "https://ghfast.top/" + originalUrl
-            "custom" -> {
-                val prefix = context.getPrefString(PreferKey.updateAcceleratorCustom)
-                    ?.trim().orEmpty()
-                when {
-                    prefix.isBlank() -> originalUrl
-                    prefix.endsWith("/") -> prefix + originalUrl
-                    else -> "$prefix/" + originalUrl
-                }
-            }
-
-            else -> originalUrl
-        }
-    }
-
     private fun showUpdateDialog(context: Context, info: UpdateInfo) {
         context.alert(
             context.getString(R.string.update_dialog_title) + " v" + info.tagName,
-            info.body?.trim().orEmpty().take(MAX_BODY_LEN).ifBlank {
-                context.getString(R.string.update_check_on_start_desc)
-            }
+            info.body?.trim().orEmpty().take(MAX_BODY_LEN)
         ) {
             positiveButton(R.string.update_download) {
                 Download.start(context, info.downloadUrl, info.fileName)
