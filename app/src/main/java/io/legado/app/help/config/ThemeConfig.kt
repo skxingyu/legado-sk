@@ -52,10 +52,6 @@ import java.util.Locale
 @Keep
 object ThemeConfig {
 
-    private const val DEFAULT_BACKGROUND_ASSET = "defaultData/pre_default_background.png"
-    private const val DEFAULT_BACKGROUND_FILE = "pre_default_background.png"
-    private const val MISAPPLIED_READER_DAY_BACKGROUND_FILE = "护眼漫绿.jpg"
-    private const val MISAPPLIED_READER_NIGHT_BACKGROUND_FILE = "宁静夜色.jpg"
     private const val DEFAULT_DAY_PRIMARY = 0xFFF1F2F6.toInt()
     private const val DEFAULT_NIGHT_PRIMARY = 0xFF252528.toInt()
     private const val DEFAULT_DAY_PRIMARY_HEX = "#F1F2F6"
@@ -74,43 +70,11 @@ object ThemeConfig {
     private var needClearImg = true
 
     /**
-     * Installs the packaged Pre wallpaper only for theme slots that have never
-     * been configured. An explicit empty value means the user removed it.
+     * 阅读SK：不再内置默认背景壁纸（原 pre_default_background.png 彩色底图已移除），
+     * 新装默认无背景图，使用主题纯色背景。保留函数签名以兼容 App.kt 调用。
      */
     fun installDefaultBackgrounds(context: Context) {
-        val preferences = context.defaultSharedPreferences
-        val defaultDir = File(context.filesDir, "defaultData")
-        val misappliedDayPath = File(
-            defaultDir,
-            MISAPPLIED_READER_DAY_BACKGROUND_FILE
-        ).absolutePath
-        val misappliedNightPath = File(
-            defaultDir,
-            MISAPPLIED_READER_NIGHT_BACKGROUND_FILE
-        ).absolutePath
-        val needsDayBackground = !preferences.contains(PreferKey.bgImage) ||
-            preferences.getString(PreferKey.bgImage, null) == misappliedDayPath
-        val needsNightBackground = !preferences.contains(PreferKey.bgImageN) ||
-            preferences.getString(PreferKey.bgImageN, null) == misappliedNightPath
-        if (!needsDayBackground && !needsNightBackground) return
-
-        val backgroundFile = File(context.filesDir, "defaultData/$DEFAULT_BACKGROUND_FILE")
-        if (!backgroundFile.isFile || backgroundFile.length() == 0L) {
-            runCatching {
-                backgroundFile.parentFile?.mkdirs()
-                context.assets.open(DEFAULT_BACKGROUND_ASSET).use { input ->
-                    backgroundFile.outputStream().use(input::copyTo)
-                }
-            }.onFailure {
-                AppLog.put("Install default theme background failed", it, true)
-            }
-        }
-        if (!backgroundFile.isFile || backgroundFile.length() == 0L) return
-
-        preferences.edit {
-            if (needsDayBackground) putString(PreferKey.bgImage, backgroundFile.absolutePath)
-            if (needsNightBackground) putString(PreferKey.bgImageN, backgroundFile.absolutePath)
-        }
+        // no-op：不安装任何默认背景图
     }
 
     fun getTheme() = when {
