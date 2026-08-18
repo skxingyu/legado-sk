@@ -1,5 +1,25 @@
 # 更新日志 / CHANGELOG
 
+## 3.26.0816c（versionCode 10009）— 2026-08-18
+
+### 九、安装包精简（体积 37.5MB → 24.6MB，-34%）
+
+- **开启 R8 代码裁剪 + 资源收缩**（`minifyEnabled true` + `shrinkResources true`）：dex 从 24 个降至 4 个，未使用的资源自动剔除
+- **补充 WebView JS 桥 keep 规则**：`WebCacheManager` / `WebViewActivity$JSInterface` / `ReadRssActivity$JSInterface` 方法名不混淆，保证 Web 阅读/浏览器书源注入正常
+- **默认封面图转 WebP**：`image_cover_default_night.png`（2.53MB）→ WebP q85（121KB），代码引用不变，视觉无差异
+- 其余沿用 legadoC 上游自带 172 行 proguard 规则（JS 引擎 / 数据类 / 书源引擎 / Jsoup / 播放器 / 语法高亮等）
+- ⚠️ R8 裁剪涉及重反射应用，**新装后请重点回归**：书源搜索 / 换源 / 朗读 / WebDAV 同步 / 漫画 / Web 阅读
+
+### 安装包
+
+| 文件 | 包名 | 说明 |
+|---|---|---|
+| `legado_sk_3.26.0816c_10009_arm64-v8a.apk` | `io.legado.app.c` | 正式版（24.6MB，可覆盖升级，保留数据） |
+
+> 提示：从旧版（release 签名）升级时若遇签名不兼容，可用本仓库提供的数据迁移方案（详见 README），或先在应用内备份导出再导入。
+
+---
+
 ## 3.26.0816c（versionCode 10008）— 2026-08-17
 
 ### 八、移除默认背景壁纸
