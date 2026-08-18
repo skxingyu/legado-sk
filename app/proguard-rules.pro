@@ -170,3 +170,13 @@ cn.hutool.core.util.**{*;}
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
+
+#############################################
+#
+# 阅读SK 补充规则（R8 裁剪保障）
+#
+#############################################
+# WebView JS 桥——JS 通过注入对象的方法名调用，混淆会改名导致 JS 调用失败
+-keep class io.legado.app.help.CacheManager$WebCacheManager { *; }
+-keep class io.legado.app.ui.browser.WebViewActivity$JSInterface { *; }
+-keep class io.legado.app.ui.rss.read.ReadRssActivity$JSInterface { *; }

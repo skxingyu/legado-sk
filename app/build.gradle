@@ -130,7 +130,8 @@ android {
             applicationIdSuffix '.c'
             versionNameSuffix 'c'
             matchingFallbacks = ['debug']
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         sk2 {
