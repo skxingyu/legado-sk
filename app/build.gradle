@@ -130,8 +130,9 @@ android {
             applicationIdSuffix '.c'
             versionNameSuffix 'c'
             matchingFallbacks = ['debug']
-            minifyEnabled true
-            shrinkResources true
+            // 10010 起回退 R8：legado 重反射体系与混淆不兼容导致运行时卡顿
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         sk2 {
