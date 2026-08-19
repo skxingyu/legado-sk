@@ -350,9 +350,10 @@ object ThemeConfig {
             config.uiCornerScale?.let {
                 context.putPrefString(PreferKey.uiCornerScale, it.coerceIn(0f, 3f).toPlainScale())
             }
-            config.uiLayoutAlpha?.let {
-                context.putPrefInt(PreferKey.uiLayoutAlpha, it.coerceIn(0, 100))
-            }
+            // SK 定制：全局界面透明度强制为 0（不可调整），不再写入偏好
+            // config.uiLayoutAlpha?.let {
+            //     context.putPrefInt(PreferKey.uiLayoutAlpha, it.coerceIn(0, 100))
+            // }
             config.uiCornerSearchFollow?.let {
                 context.putPrefBoolean(PreferKey.uiCornerSearchFollow, it)
             }
@@ -504,7 +505,7 @@ object ThemeConfig {
                 bookInfoBackgroundImgPath = bookInfoBgImgPath,
                 bookInfoBackgroundImgBlur = bookInfoBgImgBlur,
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
-                uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
+                uiLayoutAlpha = AppConfig.uiLayoutAlpha, // SK 定制：全局界面透明度强制为 0
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
                 uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: AppConfig.uiCornerReplyFollow,
                 fontScale = stored?.fontScale ?: appCtx.getPrefInt(PreferKey.fontScale, 0),
@@ -559,7 +560,7 @@ object ThemeConfig {
                 bookInfoBackgroundImgPath = bookInfoBgImgPath,
                 bookInfoBackgroundImgBlur = bookInfoBgImgBlur,
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
-                uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
+                uiLayoutAlpha = AppConfig.uiLayoutAlpha, // SK 定制：全局界面透明度强制为 0
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
                 uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: AppConfig.uiCornerReplyFollow,
                 fontScale = stored?.fontScale ?: appCtx.getPrefInt(PreferKey.fontScale, 0),
@@ -584,7 +585,7 @@ object ThemeConfig {
                 config.backgroundImgBlur
             },
             uiCornerScale = config.uiCornerScale ?: stored.uiCornerScale,
-            uiLayoutAlpha = config.uiLayoutAlpha ?: stored.uiLayoutAlpha,
+            uiLayoutAlpha = AppConfig.uiLayoutAlpha, // SK 定制：全局界面透明度强制为 0
             uiCornerSearchFollow = config.uiCornerSearchFollow ?: stored.uiCornerSearchFollow,
             uiCornerReplyFollow = config.uiCornerReplyFollow ?: stored.uiCornerReplyFollow,
             fontScale = config.fontScale ?: stored.fontScale,

@@ -1,5 +1,24 @@
 # 更新日志 / CHANGELOG
 
+## 3.26.0816c（versionCode 10011）— 2026-08-19
+
+### 十一、界面透明度优化（默认 0 / 20% / 50%）
+
+- **全局界面透明度强制为 0 且不可调整**：界面设置中移除该选项；`AppConfig.uiLayoutAlpha` 现在恒返回 0、setter 为空操作；主题包编辑页隐藏该行；主题包导入/导出与备份均不再携带该值（避免被旧主题包覆盖回非零）
+- **弹窗透明度默认 20%**（原默认 15%，`AppConfig.dialogAlpha` 与偏好默认值同步，`pref_config_theme.xml` 默认值改为 20）
+- **书架封面透明度默认 20%**（原默认 15%，同上）
+- **弹窗模糊度默认 50%**（原默认 100，同上）
+- 三处默认值均保留可调；仅全局界面透明度被锁死为 0（保持完全不透明底图，规避半透明叠加带来的视觉与性能问题）
+- 改动文件：`AppConfig.kt`、`ThemeConfigFragment.kt`、`ThemeManageActivity.kt`、`pref_config_theme.xml`、`ThemeConfig.kt`、`BackupConfig.kt`
+
+### 安装包
+
+| 文件 | 包名 | 说明 |
+|---|---|---|
+| `legado_sk_3.26.0816c_10011_arm64-v8a.apk` | `io.legado.app.c` | 正式版（36.8MB，可覆盖升级，保留数据） |
+
+---
+
 ## 3.26.0816c（versionCode 10010）— 2026-08-18
 
 ### 十、回退 R8 裁剪，保留 WebP 图片优化（体积 24.6MB → 35.1MB）

@@ -130,7 +130,6 @@ class ThemeConfigFragment : PreferenceFragment(),
         upPreferenceSummary(PreferKey.bookInfoBgImageN, getPrefString(PreferKey.bookInfoBgImageN))
         upPreferenceSummary(PreferKey.dialogAlpha)
         upPreferenceSummary(PreferKey.dialogBlur)
-        upPreferenceSummary(PreferKey.uiLayoutAlpha)
         upPreferenceSummary(PreferKey.bookshelfCoverAlpha)
         findPreference<ColorPreference>(PreferKey.cBackground)?.let {
             it.onSaveColor = { color ->
@@ -193,10 +192,6 @@ class ThemeConfigFragment : PreferenceFragment(),
         when (key) {
             PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(getPrefString(key))
             PreferKey.mainTransparentStatusBar -> recreateActivities()
-            PreferKey.uiLayoutAlpha -> {
-                upPreferenceSummary(PreferKey.uiLayoutAlpha)
-                recreateActivities()
-            }
             PreferKey.bookshelfCoverAlpha -> {
                 upPreferenceSummary(PreferKey.bookshelfCoverAlpha)
                 recreateActivities()
@@ -246,7 +241,6 @@ class ThemeConfigFragment : PreferenceFragment(),
             PreferKey.bookInfoBgImageN -> selectBookInfoBgAction(true)
             PreferKey.dialogAlpha -> showDialogAlphaDialog()
             PreferKey.dialogBlur -> showDialogBlurDialog()
-            PreferKey.uiLayoutAlpha -> showUiLayoutAlphaDialog()
             PreferKey.bookshelfCoverAlpha -> showBookshelfCoverAlphaDialog()
             "themeList" -> startActivity<ThemeManageActivity>()
             "theme_manage" -> startActivity<ThemeManageActivity>()
@@ -264,20 +258,6 @@ class ThemeConfigFragment : PreferenceFragment(),
 
         }
         return super.onPreferenceTreeClick(preference)
-    }
-
-    private fun showUiLayoutAlphaDialog() {
-        SeekBarDialog(requireContext())
-            .setTitle(getString(R.string.ui_layout_alpha))
-            .setMaxValue(100)
-            .setMinValue(0)
-            .setValue(AppConfig.uiLayoutAlpha)
-            .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.uiLayoutAlpha, 50)
-            }
-            .show {
-                putPrefInt(PreferKey.uiLayoutAlpha, it.coerceIn(0, 100))
-            }
     }
 
     private fun showBookshelfCoverAlphaDialog() {
@@ -325,7 +305,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogAlpha)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogAlpha, 50)
+                putPrefInt(PreferKey.dialogAlpha, 20)
             }
             .show {
                 putPrefInt(PreferKey.dialogAlpha, it.coerceIn(0, 100))
@@ -339,7 +319,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogBlur)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogBlur, 100)
+                putPrefInt(PreferKey.dialogBlur, 50)
             }
             .show {
                 putPrefInt(PreferKey.dialogBlur, it.coerceIn(0, 100))
@@ -462,11 +442,6 @@ class ThemeConfigFragment : PreferenceFragment(),
             } else {
                 value
             }
-
-            PreferKey.uiLayoutAlpha -> preference.summary = getString(
-                R.string.ui_layout_alpha_value,
-                AppConfig.uiLayoutAlpha
-            )
 
             PreferKey.bookshelfCoverAlpha -> preference.summary = getString(
                 R.string.bookshelf_cover_alpha_value,

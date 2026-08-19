@@ -1153,12 +1153,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiLayoutAlpha: Int
-        get() = appCtx.getPrefInt(
-            PreferKey.uiLayoutAlpha,
-            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 20)
-        ).coerceIn(0, 100)
+        // SK 定制：全局界面透明度强制为 0（完全不透明），不可调整
+        get() = 0
         set(value) {
-            appCtx.putPrefInt(PreferKey.uiLayoutAlpha, value.coerceIn(0, 100))
+            // no-op：忽略任何写入，保证恒为 0
         }
 
     var bookshelfCoverAlpha: Int
