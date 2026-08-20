@@ -38,20 +38,13 @@ import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.AppConst
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.help.IntentHelp
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
-import io.legado.app.help.book.isLocal
-import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.ui.book.audio.AudioPlayActivity
-import io.legado.app.ui.video.VideoPlayerActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
-import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.toc.BookTocLoadingActivity
 import splitties.systemservices.clipboardManager
 import splitties.systemservices.connectivityManager
@@ -59,6 +52,8 @@ import splitties.systemservices.uiModeManager
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.system.exitProcess
+
+private const val MAX_CLIPBOARD_TEXT_BYTES = 512 * 1024
 
 inline fun <reified A : Activity> Context.startActivity(configIntent: Intent.() -> Unit = {}) {
     val intent = Intent(this, A::class.java)
@@ -76,17 +71,12 @@ fun Context.startActivityForBook(
             putExtra("name", book.name)
             putExtra("author", book.author)
             putExtra("bookUrl", book.bookUrl)
+            putExtra(BookMediaType.EXTRA_MEDIA_TYPE, BookMediaType.fromBookType(book.type))
             apply(configIntent)
         }
         return
     }
-    val cls = when {
-        book.isVideo -> VideoPlayerActivity::class.java
-        book.isAudio -> AudioPlayActivity::class.java
-        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
-        else -> ReadBookActivity::class.java
-    }
-    val intent = Intent(this, cls)
+    val intent = Intent(this, book.defaultReadingActivityClass())
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     intent.putExtra("bookUrl", book.bookUrl)
     intent.apply(configIntent)
@@ -395,9 +385,46 @@ fun Context.shareWithQr(
 }
 
 fun Context.sendToClip(text: String) {
-    val clipData = ClipData.newPlainText(null, text)
+    val tooLarge = text.toByteArray(Charsets.UTF_8).size > MAX_CLIPBOARD_TEXT_BYTES
+    val clippedText = if (tooLarge) {
+        text.takeUtf8Bytes(MAX_CLIPBOARD_TEXT_BYTES)
+    } else {
+        text
+    }
+    val clipData = ClipData.newPlainText(null, clippedText)
     clipboardManager.setPrimaryClip(clipData)
-    longToastOnUi(R.string.copy_complete)
+    if (!tooLarge) {
+        longToastOnUi(R.string.copy_complete)
+    } else {
+        longToastOnUi(
+            getString(
+                R.string.copy_too_large,
+                MAX_CLIPBOARD_TEXT_BYTES / 1024
+            )
+        )
+    }
+}
+
+private fun String.takeUtf8Bytes(maxBytes: Int): String {
+    if (toByteArray(Charsets.UTF_8).size <= maxBytes) return this
+    var index = 0
+    var usedBytes = 0
+    while (index < length) {
+        val nextIndex = if (
+            Character.isHighSurrogate(this[index]) &&
+            index + 1 < length &&
+            Character.isLowSurrogate(this[index + 1])
+        ) {
+            index + 2
+        } else {
+            index + 1
+        }
+        val nextBytes = substring(index, nextIndex).toByteArray(Charsets.UTF_8).size
+        if (usedBytes + nextBytes > maxBytes) break
+        usedBytes += nextBytes
+        index = nextIndex
+    }
+    return substring(0, index) + "\n\n[clipboard content truncated]"
 }
 
 fun Context.getClipText(): String? {

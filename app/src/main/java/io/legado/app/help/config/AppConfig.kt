@@ -54,6 +54,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
     var editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
     var isEInkMode = appCtx.getPrefString(PreferKey.themeMode) == "3"
+        private set
     var clickActionTL = appCtx.getPrefInt(PreferKey.clickActionTL, 2)
     var clickActionTC = appCtx.getPrefInt(PreferKey.clickActionTC, 14)
     var clickActionTR = appCtx.getPrefInt(PreferKey.clickActionTR, 1)
@@ -63,7 +64,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var clickActionBL = appCtx.getPrefInt(PreferKey.clickActionBL, 2)
     var clickActionBC = appCtx.getPrefInt(PreferKey.clickActionBC, 0)
     var clickActionBR = appCtx.getPrefInt(PreferKey.clickActionBR, 1)
-    var themeMode = appCtx.getPrefString(PreferKey.themeMode, "1")
+    var themeMode = appCtx.getPrefString(PreferKey.themeMode, "0")
+        private set
     var useDefaultCover = appCtx.getPrefBoolean(PreferKey.useDefaultCover, false)
     var loadCoverHighQuality = appCtx.getPrefBoolean(PreferKey.loadCoverHighQuality, false)
     var optimizeRender = CanvasRecorderFactory.isSupport
@@ -86,8 +88,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             PreferKey.adaptSpecialStyle -> adaptSpecialStyle = appCtx.getPrefBoolean(PreferKey.adaptSpecialStyle, true)
 
             PreferKey.themeMode -> {
-                themeMode = appCtx.getPrefString(PreferKey.themeMode, "1")
-                isEInkMode = themeMode == "3"
+                updateThemeModeCache(appCtx.getPrefString(PreferKey.themeMode, "0") ?: "0")
             }
 
             PreferKey.clickActionTL -> clickActionTL =
@@ -186,22 +187,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                 ?.getOrNull()
         }
 
-    var isNightTheme: Boolean
+    val isNightTheme: Boolean
         get() = when (themeMode) {
             "1" -> false
             "2" -> true
             "3" -> false
             else -> sysConfiguration.isNightMode
         }
-        set(value) {
-            if (isNightTheme != value) {
-                if (value) {
-                    appCtx.putPrefString(PreferKey.themeMode, "2")
-                } else {
-                    appCtx.putPrefString(PreferKey.themeMode, "1")
-                }
-            }
-        }
+
+    internal fun updateThemeModeCache(mode: String) {
+        themeMode = mode
+        isEInkMode = mode == "3"
+    }
     var showBookname: Int
         get() = appCtx.getPrefInt(PreferKey.showBooknameLayout, 0)
         set(value) {
@@ -335,7 +332,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.modernDiscoveryPage, true)
 
     val modernRssPage: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.modernRssPage, true)
+        get() = appCtx.getPrefBoolean(PreferKey.modernRssPage, false)
 
     val mergeDiscoveryRss: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.mergeDiscoveryRss, false)
@@ -370,6 +367,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val showRSS: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showRss, false)
+
+    val showRssPageInSettings: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showRssPageInSettings, true)
 
     val showReadRecord: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showReadRecord, true)
@@ -1166,12 +1166,14 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var dialogAlpha: Int
+        // SK 定制：默认 20%
         get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 20).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
         }
 
     var dialogBlur: Int
+        // SK 定制：默认 50
         get() = appCtx.getPrefInt(PreferKey.dialogBlur, 50).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogBlur, value.coerceIn(0, 100))
@@ -1485,6 +1487,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val syncBookProgress get() = appCtx.getPrefBoolean(PreferKey.syncBookProgress, true)
 
+    // SK 定制：阅读进度同步增强默认开启
     val syncBookProgressPlus get() = appCtx.getPrefBoolean(PreferKey.syncBookProgressPlus, true)
 
     val mediaButtonOnExit get() = appCtx.getPrefBoolean("mediaButtonOnExit", true)
@@ -1492,14 +1495,109 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudByMediaButton
         get() = appCtx.getPrefBoolean(PreferKey.readAloudByMediaButton, false)
 
+    val readAloudCoverRotation
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudCoverRotation, true)
+
+    // 听书播放页（AudioPlayActivity）顶部标题显示，文字书 TTS 与书源音频共用，默认章节名
+    const val AUDIO_PLAY_TOP_TITLE_BOOK = 0
+    const val AUDIO_PLAY_TOP_TITLE_CHAPTER = 1
+
+    var audioPlayTopTitleMode: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.audioPlayTopTitleMode,
+            AUDIO_PLAY_TOP_TITLE_CHAPTER
+        ).let { if (it == AUDIO_PLAY_TOP_TITLE_CHAPTER) it else AUDIO_PLAY_TOP_TITLE_BOOK }
+        set(value) = appCtx.putPrefInt(
+            PreferKey.audioPlayTopTitleMode,
+            if (value == AUDIO_PLAY_TOP_TITLE_CHAPTER) value else AUDIO_PLAY_TOP_TITLE_BOOK
+        )
+
+    // 听书播放页下方章节名是否显示，默认关闭，隐藏后正文区域向下扩展
+    var audioPlayShowChapterTitle: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.audioPlayShowChapterTitle, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.audioPlayShowChapterTitle, value)
+
+    // 听书播放页文字字号（px），默认 50，与历史正文行号一致
+    var audioPlayTextSize: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.audioPlayTextSize,
+            DEFAULT_AUDIO_PLAY_TEXT_SIZE
+        ).coerceIn(MIN_AUDIO_PLAY_TEXT_SIZE, MAX_AUDIO_PLAY_TEXT_SIZE)
+        set(value) = appCtx.putPrefInt(PreferKey.audioPlayTextSize, value)
+
+    // 听书播放页当前朗读行放大倍率（%），默认 120（60/50）
+    var audioPlayTextZoom: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.audioPlayTextZoom,
+            DEFAULT_AUDIO_PLAY_TEXT_ZOOM
+        ).coerceIn(MIN_AUDIO_PLAY_TEXT_ZOOM, MAX_AUDIO_PLAY_TEXT_ZOOM)
+        set(value) = appCtx.putPrefInt(PreferKey.audioPlayTextZoom, value)
+
+    const val DEFAULT_AUDIO_PLAY_TEXT_SIZE = 50
+    const val MIN_AUDIO_PLAY_TEXT_SIZE = 32
+    const val MAX_AUDIO_PLAY_TEXT_SIZE = 90
+    const val DEFAULT_AUDIO_PLAY_TEXT_ZOOM = 120
+    const val MIN_AUDIO_PLAY_TEXT_ZOOM = 100
+    const val MAX_AUDIO_PLAY_TEXT_ZOOM = 180
+
+    const val DEFAULT_READ_ALOUD_COVER_ROTATION_DURATION = 10000
+    const val MIN_READ_ALOUD_COVER_ROTATION_DURATION = 100
+    const val MAX_READ_ALOUD_COVER_ROTATION_DURATION = 60000
+
+    var readAloudCoverRotationDuration: Int
+        get() {
+            val duration = appCtx.getPrefInt(
+                PreferKey.readAloudCoverRotationDuration,
+                DEFAULT_READ_ALOUD_COVER_ROTATION_DURATION
+            )
+            check(duration in MIN_READ_ALOUD_COVER_ROTATION_DURATION..MAX_READ_ALOUD_COVER_ROTATION_DURATION) {
+                "Invalid read-aloud cover rotation duration: $duration"
+            }
+            return duration
+        }
+        set(value) {
+            require(value in MIN_READ_ALOUD_COVER_ROTATION_DURATION..MAX_READ_ALOUD_COVER_ROTATION_DURATION) {
+                "Read-aloud cover rotation duration is out of range: $value"
+            }
+            appCtx.putPrefInt(PreferKey.readAloudCoverRotationDuration, value)
+        }
+
     val readAloudFloatOnDesktop
         get() = appCtx.getPrefBoolean(PreferKey.readAloudFloatOnDesktop, false)
 
     val readAloudHideFloatingWindow
         get() = appCtx.getPrefBoolean(PreferKey.readAloudHideFloatingWindow, true)
 
-    val readAloudHideFloatingInReadBook
-        get() = appCtx.getPrefBoolean(PreferKey.readAloudHideFloatingInReadBook, true)
+    val readAloudHidePlaybackPanel
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudHidePlaybackPanel, false)
+
+    const val DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION = 10
+    const val MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION = 1
+    const val MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION = 300
+
+    var readAloudPlaybackPanelDuration: Int
+        get() {
+            val duration = appCtx.getPrefInt(
+                PreferKey.readAloudPlaybackPanelDuration,
+                DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION
+            )
+            check(duration in MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION..MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION) {
+                "Invalid read-aloud playback panel duration: $duration"
+            }
+            return duration
+        }
+        set(value) {
+            require(value in MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION..MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION) {
+                "Read-aloud playback panel duration is out of range: $value"
+            }
+            appCtx.putPrefInt(PreferKey.readAloudPlaybackPanelDuration, value)
+        }
+
+    val readAloudHidePagePanel
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudHidePagePanel, false)
+
+    val readAloudPanelOnPageFooter
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudPanelOnPageFooter, true)
 
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
@@ -1512,6 +1610,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) = appCtx.putPrefBoolean(PreferKey.syncThemePackages, value)
 
     val recordHeapDump get() = appCtx.getPrefBoolean(PreferKey.recordHeapDump, false)
+
+    val disableSourceToast
+        get() = appCtx.getPrefBoolean(PreferKey.disableSourceToast, false)
+
+    val disableAllToast
+        get() = appCtx.getPrefBoolean(PreferKey.disableAllToast, false)
 
     val loadCoverOnlyWifi get() = appCtx.getPrefBoolean(PreferKey.loadCoverOnlyWifi, false)
 
@@ -1585,6 +1689,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.readAloudDoubleTapTimeout, value.coerceIn(120, 600))
         }
 
+    var readAloudScrollFollowTimeout: Int
+        get() = appCtx.getPrefInt(PreferKey.readAloudScrollFollowTimeout, 3000).coerceIn(0, 10000)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.readAloudScrollFollowTimeout, value.coerceIn(0, 10000))
+        }
+
+    var readAloudProgressPollInterval: Int
+        get() = appCtx.getPrefInt(PreferKey.readAloudProgressPollInterval, 500).coerceIn(100, 5000)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.readAloudProgressPollInterval, value.coerceIn(100, 5000))
+        }
+
     var bookshelfSort: Int
         get() = appCtx.getPrefInt(PreferKey.bookshelfSort, 0)
         set(value) {
@@ -1654,12 +1770,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
         set(value) {
             appCtx.putPrefInt(PreferKey.sourceEditMaxLine, value)
-        }
-
-    var audioPlayUseWakeLock: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.audioPlayWakeLock)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.audioPlayWakeLock, value)
         }
 
     var brightnessVwPos: Boolean

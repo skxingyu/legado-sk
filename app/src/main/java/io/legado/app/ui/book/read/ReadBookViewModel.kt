@@ -15,7 +15,9 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.ai.AiChapterPurifyService
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.CacheManifestHelper
@@ -293,18 +295,18 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             AppLog.put("拉取阅读进度失败《${book.name}》\n${it.localizedMessage}", it)
         }.onSuccess { progress ->
             progress ?: return@onSuccess
-            if (progress.durChapterIndex == book.durChapterIndex && progress.durChapterPos == book.durChapterPos) {
-                return@onSuccess
-            }
-            if (progress.durChapterIndex < book.durChapterIndex ||
-                (progress.durChapterIndex == book.durChapterIndex
-                        && progress.durChapterPos < book.durChapterPos)
-            ) {
-                alertSync?.invoke(progress)
-            } else if (progress.durChapterIndex < book.simulatedTotalChapterNum()) {
-                ReadBook.setProgress(progress)
-                AppLog.put("自动同步阅读进度成功《${book.name}》 ${progress.durChapterTitle}")
-                context.toastOnUi("已同步最新阅读进度")
+            when (progress.compareWith(book)) {
+                BookProgressComparison.LOCAL_NEWER -> {
+                    alertSync?.invoke(progress)
+                }
+                BookProgressComparison.REMOTE_NEWER -> {
+                    if (progress.durChapterIndex < book.simulatedTotalChapterNum()) {
+                        ReadBook.setProgress(progress)
+                        AppLog.put("自动同步阅读进度成功《${book.name}》 ${progress.durChapterTitle}")
+                        context.toastOnUi("已同步最新阅读进度")
+                    }
+                }
+                BookProgressComparison.SAME -> Unit
             }
         }
     }
@@ -389,6 +391,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         Coroutine.async {
             book?.let {
                 BookHelp.clearCache(it)
+                // 移出书架：一并清空该书的净化记录
+                AiChapterPurifyService.dropBookRecords(it)
                 it.delete()
             }
         }.onSuccess {
@@ -462,6 +466,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 stringBuilder.insert(0, it)
             }
             BookHelp.saveText(book, chapter, stringBuilder.toString())
+            // 反转内容 = 用户主动改写缓存原文：更新章节净化指纹，不触发 AI 重跑
+            AiChapterPurifyService.markChapterEdited(book, chapter.index)
             ReadBook.loadContent(ReadBook.durChapterIndex, resetPageOffset = false)
         }
     }

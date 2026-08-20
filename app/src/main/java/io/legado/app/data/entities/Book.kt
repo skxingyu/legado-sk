@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import io.legado.app.constant.AppPattern
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.appDb
@@ -35,7 +36,7 @@ import kotlin.math.max
 @TypeConverters(Book.Converters::class)
 @Entity(
     tableName = "books",
-    indices = [Index(value = ["name", "author"], unique = true)]
+    indices = [Index(value = ["name", "author", "mediaType"], unique = true)]
 )
 data class Book(
     // 详情页Url(本地书源存储完整文件路径)
@@ -74,6 +75,10 @@ data class Book(
     // 类型,详见BookType
     @ColumnInfo(defaultValue = "0")
     var type: Int = BookType.text,
+    // Stable identity category. Mutable state flags remain in type.
+    @ColumnInfo(defaultValue = "0")
+    @BookMediaType.Type
+    var mediaType: Int = BookMediaType.fromBookType(type),
     // 自定义分组索引号
     @ColumnInfo(defaultValue = "0")
     var group: Long = 0,
@@ -174,6 +179,10 @@ data class Book(
 
     fun getDisplayIntro() = if (customIntro.isNullOrEmpty()) intro else customIntro
 
+    fun syncMediaType() {
+        mediaType = BookMediaType.fromBookType(type)
+    }
+
     //自定义简介有自动更新的需求时，可通过更新intro再调用upCustomIntro()完成
     @Suppress("unused")
     fun upCustomIntro() {
@@ -217,6 +226,14 @@ data class Book(
         return AppConfig.replaceEnableDefault
     }
 
+    fun setAiChapterPurifyEnabled(enabled: Boolean) {
+        config.aiChapterPurifyEnabled = enabled
+    }
+
+    fun getAiChapterPurifyEnabled(): Boolean {
+        return config.aiChapterPurifyEnabled
+    }
+
     fun setReSegment(reSegment: Boolean) {
         config.reSegment = reSegment
     }
@@ -252,6 +269,27 @@ data class Book(
 
     fun getTtsEngine(): String? {
         return config.ttsEngine
+    }
+
+    fun setSourceAudioProgress(chapterIndex: Int, position: Int) {
+        config.sourceAudioChapterIndex = chapterIndex
+        config.sourceAudioPosition = position.coerceAtLeast(0)
+    }
+
+    fun getSourceAudioChapterIndex(): Int? {
+        return config.sourceAudioChapterIndex
+    }
+
+    fun getSourceAudioPosition(): Int {
+        return config.sourceAudioPosition.coerceAtLeast(0)
+    }
+
+    fun getAudioProgressVersion(): Int {
+        return config.audioProgressVersion
+    }
+
+    fun setAudioProgressVersion(version: Int) {
+        config.audioProgressVersion = version
     }
 
     fun setSplitLongChapter(limitLongContent: Boolean) {
@@ -335,6 +373,7 @@ data class Book(
 
     fun getPlaySpeed(): Float {
         return config.playSpeed
+            ?: if (mediaType == BookMediaType.audio) 1.6f else 1.0f
     }
 
     fun getDelTag(tag: Long): Boolean {
@@ -461,6 +500,7 @@ data class Book(
         var reSegment: Boolean = false,
         var imageStyle: String? = null,
         var useReplaceRule: Boolean? = null,// 正文使用净化替换规则
+        var aiChapterPurifyEnabled: Boolean = false,
         var delTag: Long = 0L,//去除标签
         var ttsEngine: String? = null,
         var splitLongChapter: Boolean = true,
@@ -471,7 +511,10 @@ data class Book(
         var openCredits: Int = 0,       //音频片头
         var closeCredits: Int = 0,       //音频片尾
         var playMode: Int = 0,           //音频播放模式
-        var playSpeed: Float = 1.0f,     //音频播放速度
+        var playSpeed: Float? = null,     //音频播放速度，null 表示尚未由用户设置
+        var sourceAudioChapterIndex: Int? = null,
+        var sourceAudioPosition: Int = 0,
+        var audioProgressVersion: Int = 0,
         var mangaHorizontalScroll: Boolean? = null,
         var mangaDisablePageAnim: Boolean? = null,
         var mangaDisableHorizontalPageSnap: Boolean? = null,

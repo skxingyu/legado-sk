@@ -72,7 +72,7 @@ class AboutFragment : PreferenceFragmentCompat() {
     }
 
     /**
-     * 更新日志：优先从 GitHub 直连拉取最新 README，失败时回退到本地 assets
+     * 更新日志：优先从 GitHub 拉取最新 README（走设置的加速源），失败时回退到本地 assets
      */
     private fun showUpdateLog() {
         Coroutine.async {
@@ -91,9 +91,13 @@ class AboutFragment : PreferenceFragmentCompat() {
 
     private suspend fun fetchReadmeFromGithub(): String? {
         return runCatching {
+            val url = UpdateManager.resolveAcceleratedUrl(
+                requireContext(),
+                "https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md"
+            )
             okHttpClient.newCallStrResponse(retry = 1) {
-                url("https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md")
-                header("User-Agent", "LegadoC/${appInfo.versionName}")
+                url(url)
+                header("User-Agent", "LegadoSK/${appInfo.versionName}")
             }.body
         }.getOrNull()
     }

@@ -4,14 +4,20 @@ import android.util.Log
 import io.legado.app.BuildConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.LogUtils
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
 
 object AppLog {
 
+    private const val AI_LOG_PREFIX = "[AI]"
     private val mLogs = arrayListOf<Triple<Long, String, Throwable?>>()
 
-    val logs get() = mLogs.toList()
+    val logs
+        get() = synchronized(this) { mLogs.toList() }
+
+    val aiLogs
+        get() = logs.filter { it.second.startsWith("$AI_LOG_PREFIX ") }
 
     @Synchronized
     fun put(message: String?, throwable: Throwable? = null, toast: Boolean = false) {
@@ -34,6 +40,12 @@ object AppLog {
         }
     }
 
+    fun putAi(message: String?, throwable: Throwable? = null) {
+        message ?: return
+        put("$AI_LOG_PREFIX $message", throwable)
+        postEvent(EventBus.AI_LOGS_CHANGED, aiLogs.size)
+    }
+
     @Synchronized
     fun putNotSave(message: String?, throwable: Throwable? = null, toast: Boolean = false) {
         message ?: return
@@ -53,6 +65,21 @@ object AppLog {
     @Synchronized
     fun clear() {
         mLogs.clear()
+    }
+
+    fun clearAi() {
+        synchronized(this) {
+            mLogs.removeAll { it.second.startsWith("$AI_LOG_PREFIX ") }
+        }
+        postEvent(EventBus.AI_LOGS_CHANGED, 0)
+    }
+
+    fun formatLogs(logs: List<Triple<Long, String, Throwable?>>): String {
+        return logs.joinToString("\n\n") { log ->
+            val time = LogUtils.logTimeFormat.format(java.util.Date(log.first))
+            val stack = log.third?.let { "\n${it.stackTraceToString()}" }.orEmpty()
+            "$time\n${log.second}$stack"
+        }
     }
 
     fun putDebug(message: String?, throwable: Throwable? = null) {

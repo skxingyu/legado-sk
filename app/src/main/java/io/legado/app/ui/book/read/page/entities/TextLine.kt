@@ -7,7 +7,6 @@ import android.graphics.Paint.FontMetrics
 import android.os.Build
 import android.text.TextPaint
 import androidx.annotation.Keep
-import io.legado.app.constant.AppLog
 import io.legado.app.help.PaintPool
 import io.legado.app.help.book.isImage
 import io.legado.app.help.config.AppConfig
@@ -41,6 +40,9 @@ data class TextLine(
     var isParagraphEnd: Boolean = false,
     var isImage: Boolean = false,
     var isHtml: Boolean = false,
+    // <usehtml>…</usehtml> 结构块渲染出的行：属于非音频正文结构，
+    // 不参与 AudioTextMapping 的正文段落 ↔ timeMs 编号
+    var isStructuralHtml: Boolean = false,
     var startX: Float = 0f,
     var indentSize: Int = 0,
     var extraLetterSpacing: Float = 0f,
@@ -166,10 +168,8 @@ data class TextLine(
 
     private fun drawTextLine(view: ContentTextView, canvas: Canvas) {
         if (checkFastDraw()) {
-            AppLog.put("SELDBG line fastDraw")
             fastDrawTextLine(view, canvas)
         } else {
-            AppLog.put("SELDBG line normalDraw")
             for (i in columns.indices) {
                 columns[i].draw(view, canvas)
             }

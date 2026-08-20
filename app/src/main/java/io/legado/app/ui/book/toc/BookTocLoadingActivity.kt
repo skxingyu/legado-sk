@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
@@ -16,21 +17,15 @@ import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityBookTocLoadingBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
-import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.info.BookInfoActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
-import io.legado.app.ui.book.read.ReadBookActivity
-import io.legado.app.ui.video.VideoPlayerActivity
+import io.legado.app.utils.defaultReadingActivityClass
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.currentCoroutineContext
@@ -55,7 +50,11 @@ class BookTocLoadingActivity :
         viewModel.loadBookToc(
             bookUrl = intent.getStringExtra("bookUrl"),
             name = intent.getStringExtra("name"),
-            author = intent.getStringExtra("author")
+            author = intent.getStringExtra("author"),
+            mediaType = intent.getIntExtra(
+                BookMediaType.EXTRA_MEDIA_TYPE,
+                BookMediaType.text
+            )
         ) { result ->
             result
                 .onSuccess { startReadActivity(it) }
@@ -64,15 +63,8 @@ class BookTocLoadingActivity :
     }
 
     private fun startReadActivity(book: Book) {
-        val cls = when {
-            book.isVideo -> VideoPlayerActivity::class.java
-            book.isAudio -> AudioPlayActivity::class.java
-            !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
-            else -> ReadBookActivity::class.java
-        }
-
         val sourceIntent = intent
-        val readIntent = Intent(this, cls).apply {
+        val readIntent = Intent(this, book.defaultReadingActivityClass()).apply {
             sourceIntent.extras?.let { putExtras(it) }
 
             putExtra("bookUrl", book.bookUrl)
@@ -83,7 +75,7 @@ class BookTocLoadingActivity :
                 removeExtra("inBookshelf")
             }
 
-            if (book.isAudio || book.isVideo) {
+            if (book.isVideo) {
                 removeExtra("chapterChanged")
             } else if (sourceIntent.hasExtra("chapterChanged")) {
                 putExtra("chapterChanged", sourceIntent.getBooleanExtra("chapterChanged", false))
@@ -109,6 +101,10 @@ class BookTocLoadingActivity :
                 .putExtra("name", intent.getStringExtra("name"))
                 .putExtra("author", intent.getStringExtra("author"))
                 .putExtra("bookUrl", intent.getStringExtra("bookUrl"))
+                .putExtra(
+                    BookMediaType.EXTRA_MEDIA_TYPE,
+                    intent.getIntExtra(BookMediaType.EXTRA_MEDIA_TYPE, BookMediaType.text)
+                )
         )
         finish()
     }
@@ -125,10 +121,11 @@ class BookTocLoadingViewModel(application: Application) : BaseViewModel(applicat
         bookUrl: String?,
         name: String?,
         author: String?,
+        @BookMediaType.Type mediaType: Int,
         success: (Result<Book>) -> Unit
     ) {
         execute {
-            val book = findBook(bookUrl, name, author)
+            val book = findBook(bookUrl, name, author, mediaType)
             if (appDb.bookChapterDao.getChapterCount(book.bookUrl) > 0) {
                 return@execute book
             }
@@ -145,12 +142,17 @@ class BookTocLoadingViewModel(application: Application) : BaseViewModel(applicat
         }
     }
 
-    private fun findBook(bookUrl: String?, name: String?, author: String?): Book {
+    private fun findBook(
+        bookUrl: String?,
+        name: String?,
+        author: String?,
+        @BookMediaType.Type mediaType: Int
+    ): Book {
         bookUrl?.let {
             appDb.bookDao.getBook(it)?.let { book -> return book }
         }
         if (!name.isNullOrBlank()) {
-            appDb.bookDao.getBook(name, author.orEmpty())?.let { return it }
+            appDb.bookDao.getBook(name, author.orEmpty(), mediaType)?.let { return it }
         }
         throw NoStackTraceException("book is null")
     }

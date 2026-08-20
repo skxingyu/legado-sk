@@ -5,6 +5,7 @@ import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 
@@ -22,8 +23,72 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_90_91, migration_91_92, migration_92_93, migration_93_94,
             migration_94_95, migration_95_96, migration_96_97, migration_97_98,
-            migration_98_99, migration_99_100,
+            migration_98_99, migration_99_100, migration_100_101, migration_101_102,
+            migration_102_103, migration_103_104,
         )
+    }
+
+    private val migration_103_104 = object : Migration(103, 104) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE books ADD COLUMN mediaType INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                """
+                UPDATE books SET mediaType = CASE
+                    WHEN type & ${BookType.video} > 0 THEN ${BookMediaType.video}
+                    WHEN type & ${BookType.image} > 0 THEN ${BookMediaType.image}
+                    WHEN type & ${BookType.audio} > 0 THEN ${BookMediaType.audio}
+                    WHEN type & ${BookType.webFile} > 0 THEN ${BookMediaType.webFile}
+                    ELSE ${BookMediaType.text}
+                END
+                """.trimIndent()
+            )
+            db.execSQL("DROP INDEX `index_books_name_author`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX `index_books_name_author_mediaType` " +
+                    "ON `books` (`name`, `author`, `mediaType`)"
+            )
+        }
+    }
+
+    private val migration_102_103 = object : Migration(102, 103) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // AI 章节净化：记录该章被哪几个 AI 功能（ad/typo/noise）处理过
+            db.execSQL(
+                "ALTER TABLE ai_chapter_purify_records " +
+                    "ADD COLUMN processedTypes TEXT NOT NULL DEFAULT ''"
+            )
+        }
+    }
+
+    private val migration_101_102 = object : Migration(101, 102) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE ai_chapter_purify_records " +
+                    "ADD COLUMN state INTEGER NOT NULL DEFAULT 1"
+            )
+            db.execSQL("ALTER TABLE ai_chapter_purify_records ADD COLUMN failureMessage TEXT")
+        }
+    }
+
+    private val migration_100_101 = object : Migration(100, 101) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `ai_chapter_purify_records` (
+                    `bookUrl` TEXT NOT NULL,
+                    `chapterIndex` INTEGER NOT NULL,
+                    `contentFingerprint` TEXT NOT NULL,
+                    `completedAt` INTEGER NOT NULL,
+                    `ruleCount` INTEGER NOT NULL,
+                    PRIMARY KEY(`bookUrl`, `chapterIndex`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_ai_chapter_purify_records_bookUrl` " +
+                    "ON `ai_chapter_purify_records` (`bookUrl`)"
+            )
+        }
     }
 
     private val migration_99_100 = object : Migration(99, 100) {

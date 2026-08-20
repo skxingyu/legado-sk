@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapter_list),
     ChapterListAdapter.Callback,
@@ -45,11 +46,14 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     private val collapsedVolumeIndexes = linkedSetOf<Int>()
     private var durChapterIndex = 0
     private var chapterList: List<BookChapter> = emptyList()
+    private var displayChapterList: List<BookChapter> = emptyList()
+    private var chapterVolumeIndexes: Map<Int, Int> = emptyMap()
     private var currentSearchKey: String? = null
-    private var suppressNextListScroll = false
+    private var initialChapterNavigationPending = true
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
-        viewModel.chapterListCallBack = this@ChapterListFragment
+        initialChapterNavigationPending = true
+        viewModel.registerChapterListCallBack(this@ChapterListFragment)
         val bbg = bottomBackground
         val btc = requireContext().getPrimaryTextColor(ColorUtils.isColorLight(bbg))
         llChapterBaseInfo.setBackgroundColor(
@@ -60,9 +64,17 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         ivChapterBottom.setColorFilter(btc, PorterDuff.Mode.SRC_IN)
         initRecyclerView()
         initView()
-        viewModel.bookData.observe(this@ChapterListFragment) {
+        viewModel.bookData.observe(viewLifecycleOwner) {
             initBook(it)
         }
+    }
+
+    override fun onDestroyView() {
+        viewModel.unregisterChapterListCallBack(this)
+        adapter.clearDisplayTitle()
+        binding.recyclerView.adapter = null
+        mLayoutManager = null
+        super.onDestroyView()
     }
 
     private fun initRecyclerView() {
@@ -91,9 +103,19 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
 
     @SuppressLint("SetTextI18n")
     private fun initBook(book: Book) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             durChapterIndex = book.durChapterIndex
-            upChapterList(null)
+            val navigateToCurrentChapter = initialChapterNavigationPending
+            initialChapterNavigationPending = false
+            updateChapterList(
+                searchKey = null,
+                resetCollapsed = navigateToCurrentChapter,
+                onCommitted = if (navigateToCurrentChapter) {
+                    ::scrollToCurrentChapter
+                } else {
+                    null
+                }
+            )
             binding.tvCurrentChapterInfo.text =
                 "${book.durChapterTitle}(${book.durChapterIndex + 1}/${book.simulatedTotalChapterNum()})"
             initCacheFileNames(book)
@@ -101,7 +123,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     private fun initCacheFileNames(book: Book) {
-        lifecycleScope.launch(IO) {
+        viewLifecycleOwner.lifecycleScope.launch(IO) {
             adapter.cacheFileNames.addAll(BookHelp.getChapterFiles(book))
             withContext(Main) {
                 adapter.notifyItemRangeChanged(0, adapter.itemCount, true)
@@ -111,6 +133,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
 
     override fun observeLiveBus() {
         observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT) { (book, chapter) ->
+            if (view == null) return@observeEvent
             viewModel.bookData.value?.bookUrl?.let { bookUrl ->
                 if (book.bookUrl == bookUrl) {
                     adapter.cacheFileNames.addAll(BookHelp.getChapterCacheFileNames(book, chapter))
@@ -132,43 +155,79 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     override fun upChapterList(searchKey: String?) {
-        lifecycleScope.launch {
+        updateChapterList(searchKey)
+    }
+
+    override fun upChapterListDisplayOrder(searchKey: String?) {
+        updateChapterList(searchKey, noDiff = true)
+    }
+
+    override fun upChapterListStructureChanged(searchKey: String?) {
+        updateChapterList(searchKey, resetCollapsed = true)
+    }
+
+    private fun updateChapterList(
+        searchKey: String?,
+        noDiff: Boolean = false,
+        resetCollapsed: Boolean = false,
+        onCommitted: (() -> Unit)? = null
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
             withContext(IO) {
                 val end = (book?.simulatedTotalChapterNum() ?: Int.MAX_VALUE) - 1
-                when {
-                    searchKey.isNullOrBlank() ->
-                        appDb.bookChapterDao.getChapterList(viewModel.bookUrl, 0, end).also {
-                            chapterList = it
-                        }
-
-                    else -> appDb.bookChapterDao.search(viewModel.bookUrl, searchKey, 0, end)
+                val canonicalChapters = if (resetCollapsed || searchKey.isNullOrBlank()) {
+                    appDb.bookChapterDao.getChapterList(viewModel.bookUrl, 0, end)
+                } else {
+                    null
                 }
-            }.let {
+                val displayChapters = if (searchKey.isNullOrBlank()) {
+                    canonicalChapters ?: error("Canonical TOC was not loaded")
+                } else {
+                    appDb.bookChapterDao.search(viewModel.bookUrl, searchKey, 0, end)
+                }
+                canonicalChapters to displayChapters
+            }.let { chapters ->
+                val canonicalChapters = chapters.first
+                val displayChapters = if (viewModel.isTocDisplayReversed) {
+                    chapters.second.asReversed()
+                } else {
+                    chapters.second
+                }
                 currentSearchKey = searchKey
-                if (searchKey.isNullOrBlank()) {
-                    chapterList = it
-                    resetCollapsedVolumes(it)
+                canonicalChapters?.let { canonical ->
+                    chapterList = canonical
+                    chapterVolumeIndexes = volumeIndexes(canonical)
+                    if (resetCollapsed) {
+                        resetCollapsedVolumes(canonical)
+                    }
                 }
-                adapter.setItems(visibleChapters(it, searchKey))
+                displayChapterList = displayChapters
+                val visible = visibleChapters(displayChapters, searchKey)
+                if (noDiff) {
+                    adapter.setItemsNoDiff(visible)
+                } else {
+                    adapter.setItems(visible, onCommitted)
+                }
             }
         }
     }
 
     override fun onListChanged() {
-        if (suppressNextListScroll) {
-            suppressNextListScroll = false
-            adapter.upDisplayTitles(
-                mLayoutManager?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
-            )
-            return
-        }
-        lifecycleScope.launch {
-            val scrollPos = visiblePositionOf(durChapterIndex)
-            binding.recyclerView.post {
-                val centerOffset = (binding.recyclerView.height / 2).coerceAtLeast(0)
-                mLayoutManager?.scrollToPositionWithOffset(scrollPos, centerOffset)
-                adapter.upDisplayTitles(scrollPos)
-            }
+        viewLifecycleOwnerLiveData.value ?: return
+        adapter.upDisplayTitles(
+            mLayoutManager?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
+        )
+    }
+
+    private fun scrollToCurrentChapter() {
+        viewLifecycleOwnerLiveData.value ?: return
+        val scrollPos = visiblePositionOf(durChapterIndex)
+        val recyclerView = binding.recyclerView
+        recyclerView.post {
+            if (viewLifecycleOwnerLiveData.value == null) return@post
+            val centerOffset = (recyclerView.height / 2).coerceAtLeast(0)
+            mLayoutManager?.scrollToPositionWithOffset(scrollPos, centerOffset)
+            adapter.upDisplayTitles(scrollPos)
         }
     }
 
@@ -182,7 +241,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
     }
 
     override val scope: CoroutineScope
-        get() = lifecycleScope
+        get() = viewLifecycleOwner.lifecycleScope
 
     override val book: Book?
         get() = viewModel.bookData.value
@@ -208,8 +267,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         if (!collapsedVolumeIndexes.add(bookChapter.index)) {
             collapsedVolumeIndexes.remove(bookChapter.index)
         }
-        val visible = visibleChapters(chapterList, currentSearchKey)
-        suppressNextListScroll = true
+        val visible = visibleChapters(displayChapterList, currentSearchKey)
         adapter.setItems(visible)
         binding.recyclerView.post {
             visible.indexOfFirst { it.index == bookChapter.index }.takeIf { it >= 0 }?.let {
@@ -225,17 +283,24 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         if (!searchKey.isNullOrBlank() || collapsedVolumeIndexes.isEmpty()) {
             return chapters
         }
-        val visible = arrayListOf<BookChapter>()
-        var hideUntilNextVolume = false
+        return chapters.filter { chapter ->
+            chapter.isVolume || chapterVolumeIndexes[chapter.index]
+                ?.let { it !in collapsedVolumeIndexes }
+                ?: true
+        }
+    }
+
+    private fun volumeIndexes(chapters: List<BookChapter>): Map<Int, Int> {
+        val indexes = HashMap<Int, Int>()
+        var currentVolumeIndex: Int? = null
         chapters.forEach { chapter ->
             if (chapter.isVolume) {
-                visible.add(chapter)
-                hideUntilNextVolume = collapsedVolumeIndexes.contains(chapter.index)
-            } else if (!hideUntilNextVolume) {
-                visible.add(chapter)
+                currentVolumeIndex = chapter.index
+            } else {
+                currentVolumeIndex?.let { indexes[chapter.index] = it }
             }
         }
-        return visible
+        return indexes
     }
 
     private fun resetCollapsedVolumes(chapters: List<BookChapter>) {
@@ -255,7 +320,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
         val items = adapter.getItems()
         val exact = items.indexOfFirst { it.index == chapterIndex }
         if (exact >= 0) return exact
-        return items.indexOfLast { it.index < chapterIndex }.coerceAtLeast(0)
+        return items.indices.minByOrNull { abs(items[it].index - chapterIndex) } ?: 0
     }
 
     override fun openChapter(bookChapter: BookChapter) {

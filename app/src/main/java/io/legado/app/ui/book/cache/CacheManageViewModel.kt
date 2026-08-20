@@ -11,10 +11,12 @@ import com.bumptech.glide.Glide
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.BookType
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.help.ai.AiChapterPurifyService
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.CacheBookManifest
@@ -191,6 +193,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             deleteMediaCache(book)
             ExoPlayerHelper.releaseBookCaches(book)
             BookHelp.clearCache(book)
+            AiChapterPurifyService.dropBookRecords(book)
             CacheManifestHelper.delete(book)
             withContext(Dispatchers.Main) {
                 onDone()
@@ -205,6 +208,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 deleteMediaCache(it)
                 ExoPlayerHelper.releaseBookCaches(it)
                 BookHelp.clearCache(it)
+                AiChapterPurifyService.dropBookRecords(it)
                 CacheManifestHelper.delete(it)
             }
             withContext(Dispatchers.Main) {
@@ -350,7 +354,11 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         return withContext(Dispatchers.IO) {
             val manifest = item.manifest ?: CacheManifestHelper.read(item.book) ?: return@withContext false
             val sameUrlBook = appDb.bookDao.getBook(manifest.bookUrl)
-            val sameNameBook = appDb.bookDao.getBook(manifest.name, manifest.author)
+            val sameNameBook = appDb.bookDao.getBook(
+                manifest.name,
+                manifest.author,
+                BookMediaType.fromBookType(manifest.type)
+            )
             val cacheBook = CacheManifestHelper.toBook(manifest).apply {
                 removeType(BookType.notShelf)
                 sameUrlBook?.let {

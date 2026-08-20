@@ -11,6 +11,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
@@ -220,18 +221,18 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             AppLog.put("拉取阅读进度失败《${book.name}》\n${it.localizedMessage}", it)
         }.onSuccess { progress ->
             progress ?: return@onSuccess
-            if (progress.durChapterIndex == book.durChapterIndex && progress.durChapterPos == book.durChapterPos) {
-                return@onSuccess
-            }
-            if (progress.durChapterIndex < book.durChapterIndex ||
-                (progress.durChapterIndex == book.durChapterIndex
-                        && progress.durChapterPos < book.durChapterPos)
-            ) {
-                alertSync?.invoke(progress)
-            } else if (progress.durChapterIndex < book.simulatedTotalChapterNum()) {
-                ReadManga.setProgress(progress)
-                AppLog.put("自动同步阅读进度成功《${book.name}》 ${progress.durChapterTitle}")
-                context.toastOnUi("已同步最新漫画阅读进度")
+            when (progress.compareWith(book)) {
+                BookProgressComparison.LOCAL_NEWER -> {
+                    alertSync?.invoke(progress)
+                }
+                BookProgressComparison.REMOTE_NEWER -> {
+                    if (progress.durChapterIndex < book.simulatedTotalChapterNum()) {
+                        ReadManga.setProgress(progress)
+                        AppLog.put("自动同步阅读进度成功《${book.name}》 ${progress.durChapterTitle}")
+                        context.toastOnUi("已同步最新漫画阅读进度")
+                    }
+                }
+                BookProgressComparison.SAME -> Unit
             }
         }
     }

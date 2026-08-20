@@ -71,11 +71,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
     val prevPage by lazy { PageView(context) }
     val curPage by lazy { PageView(context) }
     val nextPage by lazy { PageView(context) }
+    val footerBounds: IntRange get() = curPage.footerBounds
     val defaultAnimationSpeed: Int
         get() = AppConfig.pageAnimationSpeed
     private var pressDown = false
     private var isMove = false
     private var audioDragging = false
+    private var footerCenterActionTouching = false
+    private var footerCenterActionPressedIndex: Int? = null
 
     //起始点
     var startX: Float = 0f
@@ -286,6 +289,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                val footerActionIndex = footerCenterActionIndexAt(event.x, event.y)
+                if (footerActionIndex != null) {
+                    footerCenterActionTouching = true
+                    footerCenterActionPressedIndex = footerActionIndex
+                    return true
+                }
                 // 音频块进度条拖动/点击优先级最高：按下即 seek，不触发翻页/长按/选区
                 val trackHit = curPage.hitAudioTrack(event.x, event.y)
                 if (trackHit != null) {
@@ -329,6 +338,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (footerCenterActionTouching) {
+                    if (footerCenterActionIndexAt(event.x, event.y) != footerCenterActionPressedIndex) {
+                        footerCenterActionPressedIndex = null
+                    }
+                    return true
+                }
                 if (pullDownArmed) {
                     val deltaY = event.y - pullDownStartY
                     val deltaX = abs(event.x - startX)
@@ -399,6 +414,15 @@ class ReadView(context: Context, attrs: AttributeSet) :
             }
 
             MotionEvent.ACTION_UP -> {
+                if (footerCenterActionTouching) {
+                    val pressedIndex = footerCenterActionPressedIndex
+                    footerCenterActionTouching = false
+                    footerCenterActionPressedIndex = null
+                    if (pressedIndex != null && footerCenterActionIndexAt(event.x, event.y) == pressedIndex) {
+                        curPage.performFooterCenterAction(pressedIndex)
+                    }
+                    return true
+                }
                 dismissSelectionMagnifier()
                 crossPageArmed = false
                 crossPageFlipped = false
@@ -450,6 +474,11 @@ class ReadView(context: Context, attrs: AttributeSet) :
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                if (footerCenterActionTouching) {
+                    footerCenterActionTouching = false
+                    footerCenterActionPressedIndex = null
+                    return true
+                }
                 dismissSelectionMagnifier()
                 crossPageArmed = false
                 crossPageFlipped = false
@@ -981,6 +1010,22 @@ class ReadView(context: Context, attrs: AttributeSet) :
         curPage.upBattery(battery)
         prevPage.upBattery(battery)
         nextPage.upBattery(battery)
+    }
+
+    fun setFooterCenterAction(text: CharSequence?, action: (() -> Unit)?) {
+        curPage.setFooterCenterAction(text, action)
+        prevPage.setFooterCenterAction(text, action)
+        nextPage.setFooterCenterAction(text, action)
+    }
+
+    fun setFooterCenterActions(actions: List<FooterCenterAction>) {
+        curPage.setFooterCenterActions(actions)
+        prevPage.setFooterCenterActions(actions)
+        nextPage.setFooterCenterActions(actions)
+    }
+
+    private fun footerCenterActionIndexAt(x: Float, y: Float): Int? {
+        return curPage.footerCenterActionIndexAt(x - curPage.x, y - curPage.y)
     }
 
     /**

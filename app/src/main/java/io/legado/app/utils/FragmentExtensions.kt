@@ -14,17 +14,9 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import io.legado.app.R
+import io.legado.app.constant.BookMediaType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
-import io.legado.app.help.book.isLocal
-import io.legado.app.help.book.isVideo
-import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.book.audio.AudioPlayActivity
-import io.legado.app.ui.video.VideoPlayerActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
-import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.toc.BookTocLoadingActivity
 import io.legado.app.ui.widget.dialog.TextDialog
 
@@ -104,17 +96,12 @@ fun Fragment.startActivityForBook(
             putExtra("name", book.name)
             putExtra("author", book.author)
             putExtra("bookUrl", book.bookUrl)
+            putExtra(BookMediaType.EXTRA_MEDIA_TYPE, BookMediaType.fromBookType(book.type))
             apply(configIntent)
         }
         return
     }
-    val cls = when {
-        book.isVideo -> VideoPlayerActivity::class.java
-        book.isAudio -> AudioPlayActivity::class.java
-        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
-        else -> ReadBookActivity::class.java
-    }
-    val intent = Intent(requireActivity(), cls)
+    val intent = Intent(requireActivity(), book.defaultReadingActivityClass())
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     intent.putExtra("bookUrl", book.bookUrl)
     intent.apply(configIntent)

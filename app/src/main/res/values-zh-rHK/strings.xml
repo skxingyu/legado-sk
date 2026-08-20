@@ -95,7 +95,7 @@
         \u3000\u3000這是一款使用 Kotlin 全新開發的開源的閲讀應用程式，歡迎你的加入。
     </string>
     <string name="app_share_description">
-        閱讀SK\nhttps://github.com/skxingyu/legado-sk
+        閲讀SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">Version %s</string>
     <string name="pt_background_verification">後臺校驗書源</string>
@@ -469,6 +469,7 @@
     <string name="theme">主題</string>
     <string name="theme_mode">主題模式</string>
     <string name="theme_mode_desc">選擇主題模式</string>
+    <string name="join_qq_group">加入QQ羣</string>
     <string name="bg_image_per">獲取背景圖片需存儲權限</string>
     <string name="input_book_source_url">輸入書源網址</string>
     <string name="del_file">刪除文件</string>
@@ -632,6 +633,9 @@
     <string name="tone_colour">在線朗讀音色</string>
     <string name="select_count">(%1$d/%2$d)</string>
     <string name="show_rss">顯示訂閲</string>
+    <string name="enter_rss_page">進入訂閲頁面</string>
+    <string name="enter_rss_page_summary">開啟訂閲內容頁面</string>
+    <string name="show_rss_page_in_settings">在設定中顯示訂閲頁面</string>
     <string name="service_stop">服務已停止</string>
     <string name="service_start">正在啟動服務\n具體信息查看通知欄</string>
     <string name="default_path">默認路徑</string>
@@ -907,6 +911,7 @@
     <string name="cover_show_author_summary">封面上顯示作者</string>
     <string name="read_aloud_prev_paragraph">朗讀上一段</string>
     <string name="read_aloud_next_paragraph">朗讀下一段</string>
+    <string name="read_aloud_paragraph_progress">段 %1$d</string>
     <string name="wait_download">待下載</string>
     <string name="download_success">下載完成</string>
     <string name="download_error">下載失敗</string>
@@ -960,6 +965,10 @@
     <string name="use_replace">使用替换</string>
     <string name="scope_title">作用于标题</string>
     <string name="scope_content">作用于正文</string>
+    <string name="join_qq_channel">加入QQ频道</string>
+    <string name="qq_channel_summary">点击加入阅读QQ频道</string>
+    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
+    <string name="telegram_channel_summary">長按複製 QQ 群號</string>
     <string name="menu_refresh_dur">刷新当前章节</string>
     <string name="menu_refresh_after">刷新之后章节</string>
     <string name="menu_refresh_all">刷新全部章节</string>
@@ -1032,6 +1041,8 @@
     <string name="read_aloud_double_tap_timeout_summary">越短單擊越跟手，但雙擊要求越快</string>
     <string name="read_aloud_double_tap_timeout_dialog_title">朗讀雙擊判定時間（毫秒）</string>
     <string name="read_aloud_double_tap_timeout_value">%sms</string>
+    <string name="integer_input_range_hint">%1$d-%2$d</string>
+    <string name="integer_input_range_invalid">請輸入 %1$d 到 %2$d 之間的整數。</string>
     <string name="example">示例</string>
     <string name="check_selected_interval">选中所选区间</string>
     <string name="show_add_to_shelf_alert_title">返回时提示放入书架</string>
@@ -1320,4 +1331,9 @@
     <string name="export_tab_background">背景</string>
     <string name="epub_background_color">背景顏色</string>
     <string name="epub_background_image">背景圖片</string>
+    <string name="disable_source_toast">關閉書源底部彈窗</string>
+    <string name="disable_source_toast_summary">不顯示書源腳本透過 toast 或 longToast 發出的底部彈窗</string>
+    <string name="disable_all_toast">關閉所有底部彈窗</string>
+    <string name="disable_all_toast_summary">不顯示應用程式透過 Toast 發出的所有底部彈窗，包括書源彈窗</string>
+    <string name="reverse_toc_display">&#x53CD;&#x5411;&#x986F;&#x793A;</string>
 </resources>

@@ -22,9 +22,10 @@ import io.legado.app.utils.writeText
 class TocViewModel(application: Application) : BaseViewModel(application) {
     var bookUrl: String = ""
     var bookData = MutableLiveData<Book>()
-    var chapterListCallBack: ChapterListCallBack? = null
-    var bookMarkCallBack: BookmarkCallBack? = null
+    private var chapterListCallBack: ChapterListCallBack? = null
+    private var bookMarkCallBack: BookmarkCallBack? = null
     var searchKey: String? = null
+    var isTocDisplayReversed = false
 
     fun initBook(bookUrl: String) {
         this.bookUrl = bookUrl
@@ -68,8 +69,45 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
+    fun toggleTocDisplayOrder(): Boolean {
+        isTocDisplayReversed = !isTocDisplayReversed
+        return isTocDisplayReversed
+    }
+
+    fun registerChapterListCallBack(callBack: ChapterListCallBack) {
+        chapterListCallBack = callBack
+    }
+
+    fun unregisterChapterListCallBack(callBack: ChapterListCallBack) {
+        if (chapterListCallBack === callBack) {
+            chapterListCallBack = null
+        }
+    }
+
+    fun registerBookmarkCallBack(callBack: BookmarkCallBack) {
+        bookMarkCallBack = callBack
+    }
+
+    fun unregisterBookmarkCallBack(callBack: BookmarkCallBack) {
+        if (bookMarkCallBack === callBack) {
+            bookMarkCallBack = null
+        }
+    }
+
     fun startChapterListSearch(newText: String?) {
         chapterListCallBack?.upChapterList(newText)
+    }
+
+    fun startChapterListDisplayOrder(newText: String?) {
+        chapterListCallBack?.upChapterListDisplayOrder(newText)
+    }
+
+    fun startChapterListStructureChanged(newText: String?) {
+        chapterListCallBack?.upChapterListStructureChanged(newText)
+    }
+
+    fun clearChapterListDisplayTitle() {
+        chapterListCallBack?.clearDisplayTitle()
     }
 
     fun startBookmarkSearch(newText: String?) {
@@ -124,6 +162,10 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
 
     interface ChapterListCallBack {
         fun upChapterList(searchKey: String?)
+
+        fun upChapterListDisplayOrder(searchKey: String?)
+
+        fun upChapterListStructureChanged(searchKey: String?)
 
         fun clearDisplayTitle()
 

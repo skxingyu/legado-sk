@@ -57,9 +57,11 @@ import kotlinx.coroutines.launch
 /**
  * 换源界面
  */
-class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_source, useLegacySurfaceStyle = true),
+class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_source),
     Toolbar.OnMenuItemClickListener,
     ChangeBookSourceAdapter.CallBack {
+
+    protected override val chromeMode: ChromeMode = ChromeMode.FULL_SCREEN_TOOL
 
     constructor(name: String, author: String) : this() {
         arguments = Bundle().apply {

@@ -76,6 +76,7 @@ class SurfacePopupMenu(
     private var dismissGeneration = 0
     private var dismissAnimator: ObjectAnimator? = null
     private var dismissAction: (() -> Unit)? = null
+    private var dismissListener: (() -> Unit)? = null
     private var immediateDismiss = false
     private val popupWindow: PopupWindow = object : PopupWindow(
         surface,
@@ -102,6 +103,7 @@ class SurfacePopupMenu(
             cancelDismissFade()
             SurfaceBackdrop.clear(surface)
             surface.alpha = 1f
+            dismissListener?.invoke()
         }
     }
 
@@ -112,6 +114,7 @@ class SurfacePopupMenu(
 
     private val levels = ArrayDeque<Level>()
     private var itemClickListener: ((MenuItem) -> Boolean)? = null
+    private var activeMenu: Menu = menu
 
     fun inflate(@MenuRes menuRes: Int) {
         SupportMenuInflater(context).inflate(menuRes, menu)
@@ -121,12 +124,26 @@ class SurfacePopupMenu(
         itemClickListener = listener
     }
 
+    fun setOnDismissListener(listener: (() -> Unit)?) {
+        dismissListener = listener
+    }
+
     fun show() {
+        show(menu, menu.visibleItemsForSurface())
+    }
+
+    /** Shows an existing menu (for example a toolbar item's submenu) in this surface. */
+    fun show(sourceMenu: Menu) {
+        show(sourceMenu, sourceMenu.visibleItemsForSurface())
+    }
+
+    fun show(sourceMenu: Menu, rootItems: List<MenuItem>) {
         cancelDismissFade()
         val generation = ++surfaceGeneration
-        menu.applyUiMenuStyle(context)
+        activeMenu = sourceMenu
+        sourceMenu.applyUiMenuStyle(context)
         levels.clear()
-        levels.addLast(Level(null, menu.visibleItemsForSurface()))
+        levels.addLast(Level(null, rootItems))
         renderCurrentLevel()
         SurfaceBackdrop.installStatic(surface, SurfaceStyles.popup(context))
         measurePopup()
@@ -180,7 +197,7 @@ class SurfacePopupMenu(
                     prepareBackdrop(++surfaceGeneration)
                 } else {
                     dismissWithFade {
-                        itemClickListener?.invoke(item) ?: menu.performIdentifierAction(item.itemId, 0)
+                        itemClickListener?.invoke(item) ?: activeMenu.performIdentifierAction(item.itemId, 0)
                     }
                 }
             }

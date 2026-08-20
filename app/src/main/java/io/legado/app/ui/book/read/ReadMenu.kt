@@ -6,12 +6,12 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.graphics.PorterDuff
-import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
@@ -47,6 +47,7 @@ import io.legado.app.utils.activity
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
+import io.legado.app.utils.doAfterFirstDraw
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -92,6 +93,7 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     private var onMenuOutEnd: (() -> Unit)? = null
+    private var menuVisibilityPublished = false
     private val showBrightnessView
         get() = context.getPrefBoolean(
             PreferKey.showBrightnessView,
@@ -113,7 +115,6 @@ class ReadMenu @JvmOverloads constructor(
 
     private fun onMenuShownEnd() {
         binding.vwMenuBg.setOnClickListener { runMenuOut() }
-        callBack.onReadMenuAvoidanceChanged(true)
         callBack.upSystemUiVisibility()
     }
 
@@ -130,7 +131,7 @@ class ReadMenu @JvmOverloads constructor(
         canShowMenu = false
         isMenuOutAnimating = false
         onMenuOutEnd?.invoke()
-        callBack.onReadMenuAvoidanceChanged(false)
+        publishMenuVisibility(false)
         callBack.upSystemUiVisibility()
     }
 
@@ -326,14 +327,9 @@ class ReadMenu @JvmOverloads constructor(
         }
     }
 
-    fun bottomMenuTopOnScreen(): Int? {
-        val rect = Rect()
-        return if (binding.bottomMenu.getGlobalVisibleRect(rect) && rect.height() > 0) {
-            rect.top
-        } else {
-            null
-        }
-    }
+    fun bottomMenuView(): View = binding.bottomMenu
+
+    fun titleBarView(): View = binding.titleBar
 
     private fun upColorConfig() {
         bgColor = if (immersiveMenu) {
@@ -444,11 +440,18 @@ class ReadMenu @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         cancelMenuFade()
+        publishMenuVisibility(false)
         super.onDetachedFromWindow()
         contentObserver?.let {
             context.contentResolver.unregisterContentObserver(it)
             contentObserver = null
         }
+    }
+
+    private fun publishMenuVisibility(visible: Boolean) {
+        if (menuVisibilityPublished == visible) return
+        menuVisibilityPublished = visible
+        callBack.onReadMenuAvoidanceChanged(visible)
     }
 
     fun runMenuIn() {
@@ -459,6 +462,13 @@ class ReadMenu @JvmOverloads constructor(
         callBack.onMenuShow()
         clearMenuBlur()
         this.visible()
+        val presentationGeneration = generation
+        this@ReadMenu.doAfterFirstDraw {
+            if (presentationGeneration != menuBlurGeneration || isMenuOutAnimating || !isVisible) {
+                return@doAfterFirstDraw
+            }
+            publishMenuVisibility(true)
+        }
         binding.titleBar.visible()
         binding.bottomMenu.visible()
         val originalAlpha = alpha.takeIf { it > 0f } ?: 1f
@@ -706,8 +716,7 @@ class ReadMenu @JvmOverloads constructor(
 
         //夜间模式
         llFabNightTheme.setOnClickListener {
-            AppConfig.isNightTheme = !AppConfig.isNightTheme
-            ThemeConfig.applyDayNight(context)
+            ThemeConfig.toggleLightDarkTheme(context)
         }
 
         //上一章

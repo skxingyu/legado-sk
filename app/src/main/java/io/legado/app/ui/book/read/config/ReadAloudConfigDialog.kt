@@ -20,6 +20,8 @@ import io.legado.app.data.appDb
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.lib.dialogs.showDecimalInputDialog
+import io.legado.app.lib.dialogs.showIntegerInputDialog
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.prefs.SwitchPreference
@@ -34,6 +36,8 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
+import java.math.BigDecimal
+import kotlin.math.roundToInt
 
 class ReadAloudConfigDialog : BasePrefDialogFragment() {
     private val readAloudPreferTag = "readAloudPreferTag"
@@ -74,9 +78,12 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
             get() {
                 val ttsEngine = ReadAloud.ttsEngine
                     ?: return getString(R.string.system_tts)
+                if (ttsEngine == ReadAloud.SOURCE_AUDIO_ENGINE_ID) {
+                    return getString(R.string.source_audio_engine)
+                }
                 if (StringUtils.isNumeric(ttsEngine)) {
                     return appDb.httpTTSDao.getName(ttsEngine.toLong())
-                        ?: getString(R.string.system_tts)
+                        ?: getString(R.string.http_tts_missing, ttsEngine)
                 }
                 return GSON.fromJsonObject<SelectItem<String>>(ttsEngine).getOrNull()?.title
                     ?: getString(R.string.system_tts)
@@ -88,6 +95,10 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
             initPhoneCallPausePreference()
             initFloatOnDesktopPreference()
             upFloatOnDesktopPreference()
+            upCoverRotationDurationSummary()
+            upScrollFollowTimeoutSummary()
+            upProgressPollIntervalSummary()
+            upPlaybackPanelDurationSummary()
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -111,8 +122,97 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
             when (preference.key) {
                 PreferKey.ttsEngine -> showDialogFragment(SpeakEngineDialog())
                 "sysTtsConfig" -> IntentHelp.openTTSSetting()
+                PreferKey.readAloudCoverRotationDuration -> showCoverRotationDurationDialog()
+                PreferKey.readAloudScrollFollowTimeout -> showScrollFollowTimeoutDialog()
+                PreferKey.readAloudProgressPollInterval -> showProgressPollIntervalDialog()
+                PreferKey.readAloudPlaybackPanelDuration -> showPlaybackPanelDurationDialog()
             }
             return super.onPreferenceTreeClick(preference)
+        }
+
+        private fun showScrollFollowTimeoutDialog() {
+            showIntegerInputDialog(
+                title = R.string.read_aloud_scroll_follow_timeout_dialog_title,
+                currentValue = AppConfig.readAloudScrollFollowTimeout,
+                validRange = 0..10000,
+                defaultValue = 3000
+            ) {
+                AppConfig.readAloudScrollFollowTimeout = it
+                upScrollFollowTimeoutSummary()
+            }
+        }
+
+        private fun upScrollFollowTimeoutSummary() {
+            findPreference<Preference>(PreferKey.readAloudScrollFollowTimeout)?.summary =
+                getString(
+                    R.string.read_aloud_scroll_follow_timeout_value,
+                    AppConfig.readAloudScrollFollowTimeout
+                )
+        }
+
+        private fun showProgressPollIntervalDialog() {
+            showIntegerInputDialog(
+                title = R.string.read_aloud_progress_poll_interval_dialog_title,
+                currentValue = AppConfig.readAloudProgressPollInterval,
+                validRange = 100..5000,
+                defaultValue = 500
+            ) {
+                AppConfig.readAloudProgressPollInterval = it
+                upProgressPollIntervalSummary()
+            }
+        }
+
+        private fun upProgressPollIntervalSummary() {
+            findPreference<Preference>(PreferKey.readAloudProgressPollInterval)?.summary =
+                getString(
+                    R.string.read_aloud_progress_poll_interval_value,
+                    AppConfig.readAloudProgressPollInterval
+                )
+        }
+
+        private fun showPlaybackPanelDurationDialog() {
+            showIntegerInputDialog(
+                title = R.string.read_aloud_playback_panel_duration_dialog_title,
+                currentValue = AppConfig.readAloudPlaybackPanelDuration,
+                validRange =
+                    AppConfig.MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION..
+                            AppConfig.MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION,
+                defaultValue = AppConfig.DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION
+            ) {
+                AppConfig.readAloudPlaybackPanelDuration = it
+                upPlaybackPanelDurationSummary()
+            }
+        }
+
+        private fun upPlaybackPanelDurationSummary() {
+            findPreference<Preference>(PreferKey.readAloudPlaybackPanelDuration)?.summary =
+                getString(
+                    R.string.read_aloud_playback_panel_duration_summary,
+                    AppConfig.readAloudPlaybackPanelDuration
+                )
+        }
+
+        private fun showCoverRotationDurationDialog() {
+            val secondsRange =
+                (AppConfig.MIN_READ_ALOUD_COVER_ROTATION_DURATION / 1000.0)..
+                        (AppConfig.MAX_READ_ALOUD_COVER_ROTATION_DURATION / 1000.0)
+            showDecimalInputDialog(
+                title = R.string.read_aloud_cover_rotation_duration_dialog_title,
+                currentValue = AppConfig.readAloudCoverRotationDuration / 1000.0,
+                validRange = secondsRange,
+                defaultValue = AppConfig.DEFAULT_READ_ALOUD_COVER_ROTATION_DURATION / 1000.0
+            ) {
+                AppConfig.readAloudCoverRotationDuration = (it * 1000).roundToInt()
+                upCoverRotationDurationSummary()
+            }
+        }
+
+        private fun upCoverRotationDurationSummary() {
+            val seconds = BigDecimal.valueOf(
+                AppConfig.readAloudCoverRotationDuration / 1000.0
+            ).stripTrailingZeros().toPlainString()
+            findPreference<Preference>(PreferKey.readAloudCoverRotationDuration)?.summary =
+                getString(R.string.read_aloud_cover_rotation_duration_summary, seconds)
         }
 
         override fun onSharedPreferenceChanged(
@@ -134,6 +234,20 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                     upFloatOnDesktopPreference()
                     postEvent(PreferKey.readAloudHideFloatingWindow, "")
                 }
+
+                PreferKey.readAloudHidePlaybackPanel,
+                PreferKey.readAloudHidePagePanel,
+                PreferKey.readAloudPanelOnPageFooter -> {
+                    postEvent(key, "")
+                }
+
+                PreferKey.readAloudScrollFollowTimeout -> upScrollFollowTimeoutSummary()
+                PreferKey.readAloudProgressPollInterval -> upProgressPollIntervalSummary()
+                PreferKey.readAloudPlaybackPanelDuration -> {
+                    upPlaybackPanelDurationSummary()
+                    postEvent(key, "")
+                }
+                PreferKey.readAloudCoverRotationDuration -> upCoverRotationDurationSummary()
 
                 PreferKey.ignoreAudioFocus -> {
                     Unit

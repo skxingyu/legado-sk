@@ -1,18 +1,29 @@
 package io.legado.app.ui.config
 
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.text.method.PasswordTransformationMethod
 import android.view.View
+import android.widget.EditText
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
+import androidx.preference.PreferenceGroup
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.DialogAiMcpServerEditBinding
 import io.legado.app.databinding.DialogAiProviderEditBinding
 import io.legado.app.databinding.DialogEditTextBinding
+import io.legado.app.help.ai.AiChapterPurifyConfig
 import io.legado.app.help.ai.AiChatService
+import io.legado.app.help.ai.AiLogExporter
+import io.legado.app.help.ai.AiLogConfig
+import io.legado.app.help.ai.AiRequestTimeoutConfig
+import io.legado.app.help.ai.AiStructuredRequestTemplate
 import io.legado.app.help.ai.AiToolRegistry
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.newCallResponse
@@ -26,8 +37,11 @@ import io.legado.app.ui.main.ai.AiModelConfig
 import io.legado.app.ui.main.ai.AiMcpServerConfig
 import io.legado.app.ui.main.ai.AiProviderConfig
 import io.legado.app.ui.main.ai.AiSkillConfig
+import io.legado.app.ui.about.AiLogDialog
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -35,6 +49,16 @@ import kotlinx.coroutines.withContext
 
 class AiConfigFragment : PreferenceFragment(),
     SharedPreferences.OnSharedPreferenceChangeListener {
+
+    private var pendingAiLogs = emptyList<Triple<Long, String, Throwable?>>()
+
+    private val exportAiLogLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        val logs = pendingAiLogs
+        pendingAiLogs = emptyList()
+        uri?.let { writeAiLogs(it, logs) }
+    }
 
     private val defaultSkillUrls = listOf(
         "https://raw.githubusercontent.com/DandanLLab/legadoSkill/main/.trae/skills/legado-book-source-tamer/SKILL.md",
@@ -44,6 +68,7 @@ class AiConfigFragment : PreferenceFragment(),
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.pref_config_ai)
+        configureApiRedactionPreference()
         refreshUi()
     }
 
@@ -52,6 +77,10 @@ class AiConfigFragment : PreferenceFragment(),
         activity?.setTitle(R.string.ai_setting)
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
         listView.setEdgeEffectColor(primaryColor)
+        observeEvent<Int>(EventBus.AI_LOGS_CHANGED) { count ->
+            findPreference<Preference>("aiLogs")?.summary =
+                getString(R.string.ai_log_summary, count)
+        }
     }
 
     override fun onDestroy() {
@@ -63,9 +92,36 @@ class AiConfigFragment : PreferenceFragment(),
         when (preference.key) {
             "aiAddProvider" -> showEditProviderDialog()
             "aiManageProviders" -> showManageProvidersDialog()
+            "aiTestCurrentConnection" -> testCurrentAiConnection()
             "aiAddModel" -> showAddModelOptionsDialog()
-            "aiFetchModels" -> fetchModelsFromCurrentProvider(showSelector = true)
             "aiManageModels" -> showManageModelsDialog()
+            "aiEditRequest" -> showEditRequestDialog()
+            "aiSseIdleTimeoutSeconds" -> showChapterPurifyIntDialog(
+                R.string.ai_sse_idle_timeout,
+                AiRequestTimeoutConfig.sseIdleTimeoutSeconds,
+                AiRequestTimeoutConfig.MIN_SSE_IDLE_TIMEOUT_SECONDS,
+                AiRequestTimeoutConfig.MAX_SSE_IDLE_TIMEOUT_SECONDS
+            ) { AiRequestTimeoutConfig.sseIdleTimeoutSeconds = it }
+            "aiGenerationTimeoutSeconds" -> showChapterPurifyIntDialog(
+                R.string.ai_generation_timeout,
+                AiRequestTimeoutConfig.generationTimeoutSeconds,
+                AiRequestTimeoutConfig.MIN_GENERATION_TIMEOUT_SECONDS,
+                AiRequestTimeoutConfig.MAX_GENERATION_TIMEOUT_SECONDS
+            ) { AiRequestTimeoutConfig.generationTimeoutSeconds = it }
+            "aiThinkingInterruptSeconds" -> showOptionalAiIntDialog(
+                R.string.ai_thinking_interrupt_seconds,
+                AiRequestTimeoutConfig.thinkingInterruptSeconds,
+                AiRequestTimeoutConfig.MIN_THINKING_INTERRUPT_SECONDS,
+                AiRequestTimeoutConfig.MAX_THINKING_INTERRUPT_SECONDS
+            ) { AiRequestTimeoutConfig.thinkingInterruptSeconds = it }
+            "aiThinkingInterruptMaxCount" -> showChapterPurifyIntDialog(
+                R.string.ai_thinking_interrupt_max_count,
+                AiRequestTimeoutConfig.thinkingInterruptMaxCount,
+                AiRequestTimeoutConfig.MIN_THINKING_INTERRUPT_MAX_COUNT,
+                AiRequestTimeoutConfig.MAX_THINKING_INTERRUPT_MAX_COUNT
+            ) { AiRequestTimeoutConfig.thinkingInterruptMaxCount = it }
+            "aiLogs" -> showDialogFragment<AiLogDialog>()
+            "aiExportLogs" -> exportAiLogs()
             "aiAddMcpServer" -> showEditMcpServerDialog()
             "aiManageMcpServers" -> showManageMcpServersDialog()
             "aiManageNativeTools" -> showManageNativeToolsDialog()
@@ -77,13 +133,351 @@ class AiConfigFragment : PreferenceFragment(),
             PreferKey.aiSystemPrompt -> showSystemPromptDialog()
             "aiImportDefaultSkill" -> importDefaultSkill()
             PreferKey.aiSkillPrompt -> showManageSkillsDialog()
+            PreferKey.aiChapterPurifyProvider -> showSelectChapterPurifyProviderDialog()
+            PreferKey.aiChapterPurifyModel -> showSelectChapterPurifyModelDialog()
+            "aiChapterPurifyTestConnection" -> testChapterPurifyConnection()
+            PreferKey.aiChapterPurifyRequestTemplate -> showChapterPurifyRequestDialog()
+            PreferKey.aiChapterPurifyPrompt -> showChapterPurifyPromptDialog()
+            "aiChapterPurifyFlowInfo" -> showChapterPurifyFlowInfo()
+            PreferKey.aiChapterPurifyPreprocess -> showChapterPurifyPreprocessDialog()
+            PreferKey.aiChapterPurifyChapterCount -> showChapterPurifyIntDialog(
+                R.string.ai_chapter_purify_chapter_count,
+                AiChapterPurifyConfig.chapterCount,
+                AiChapterPurifyConfig.MIN_CHAPTER_COUNT,
+                AiChapterPurifyConfig.MAX_CHAPTER_COUNT
+            ) { AiChapterPurifyConfig.chapterCount = it }
+            PreferKey.aiChapterPurifySegmentLimit -> showChapterPurifyIntDialog(
+                R.string.ai_chapter_purify_segment_limit,
+                AiChapterPurifyConfig.segmentLimit,
+                AiChapterPurifyConfig.MIN_SEGMENT_LIMIT,
+                AiChapterPurifyConfig.MAX_SEGMENT_LIMIT
+            ) { AiChapterPurifyConfig.segmentLimit = it }
+            PreferKey.aiChapterPurifyRetryCount -> showChapterPurifyIntDialog(
+                R.string.ai_chapter_purify_retry_count,
+                AiChapterPurifyConfig.retryCount,
+                AiChapterPurifyConfig.MIN_RETRY_COUNT,
+                AiChapterPurifyConfig.MAX_RETRY_COUNT
+            ) { AiChapterPurifyConfig.retryCount = it }
+            PreferKey.aiChapterPurifyConcurrency -> showChapterPurifyIntDialog(
+                R.string.ai_chapter_purify_concurrency,
+                AiChapterPurifyConfig.concurrency,
+                AiChapterPurifyConfig.MIN_CONCURRENCY,
+                AiChapterPurifyConfig.MAX_CONCURRENCY
+            ) { AiChapterPurifyConfig.concurrency = it }
         }
         return super.onPreferenceTreeClick(preference)
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (key == PreferKey.aiAssistantEnabled) {
+        if (key == PreferKey.aiAssistantEnabled ||
+            key == PreferKey.aiAdvancedSettingsEnabled ||
+            key == PreferKey.aiChapterPurifyReuseCurrentModel ||
+            key == PreferKey.aiChapterPurifyRequestTemplate ||
+            key == PreferKey.aiSseIdleTimeoutSeconds ||
+            key == PreferKey.aiGenerationTimeoutSeconds ||
+            key == PreferKey.aiThinkingInterruptSeconds ||
+            key == PreferKey.aiThinkingInterruptMaxCount
+        ) {
             refreshUi(notifyMain = true)
+        }
+    }
+
+    private fun exportAiLogs() {
+        if (AppLog.aiLogs.isEmpty()) {
+            toastOnUi(R.string.ai_log_empty)
+            return
+        }
+        pendingAiLogs = AppLog.aiLogs
+        exportAiLogLauncher.launch(AiLogExporter.fileName())
+    }
+
+    private fun configureApiRedactionPreference() {
+        val preference = findPreference<SwitchPreference>(PreferKey.aiApiRedactionEnabled)
+            ?: error("Missing API redaction preference")
+        preference.setOnPreferenceChangeListener { _, newValue ->
+            val enabled = newValue as? Boolean
+                ?: error("API redaction preference must be Boolean")
+            if (!enabled && AiLogConfig.apiRedactionEnabled) {
+                showApiRedactionWarning(preference)
+                false
+            } else {
+                AiLogConfig.apiRedactionEnabled = enabled
+                true
+            }
+        }
+    }
+
+    private fun showApiRedactionWarning(preference: SwitchPreference) {
+        alert(
+            getString(R.string.ai_api_redaction_warning_title),
+            getString(R.string.ai_api_redaction_warning_message)
+        ) {
+            okButton {
+                AiLogConfig.apiRedactionEnabled = false
+                preference.isChecked = false
+            }
+            cancelButton()
+        }
+    }
+
+    private fun applyApiKeyInputPolicy(editText: EditText) {
+        val masked = AiLogConfig.apiRedactionEnabled
+        editText.inputType = InputType.TYPE_CLASS_TEXT or
+            if (masked) {
+                InputType.TYPE_TEXT_VARIATION_PASSWORD
+            } else {
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            }
+        editText.transformationMethod = if (masked) {
+            PasswordTransformationMethod.getInstance()
+        } else {
+            null
+        }
+        editText.setSelection(editText.text?.length ?: 0)
+    }
+
+    private fun writeAiLogs(uri: Uri, logs: List<Triple<Long, String, Throwable?>>) {
+        lifecycleScope.launch {
+            val result = withContext(IO) {
+                runCatching {
+                    AiLogExporter.write(requireContext(), uri, logs)
+                }
+            }
+            result.onSuccess {
+                toastOnUi(R.string.ai_log_export_success)
+            }.onFailure {
+                AppLog.put("AI 日志导出失败\n${it.localizedMessage}", it)
+                toastOnUi(getString(R.string.ai_log_export_failed, it.localizedMessage ?: "未知错误"))
+            }
+        }
+    }
+
+    private fun showSelectChapterPurifyProviderDialog() {
+        val providers = AppConfig.aiProviderList
+        if (providers.isEmpty()) {
+            toastOnUi(R.string.ai_no_providers)
+            return
+        }
+        context?.selector(
+            getString(R.string.ai_chapter_purify_provider),
+            providers.map { it.name }
+        ) { _, _, index ->
+            AiChapterPurifyConfig.independentProviderId = providers[index].id
+            // 切换供应商后，原模型引用不再属于新供应商，清空让用户重新选择
+            AiChapterPurifyConfig.independentModelId = ""
+            refreshUi()
+        }
+    }
+
+    private fun showSelectChapterPurifyModelDialog() {
+        val provider = AiChapterPurifyConfig.independentProvider
+        if (provider == null) {
+            toastOnUi(R.string.ai_chapter_purify_select_provider_first)
+            return
+        }
+        val models = AppConfig.aiModelConfigList.filter { it.providerId == provider.id }
+        if (models.isEmpty()) {
+            toastOnUi(R.string.ai_chapter_purify_provider_no_models)
+            return
+        }
+        context?.selector(
+            getString(R.string.ai_chapter_purify_model),
+            models.map { it.modelId }
+        ) { _, _, index ->
+            AiChapterPurifyConfig.independentModelId = models[index].id
+            refreshUi()
+        }
+    }
+
+    private fun showChapterPurifyPromptDialog() {
+        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = getString(R.string.ai_chapter_purify_prompt_hint)
+            editView.inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            editView.minLines = 8
+            editView.setText(AiChapterPurifyConfig.prompt)
+            editView.setSelection(editView.text?.length ?: 0)
+        }
+        alert(titleResource = R.string.ai_chapter_purify_prompt) {
+            customView { binding.root }
+            okButton {
+                AiChapterPurifyConfig.prompt = binding.editView.text?.toString().orEmpty()
+                refreshUi()
+            }
+            neutralButton(R.string.restore_default) {
+                AiChapterPurifyConfig.prompt = AiChapterPurifyConfig.defaultPrompt
+                refreshUi()
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showChapterPurifyFlowInfo() {
+        alert(
+            getString(R.string.ai_chapter_purify_flow_info),
+            getString(R.string.ai_chapter_purify_flow_info_message)
+        ) {
+            okButton()
+        }
+    }
+
+    private fun showChapterPurifyPreprocessDialog() {
+        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = getString(R.string.ai_chapter_purify_preprocess_hint)
+            editView.inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            editView.minLines = 18
+            editView.setText(AiChapterPurifyConfig.preprocessJson)
+            editView.setSelection(editView.text?.length ?: 0)
+        }
+        alert(titleResource = R.string.ai_chapter_purify_preprocess) {
+            customView { binding.root }
+            okButton {
+                val json = binding.editView.text?.toString()?.trim().orEmpty()
+                val error = runCatching {
+                    AiChapterPurifyConfig.preprocessJson = json
+                }.exceptionOrNull()
+                if (error != null) {
+                    toastOnUi(
+                        getString(
+                            R.string.ai_chapter_purify_preprocess_invalid,
+                            error.message.orEmpty()
+                        )
+                    )
+                    return@okButton
+                }
+                refreshUi()
+            }
+            neutralButton(R.string.restore_default) {
+                AiChapterPurifyConfig.preprocessJson = AiChapterPurifyConfig.defaultPreprocessJson
+                refreshUi()
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showEditRequestDialog() {
+        showRequestTemplateDialog(
+            titleResource = R.string.ai_edit_request,
+            currentTemplate = { AiChapterPurifyConfig.requestTemplate },
+            save = { AiChapterPurifyConfig.requestTemplate = it },
+            restore = { AiChapterPurifyConfig.requestTemplate = AiStructuredRequestTemplate.default },
+            restoreLabelResource = R.string.restore_default
+        )
+    }
+
+    private fun showChapterPurifyRequestDialog() {
+        showRequestTemplateDialog(
+            titleResource = R.string.ai_chapter_purify_request_template,
+            currentTemplate = { AiChapterPurifyConfig.effectiveRequestTemplate },
+            save = { AiChapterPurifyConfig.independentRequestTemplate = it },
+            restore = { AiChapterPurifyConfig.clearIndependentRequestTemplate() },
+            restoreLabelResource = R.string.ai_restore_global_request
+        )
+    }
+
+    private fun showRequestTemplateDialog(
+        titleResource: Int,
+        currentTemplate: () -> String,
+        save: (String) -> Unit,
+        restore: () -> Unit,
+        restoreLabelResource: Int
+    ) {
+        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = getString(R.string.ai_edit_request_hint)
+            editView.inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            editView.minLines = 16
+            editView.setText(currentTemplate())
+            editView.setSelection(editView.text?.length ?: 0)
+        }
+        alert(
+            titleResource = titleResource
+        ) {
+            customView { binding.root }
+            okButton {
+                val template = binding.editView.text?.toString()?.trim().orEmpty()
+                save(template)
+                refreshUi()
+            }
+            neutralButton(restoreLabelResource) {
+                restore()
+                refreshUi()
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showChapterPurifyIntDialog(
+        title: Int,
+        current: Int,
+        min: Int,
+        max: Int,
+        save: (Int) -> Unit
+    ) {
+        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = "$min-$max"
+            editView.inputType = InputType.TYPE_CLASS_NUMBER
+            editView.setText(current.toString())
+            editView.setSelection(editView.text?.length ?: 0)
+        }
+        alert(titleResource = title) {
+            customView { binding.root }
+            okButton {
+                val value = binding.editView.text?.toString()?.trim()?.toIntOrNull()
+                if (value == null || value !in min..max) {
+                    toastOnUi(getString(R.string.ai_chapter_purify_number_invalid, min, max))
+                    return@okButton
+                }
+                save(value)
+                refreshUi()
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showOptionalAiIntDialog(
+        title: Int,
+        current: Int?,
+        min: Int,
+        max: Int,
+        save: (Int?) -> Unit
+    ) {
+        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = getString(
+                R.string.ai_thinking_interrupt_number_invalid,
+                min,
+                max
+            )
+            editView.inputType = InputType.TYPE_CLASS_NUMBER
+            editView.setText(current?.toString().orEmpty())
+            editView.setSelection(editView.text?.length ?: 0)
+        }
+        alert(titleResource = title) {
+            customView { binding.root }
+            okButton {
+                val raw = binding.editView.text?.toString()?.trim().orEmpty()
+                if (raw.isEmpty()) {
+                    save(null)
+                    refreshUi()
+                    return@okButton
+                }
+                val value = raw.toIntOrNull()
+                if (value == null || value !in min..max) {
+                    toastOnUi(getString(R.string.ai_thinking_interrupt_number_invalid, min, max))
+                    return@okButton
+                }
+                save(value)
+                refreshUi()
+            }
+            neutralButton(R.string.ai_thinking_interrupt_clear) {
+                save(null)
+                refreshUi()
+            }
+            cancelButton()
         }
     }
 
@@ -94,6 +488,7 @@ class AiConfigFragment : PreferenceFragment(),
             editProviderApiKey.setText(provider?.apiKey.orEmpty())
             editProviderHeaders.setText(provider?.headers.orEmpty())
         }
+        applyApiKeyInputPolicy(binding.editProviderApiKey)
         alert(
             title = getString(
                 if (provider == null) R.string.ai_add_provider else R.string.ai_edit_provider
@@ -329,7 +724,53 @@ class AiConfigFragment : PreferenceFragment(),
                     appendFetchedModels(provider.id, modelIds)
                 }
             }.onFailure {
-                toastOnUi(getString(R.string.ai_fetch_models_failed, it.localizedMessage ?: "Error"))
+                toastOnUi(getString(R.string.ai_fetch_models_failed, it.localizedMessage ?: "未知错误"))
+            }
+        }
+    }
+
+    private fun testCurrentAiConnection() {
+        val provider = AppConfig.aiCurrentProvider
+        if (provider == null) {
+            toastOnUi(R.string.ai_connection_test_summary_missing_provider)
+            return
+        }
+        val model = AppConfig.aiCurrentModelConfig?.modelId?.trim().orEmpty()
+        if (model.isEmpty()) {
+            toastOnUi(R.string.ai_connection_test_summary_missing_model)
+            return
+        }
+        testAiConnection(provider, model, AiChapterPurifyConfig.requestTemplate)
+    }
+
+    private fun testChapterPurifyConnection() {
+        val target = runCatching { AiChapterPurifyConfig.requireModelTarget() }.getOrElse {
+            toastOnUi(it.message ?: it.javaClass.simpleName)
+            return
+        }
+        testAiConnection(
+            target.provider,
+            target.modelId,
+            AiChapterPurifyConfig.effectiveRequestTemplate
+        )
+    }
+
+    private fun testAiConnection(
+        provider: AiProviderConfig,
+        model: String,
+        requestTemplate: String
+    ) {
+        toastOnUi(R.string.ai_connection_test_running)
+        lifecycleScope.launch {
+            val result = withContext(IO) {
+                runCatching { AiChatService.testConnection(provider, model, requestTemplate) }
+            }
+            result.onSuccess {
+                toastOnUi(getString(R.string.ai_connection_test_success, provider.name, model))
+            }.onFailure { throwable ->
+                val message = throwable.message ?: throwable.javaClass.simpleName
+                AppLog.put("AI 连接测试失败，提供商《${provider.name}》，模型《$model》\n$message", throwable)
+                toastOnUi(getString(R.string.ai_connection_test_failed, message))
             }
         }
     }
@@ -410,6 +851,7 @@ class AiConfigFragment : PreferenceFragment(),
             editMcpServerApiKey.setText(server?.apiKey.orEmpty())
             checkMcpServerEnabled.isChecked = server?.enabled ?: true
         }
+        applyApiKeyInputPolicy(binding.editMcpServerApiKey)
         alert(
             title = getString(
                 if (server == null) R.string.ai_add_mcp_server else R.string.ai_edit_mcp_server
@@ -621,10 +1063,9 @@ class AiConfigFragment : PreferenceFragment(),
     private fun showTavilyApiKeyDialog() {
         val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
             editView.hint = getString(R.string.ai_tavily_api_key_hint)
-            editView.inputType = InputType.TYPE_CLASS_TEXT
             editView.setText(AppConfig.aiTavilyApiKey)
-            editView.setSelection(editView.text?.length ?: 0)
         }
+        applyApiKeyInputPolicy(binding.editView)
         alert(titleResource = R.string.ai_tavily_api_key) {
             customView { binding.root }
             okButton {
@@ -905,10 +1346,42 @@ class AiConfigFragment : PreferenceFragment(),
                     append(getString(R.string.ai_manage_models_summary, providerModels.size))
                 }
             }
+        findPreference<Preference>("aiEditRequest")?.summary =
+            getString(R.string.ai_edit_request_summary_global)
+        findPreference<Preference>("aiSseIdleTimeoutSeconds")?.summary =
+            getString(
+                R.string.ai_sse_idle_timeout_summary,
+                AiRequestTimeoutConfig.sseIdleTimeoutSeconds
+            )
+        findPreference<Preference>("aiGenerationTimeoutSeconds")?.summary =
+            getString(
+                R.string.ai_generation_timeout_summary,
+                AiRequestTimeoutConfig.generationTimeoutSeconds
+            )
+        findPreference<Preference>("aiThinkingInterruptSeconds")?.summary =
+            AiRequestTimeoutConfig.thinkingInterruptSeconds?.let {
+                getString(R.string.ai_thinking_interrupt_seconds_summary_set, it)
+            } ?: getString(R.string.ai_thinking_interrupt_seconds_summary_unset)
+        findPreference<Preference>("aiThinkingInterruptMaxCount")?.summary =
+            getString(
+                R.string.ai_thinking_interrupt_max_count_summary,
+                AiRequestTimeoutConfig.thinkingInterruptMaxCount
+            )
+        findPreference<Preference>("aiLogs")?.summary =
+            getString(R.string.ai_log_summary, AppLog.aiLogs.size)
+        val currentModelId = AppConfig.aiCurrentModelConfig?.modelId?.trim().orEmpty()
+        findPreference<Preference>("aiTestCurrentConnection")?.summary = when {
+            currentProvider == null -> getString(R.string.ai_connection_test_summary_missing_provider)
+            currentModelId.isEmpty() ->
+                getString(R.string.ai_connection_test_summary_missing_model)
+            else -> getString(
+                R.string.ai_connection_test_summary_target,
+                currentProvider.name,
+                currentModelId
+            )
+        }
         findPreference<Preference>("aiAddModel")?.summary =
             getString(R.string.ai_add_model_summary_modern)
-        findPreference<Preference>("aiFetchModels")?.summary =
-            getString(R.string.ai_fetch_models_summary_modern)
         findPreference<Preference>("aiManageMcpServers")?.summary =
             if (mcpServers.isEmpty()) {
                 getString(R.string.ai_no_mcp_servers)
@@ -952,6 +1425,77 @@ class AiConfigFragment : PreferenceFragment(),
             AppConfig.aiTavilyMaxResults.toString()
         findPreference<Preference>(PreferKey.aiSystemPrompt)?.summary =
             getString(R.string.ai_system_prompt_summary)
+        val advancedSettingsEnabled = preferenceManager.sharedPreferences
+            ?.getBoolean(PreferKey.aiAdvancedSettingsEnabled, false) == true
+        findPreference<SwitchPreference>(PreferKey.aiAdvancedSettingsEnabled)?.isChecked =
+            advancedSettingsEnabled
+        findPreference<Preference>("aiEditRequest")?.isVisible = advancedSettingsEnabled
+        findPreference<Preference>(PreferKey.aiApiRedactionEnabled)?.isVisible =
+            advancedSettingsEnabled
+        findPreference<PreferenceGroup>("aiAssistantCategory")?.isVisible = advancedSettingsEnabled
+        findPreference<PreferenceGroup>("aiMcpCategory")?.isVisible = advancedSettingsEnabled
+        findPreference<PreferenceGroup>("aiWebToolsCategory")?.isVisible = advancedSettingsEnabled
+        findPreference<PreferenceGroup>("aiTimeoutCategory")?.isVisible = advancedSettingsEnabled
+        listOf(
+            "aiChapterPurifyFlowInfo",
+            PreferKey.aiChapterPurifyReuseCurrentModel,
+            PreferKey.aiChapterPurifyPrompt,
+            PreferKey.aiChapterPurifyPreprocess,
+            PreferKey.aiChapterPurifySummaryEnabled,
+            PreferKey.aiChapterPurifyChapterCount,
+            PreferKey.aiChapterPurifySegmentLimit,
+            PreferKey.aiChapterPurifyRetryCount,
+            PreferKey.aiChapterPurifyConcurrency
+        ).forEach { key ->
+            findPreference<Preference>(key)?.isVisible = advancedSettingsEnabled
+        }
+        val chapterPurifyReuseCurrentModel = AiChapterPurifyConfig.reuseCurrentModel
+        findPreference<SwitchPreference>(PreferKey.aiChapterPurifyReuseCurrentModel)?.isChecked =
+            chapterPurifyReuseCurrentModel
+        findPreference<Preference>(PreferKey.aiChapterPurifyProvider)?.apply {
+            isVisible = advancedSettingsEnabled && !chapterPurifyReuseCurrentModel
+            val provider = AiChapterPurifyConfig.independentProvider
+            summary = when {
+                provider != null -> provider.name
+                AiChapterPurifyConfig.independentProviderId.isNotBlank() ->
+                    getString(R.string.ai_chapter_purify_reference_missing)
+                else -> getString(R.string.ai_chapter_purify_provider_summary_empty)
+            }
+        }
+        findPreference<Preference>(PreferKey.aiChapterPurifyModel)?.apply {
+            isVisible = advancedSettingsEnabled && !chapterPurifyReuseCurrentModel
+            val model = AiChapterPurifyConfig.independentModel
+            summary = when {
+                model != null -> model.modelId
+                AiChapterPurifyConfig.independentModelId.isNotBlank() ->
+                    getString(R.string.ai_chapter_purify_reference_missing)
+                else -> getString(R.string.ai_chapter_purify_model_summary_empty)
+            }
+        }
+        findPreference<Preference>(PreferKey.aiChapterPurifyRequestTemplate)?.apply {
+            isVisible = advancedSettingsEnabled && !chapterPurifyReuseCurrentModel
+            summary = getString(
+                if (AiChapterPurifyConfig.hasIndependentRequestTemplate) {
+                    R.string.ai_chapter_purify_request_template_summary_custom
+                } else {
+                    R.string.ai_chapter_purify_request_template_summary_inherited
+                }
+            )
+        }
+        findPreference<Preference>("aiChapterPurifyTestConnection")?.isVisible =
+            advancedSettingsEnabled && !chapterPurifyReuseCurrentModel
+        findPreference<Preference>(PreferKey.aiChapterPurifyPrompt)?.summary =
+            getString(R.string.ai_chapter_purify_prompt_summary)
+        findPreference<Preference>(PreferKey.aiChapterPurifyPreprocess)?.summary =
+            getString(R.string.ai_chapter_purify_preprocess_summary)
+        findPreference<Preference>(PreferKey.aiChapterPurifyChapterCount)?.summary =
+            getString(R.string.ai_chapter_purify_chapter_count_summary, AiChapterPurifyConfig.chapterCount)
+        findPreference<Preference>(PreferKey.aiChapterPurifySegmentLimit)?.summary =
+            getString(R.string.ai_chapter_purify_segment_limit_summary, AiChapterPurifyConfig.segmentLimit)
+        findPreference<Preference>(PreferKey.aiChapterPurifyRetryCount)?.summary =
+            getString(R.string.ai_chapter_purify_retry_count_summary, AiChapterPurifyConfig.retryCount)
+        findPreference<Preference>(PreferKey.aiChapterPurifyConcurrency)?.summary =
+            getString(R.string.ai_chapter_purify_concurrency_summary, AiChapterPurifyConfig.concurrency)
         val skills = AppConfig.aiSkillList
         val enabledSkillCount = skills.count { it.enabled }
         findPreference<Preference>(PreferKey.aiSkillPrompt)?.summary =

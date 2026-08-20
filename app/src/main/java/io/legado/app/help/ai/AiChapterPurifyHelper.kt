@@ -1,0 +1,485 @@
+package io.legado.app.help.ai
+
+import io.legado.app.constant.AppLog
+import io.legado.app.ui.main.ai.AiChatException
+import io.legado.app.utils.GSON
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+data class AiChapterPurifyParagraph(
+    val id: Int,
+    val content: String,
+    val preprocessedByType: Map<String, AiChapterPurifyPreprocessedParagraph> = emptyMap()
+)
+
+data class AiChapterPurifyRule(
+    val id: Int,
+    val type: String,
+    val old: String,
+    val new: String
+)
+
+class AiChapterPurifyException(
+    message: String,
+    cause: Throwable? = null,
+    val debugLog: String? = when (cause) {
+        is AiChatException -> cause.debugLog
+        is AiChapterPurifyException -> cause.debugLog
+        else -> null
+    }
+) : IllegalStateException(message, cause)
+
+sealed interface AiChapterPurifyProgress {
+    data class RequestAccepted(
+        val chapterIndex: Int,
+        val chunkIndex: Int,
+        val totalChunks: Int,
+        val attempt: Int
+    ) : AiChapterPurifyProgress
+
+    data class ResponseReceived(
+        val chapterIndex: Int,
+        val chunkIndex: Int,
+        val totalChunks: Int
+    ) : AiChapterPurifyProgress
+
+    data class StreamProgress(
+        val chapterIndex: Int,
+        val chunkIndex: Int,
+        val totalChunks: Int,
+        val attempt: Int,
+        val progress: AiStreamProgress
+    ) : AiChapterPurifyProgress
+
+    data class ChapterRulesStored(
+        val chapterIndex: Int,
+        val candidateRules: Int,
+        val addedRules: Int
+    ) : AiChapterPurifyProgress
+
+    data class ReplacementApplied(
+        val addedRules: Int
+    ) : AiChapterPurifyProgress
+}
+
+object AiChapterPurifyHelper {
+
+    private val supportedTypes = setOf("typo", "noise", "ad")
+    private val presentationMarkupRegex = Regex(
+        "<img\\b[^>]*>",
+        RegexOption.IGNORE_CASE
+    )
+
+    private data class Response(
+        val rules: List<ResponseRule>?
+    )
+
+    private data class ResponseRule(
+        val id: Int,
+        val type: String?,
+        val old: String?,
+        val new: String?
+    )
+
+    fun sanitizeParagraphForModel(content: String): String {
+        return presentationMarkupRegex.replace(content, "")
+    }
+
+    fun prepareParagraphForModel(
+        content: String,
+        rules: List<AiChapterPurifyPreprocessRule> = AiChapterPurifyConfig.preprocessRules
+    ): AiChapterPurifyPreprocessedParagraph {
+        return AiChapterPurifyPreprocessor.apply(content, rules)
+    }
+
+    fun prepareParagraphForModel(
+        content: String,
+        scope: String,
+        rules: List<AiChapterPurifyPreprocessRule> = AiChapterPurifyConfig.preprocessRules
+    ): AiChapterPurifyPreprocessedParagraph {
+        return AiChapterPurifyPreprocessor.apply(content, rules, scope)
+    }
+
+    suspend fun generateRules(
+        paragraphs: List<AiChapterPurifyParagraph>,
+        chapterIndex: Int,
+        onProgress: suspend (AiChapterPurifyProgress) -> Unit = {}
+    ): List<AiChapterPurifyRule> {
+        require(paragraphs.isNotEmpty()) { "章节没有可处理的内容" }
+        require(
+            AiChapterPurifyConfig.typoEnabled ||
+                AiChapterPurifyConfig.noiseEnabled ||
+                AiChapterPurifyConfig.adEnabled
+        ) { "请至少启用一种净化类型" }
+
+        val enabledTypes = AiChapterPurifyConfig.enabledTypes()
+        val chunks = splitIntoChunks(
+            paragraphs,
+            AiChapterPurifyConfig.segmentLimit,
+            enabledTypes
+        )
+        val target = try {
+            AiChapterPurifyConfig.requireModelTarget()
+        } catch (throwable: Throwable) {
+            AppLog.putAi(
+                "CHAPTER_PURIFY MODEL_TARGET_FAILED chapter=${chapterIndex + 1}\n" +
+                    "chunks=${chunks.size}",
+                throwable
+            )
+            throw throwable
+        }
+        AppLog.putAi(
+            "CHAPTER_PURIFY BATCHES_PREPARED\n" +
+                "chapter=${chapterIndex + 1}\n" +
+                "paragraphs=${paragraphs.size}\n" +
+                "chunks=${chunks.size}\n" +
+                "segmentLimit=${AiChapterPurifyConfig.segmentLimit}\n" +
+                "concurrency=${AiChapterPurifyConfig.concurrency}\n" +
+                "retryCount=${AiChapterPurifyConfig.retryCount}\n" +
+                "enabledTypes=${enabledTypes.joinToString(",")}\n" +
+                "provider=${target.provider.name}\n" +
+                "model=${target.modelId}"
+        )
+        val semaphore = Semaphore(AiChapterPurifyConfig.concurrency)
+        return coroutineScope {
+            chunks.mapIndexed { chunkIndex, chunk ->
+                async {
+                    semaphore.withPermit {
+                        requestChunk(
+                            target = target,
+                            chapterIndex = chapterIndex,
+                            chunkIndex = chunkIndex + 1,
+                            totalChunks = chunks.size,
+                            paragraphs = chunk,
+                            enabledTypes = enabledTypes,
+                            onProgress = onProgress
+                        )
+                    }
+                }
+            }.awaitAll().flatten().distinctBy { it.old to it.new }
+        }
+    }
+
+    private suspend fun requestChunk(
+        target: AiChapterPurifyModelTarget,
+        chapterIndex: Int,
+        chunkIndex: Int,
+        totalChunks: Int,
+        paragraphs: List<AiChapterPurifyParagraph>,
+        enabledTypes: List<String>,
+        onProgress: suspend (AiChapterPurifyProgress) -> Unit
+    ): List<AiChapterPurifyRule> {
+        var lastFailure: Throwable? = null
+        repeat(AiChapterPurifyConfig.retryCount + 1) { attempt ->
+            try {
+                AppLog.putAi(
+                    "CHAPTER_PURIFY BATCH_REQUEST chapter=${chapterIndex + 1}\n" +
+                        "batch=$chunkIndex/$totalChunks\n" +
+                        "attempt=${attempt + 1}\n" +
+                        "paragraphIds=${paragraphs.joinToString { it.id.toString() }}\n" +
+                        "chars=${paragraphs.sumOf { modelInputLength(it, enabledTypes) }}"
+                )
+                val response = AiChatService.generateStructuredText(
+                    provider = target.provider,
+                    model = target.modelId,
+                    systemPrompt = buildSystemPrompt(enabledTypes),
+                    userContent = buildUserContent(paragraphs, enabledTypes),
+                    temperature = 0.0,
+                    requestTemplate = AiChapterPurifyConfig.effectiveRequestTemplate,
+                    onRequestAccepted = {
+                        onProgress(
+                            AiChapterPurifyProgress.RequestAccepted(
+                                chapterIndex = chapterIndex,
+                                chunkIndex = chunkIndex,
+                                totalChunks = totalChunks,
+                                attempt = attempt + 1
+                            )
+                        )
+                    },
+                    onStreamProgress = { progress ->
+                        onProgress(
+                            AiChapterPurifyProgress.StreamProgress(
+                                chapterIndex = chapterIndex,
+                                chunkIndex = chunkIndex,
+                                totalChunks = totalChunks,
+                                attempt = attempt + 1,
+                                progress = progress
+                            )
+                        )
+                    }
+                )
+                onProgress(
+                    AiChapterPurifyProgress.ResponseReceived(
+                        chapterIndex = chapterIndex,
+                        chunkIndex = chunkIndex,
+                        totalChunks = totalChunks
+                    )
+                )
+                val rules = parseAndValidate(response, paragraphs)
+                AppLog.putAi(
+                    "CHAPTER_PURIFY BATCH_PARSED chapter=${chapterIndex + 1}\n" +
+                        "batch=$chunkIndex/$totalChunks\n" +
+                        "attempt=${attempt + 1}\n" +
+                        "rules=${rules.size}\n" +
+                        "ruleDetails=${rules.joinToString(" || ") { rule ->
+                            "id=${rule.id},type=${rule.type},old=${rule.old},new=${rule.new}"
+                        }.ifBlank { "<none>" }}"
+                )
+                return rules
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
+                if (throwable is AiThinkingInterruptLimitException) throw throwable
+                lastFailure = throwable
+                AppLog.putAi(
+                    "CHAPTER_PURIFY BATCH_FAILED chapter=${chapterIndex + 1}\n" +
+                        "batch=$chunkIndex/$totalChunks\n" +
+                        "attempt=${attempt + 1}",
+                    throwable
+                )
+                if (attempt < AiChapterPurifyConfig.retryCount) {
+                    delay(300L * (attempt + 1))
+                }
+            }
+        }
+        AppLog.putAi(
+            "CHAPTER_PURIFY BATCH_EXHAUSTED chapter=${chapterIndex + 1}\n" +
+                "batch=$chunkIndex/$totalChunks\n" +
+                "attempts=${AiChapterPurifyConfig.retryCount + 1}",
+            lastFailure
+        )
+        val causeMessage = lastFailure?.message
+            ?.takeIf { it.isNotBlank() }
+            ?: lastFailure?.javaClass?.simpleName
+            ?: "未知错误"
+        throw AiChapterPurifyException(
+            message = "$causeMessage（批次 $chunkIndex 重试 " +
+                "${AiChapterPurifyConfig.retryCount + 1} 次后仍失败）",
+            cause = lastFailure
+        )
+    }
+
+    private fun buildSystemPrompt(enabledTypes: List<String>): String {
+        val enabledTypeText = enabledTypes.joinToString(",")
+        return """
+            You are a strict structured-rule generator. Do not use tools. Do not return analysis or reasoning.
+            Return exactly one JSON object and no Markdown fence:
+            {"rules":[{"id":76,"type":"ad"},{"id":12,"type":"typo","old":"normalized source text","new":"replacement text"}]}
+            The id must be the input paragraph number added by the client after preprocessing.
+            Paragraph boundaries and ids are authoritative; never merge paragraphs or invent ids.
+            Only these types are enabled: $enabledTypeText.
+            Each paragraph can have one view per enabled type, written as [id][type].
+            Use the view matching the returned type; do not compare text across views.
+            For ad, return only id and type. Do not return old or new. The client will remove the complete B paragraph.
+            For typo and noise, old must be an exact contiguous substring of that paragraph's normalized input,
+            and new must contain the intended replacement. The client maps old back to B before storing the rule.
+            For noise, do not rewrite normal prose. Return an empty rules array when uncertain.
+            Never return HTML tags, image data, base64 data, SVG markup, or click metadata as a rule.
+            Those are presentation artifacts removed from the model input, not chapter text.
+
+            Task prompt controlled by the user:
+            ${AiChapterPurifyConfig.prompt}
+        """.trimIndent()
+    }
+
+    private fun buildUserContent(
+        paragraphs: List<AiChapterPurifyParagraph>,
+        enabledTypes: List<String>
+    ): String {
+        return buildString {
+            append("Input paragraphs:\n")
+            paragraphs.forEach { paragraph ->
+                enabledTypes.forEach { type ->
+                    val text = requiredPreprocessed(paragraph, type).text
+                    if (text.isNotBlank()) {
+                        append('[').append(paragraph.id).append("][")
+                            .append(type).append("] ")
+                        append(text)
+                        append('\n')
+                    }
+                }
+            }
+        }
+    }
+
+    private fun parseAndValidate(
+        response: String,
+        paragraphs: List<AiChapterPurifyParagraph>
+    ): List<AiChapterPurifyRule> {
+        val parsed = try {
+            GSON.fromJson(response.trim(), Response::class.java)
+        } catch (throwable: Throwable) {
+            throw AiChapterPurifyException("模型返回内容无法解析：模型返回的不是合法 JSON", throwable)
+        } ?: throw AiChapterPurifyException("模型没有返回内容")
+        val responseRules = parsed.rules
+            ?: throw AiChapterPurifyException("模型返回内容无法解析：缺少 rules 数组")
+        val sourceById = paragraphs.associateBy { it.id }
+        return responseRules.mapIndexedNotNull { index, rule ->
+            val id = rule.id
+            val paragraph = sourceById[id]
+                ?: throw AiChapterPurifyException(
+                    "AI 返回的净化规则无效：第 ${index + 1} 条规则引用了不存在的段落号 $id"
+                )
+            val source = paragraph.content
+            val type = rule.type?.lowercase()?.trim().orEmpty()
+            if (type !in supportedTypes || !AiChapterPurifyConfig.isTypeEnabled(type)) {
+                throw AiChapterPurifyException(
+                    "AI 返回的净化规则无效：第 ${index + 1} 条规则类型 '$type' 无效或未启用"
+                )
+            }
+            if (type == "ad") {
+                if (rule.old != null || rule.new != null) {
+                    throw AiChapterPurifyException(
+                        "AI 返回的净化规则无效：第 ${index + 1} 条广告规则只能包含段落号和类型"
+                    )
+                }
+                validateRule(index + 1, type, source, "", source)
+                return@mapIndexedNotNull AiChapterPurifyRule(id, type, source, "")
+            }
+            val old = rule.old ?: throw AiChapterPurifyException(
+                "AI 返回的净化规则无效：第 ${index + 1} 条规则缺少原文"
+            )
+            val new = rule.new ?: throw AiChapterPurifyException(
+                "AI 返回的净化规则无效：第 ${index + 1} 条规则缺少替换文本"
+            )
+            val markupMarker = findPresentationMarkupMarker(old)
+                ?: findPresentationMarkupMarker(new)
+            if (markupMarker != null) {
+                AppLog.putAi(
+                    "CHAPTER_PURIFY RULE_REJECTED\n" +
+                        "reason=presentation_markup\n" +
+                        "rule=${index + 1}\n" +
+                        "id=$id\n" +
+                        "type=$type\n" +
+                        "marker=$markupMarker\n" +
+                        "oldChars=${old.length}\n" +
+                        "newChars=${new.length}"
+                )
+                return@mapIndexedNotNull null
+            }
+            val preprocessed = paragraph.preprocessedByType[type]
+                ?: throw AiChapterPurifyException(
+                    "AI 返回的净化规则无效：第 ${index + 1} 条规则缺少类型 '$type' 的预处理映射"
+                )
+            val effectiveOld = preprocessed.sourceTextForModelText(old, source)
+            if (effectiveOld != old) {
+                AppLog.putAi(
+                    "CHAPTER_PURIFY RULE_REHYDRATED\n" +
+                        "type=$type\n" +
+                        "id=$id\n" +
+                        "modelOldChars=${old.length}\n" +
+                        "sourceOldChars=${effectiveOld.length}"
+                )
+            }
+            validateRule(index + 1, type, effectiveOld, new, source)
+            AiChapterPurifyRule(id, type, effectiveOld, new)
+        }
+    }
+
+    private fun findPresentationMarkupMarker(value: String): String? {
+        return when {
+            value.contains("<img", ignoreCase = true) -> "img-tag"
+            value.contains("data:image/", ignoreCase = true) -> "data-image"
+            value.contains("base64,", ignoreCase = true) -> "base64"
+            value.contains("showCmt(", ignoreCase = true) -> "click-metadata"
+            value.contains("<svg", ignoreCase = true) -> "svg-tag"
+            else -> null
+        }
+    }
+
+    private fun validateRule(
+        position: Int,
+        type: String,
+        old: String,
+        new: String,
+        source: String
+    ) {
+        if (old.isBlank()) {
+            throw AiChapterPurifyException("AI 返回的净化规则无效：第 $position 条规则原文为空")
+        }
+        if (old !in source) {
+            throw AiChapterPurifyException(
+                "AI 返回的净化规则无效：第 $position 条规则原文不是段落的精确子串"
+            )
+        }
+        if (old == new) {
+            throw AiChapterPurifyException("AI 返回的净化规则无效：第 $position 条规则未产生任何修改")
+        }
+        when (type) {
+            "ad" -> {
+                if (old != source || new.isNotEmpty()) {
+                    throw AiChapterPurifyException(
+                        "AI 返回的净化规则无效：第 $position 条广告规则必须整段删除"
+                    )
+                }
+            }
+
+            "typo" -> {
+                if (old.length < 2 || new.length < 2) {
+                    throw AiChapterPurifyException(
+                        "AI 返回的净化规则无效：第 $position 条错别字规则至少需要两个字符"
+                    )
+                }
+            }
+
+            "noise" -> {
+                if (new.isBlank() && old.length < 4) {
+                    throw AiChapterPurifyException(
+                        "AI 返回的净化规则无效：第 $position 条噪声规则内容过短"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun splitIntoChunks(
+        paragraphs: List<AiChapterPurifyParagraph>,
+        characterLimit: Int,
+        enabledTypes: List<String>
+    ): List<List<AiChapterPurifyParagraph>> {
+        val chunks = mutableListOf<MutableList<AiChapterPurifyParagraph>>()
+        var current = mutableListOf<AiChapterPurifyParagraph>()
+        var currentLength = 0
+        paragraphs.forEach { paragraph ->
+            val estimatedLength = modelInputLength(paragraph, enabledTypes) +
+                paragraph.id.toString().length + enabledTypes.size * 8
+            require(estimatedLength <= characterLimit) {
+                "章节没有可处理的内容：段落 ${paragraph.id} 超过分批字符上限"
+            }
+            if (current.isNotEmpty() && currentLength + estimatedLength > characterLimit) {
+                chunks.add(current)
+                current = mutableListOf()
+                currentLength = 0
+            }
+            current.add(paragraph)
+            currentLength += estimatedLength
+        }
+        if (current.isNotEmpty()) {
+            chunks.add(current)
+        }
+        return chunks
+    }
+
+    private fun requiredPreprocessed(
+        paragraph: AiChapterPurifyParagraph,
+        type: String
+    ): AiChapterPurifyPreprocessedParagraph {
+        return paragraph.preprocessedByType[type]
+            ?: throw AiChapterPurifyException(
+                "AI 返回的净化规则无效：段落 ${paragraph.id} 缺少 '$type' 类型的预处理输入"
+            )
+    }
+
+    private fun modelInputLength(
+        paragraph: AiChapterPurifyParagraph,
+        enabledTypes: List<String>
+    ): Int {
+        return enabledTypes.sumOf { type ->
+            requiredPreprocessed(paragraph, type).text.length
+        }
+    }
+}

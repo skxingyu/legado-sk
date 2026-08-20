@@ -16,8 +16,12 @@ import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.FragmentMyConfigBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.update.UpdateManager
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.lib.prefs.EditTextPreference
 import io.legado.app.lib.prefs.NameListPreference
 import io.legado.app.lib.prefs.SwitchPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
@@ -38,6 +42,7 @@ import io.legado.app.ui.config.NavigationBarManageActivity
 import io.legado.app.ui.config.ThemeManageActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
@@ -46,6 +51,7 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyMainBottomBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
@@ -202,11 +208,16 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                 }
             }
             findPreference<NameListPreference>(PreferKey.themeMode)?.let {
-                it.setOnPreferenceChangeListener { _, _ ->
-                    view?.post { ThemeConfig.applyDayNight(requireContext()) }
-                    true
+                it.setOnPreferenceChangeListener { _, value ->
+                    val mode = ThemeConfig.ThemeMode.fromPreference(value)
+                        ?: return@setOnPreferenceChangeListener false
+                    ThemeConfig.switchThemeMode(requireContext(), mode)
+                    false
                 }
             }
+            findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)?.isVisible =
+                getPrefString(PreferKey.updateAccelerator) == "custom"
+            updateSettingsEntryVisibility()
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -219,6 +230,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         override fun onResume() {
             super.onResume()
             preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
+            updateSettingsEntryVisibility()
         }
 
         override fun onPause() {
@@ -239,7 +251,22 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                     }
                 }
 
+                PreferKey.updateAccelerator -> {
+                    findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)
+                        ?.isVisible = sharedPreferences?.getString(key, "none") == "custom"
+                }
+
+                PreferKey.updateCheckOnStart -> {
+                    if (requireContext().getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
+                        val ctx = requireContext()
+                        Coroutine.async {
+                            UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)
+                        }
+                    }
+                }
+
                 "recordLog" -> LogUtils.upLevel()
+                PreferKey.showRssPageInSettings -> updateSettingsEntryVisibility()
             }
         }
 
@@ -267,7 +294,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                     else -> matchesMainPreference(preference, keyword)
                 }
                 preference.isVisible = visible
-                anyVisible = anyVisible || visible
+                anyVisible = anyVisible || preference.isVisible
             }
             group.isVisible = anyVisible || group == preferenceScreen
             return anyVisible
@@ -277,10 +304,17 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             group.isVisible = true
             for (index in 0 until group.preferenceCount) {
                 val preference = group.getPreference(index)
-                preference.isVisible = true
                 if (preference is PreferenceGroup) {
                     resetVisibility(preference)
                 }
+            }
+        }
+
+        private fun updateSettingsEntryVisibility() {
+            if (activeSearchKeyword.isBlank()) {
+                findPreference<Preference>("rssPageManage")?.isVisible = false
+            } else {
+                filterMainPreferences(activeSearchKeyword)
             }
         }
 
@@ -511,10 +545,17 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                     putExtra("configTag", ConfigTag.AI_CONFIG)
                 }
 
+                "updateCheckNow" -> {
+                    val ctx = requireContext()
+                    Coroutine.async {
+                        UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)
+                    }
+                    return true
+                }
+
                 "fileManage" -> startActivity<FileManageActivity>()
                 "readRecord" -> startActivity<ReadRecordActivity>()
                 "about" -> startActivity<AboutActivity>()
-                "exit" -> activity?.finish()
                 else -> Unit
             }
             return super.onPreferenceTreeClick(preference)

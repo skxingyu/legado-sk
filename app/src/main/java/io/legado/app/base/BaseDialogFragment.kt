@@ -21,7 +21,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.applyHeaderlessDialogChrome
 import io.legado.app.lib.theme.applyUiBodyTypeface
-import io.legado.app.lib.theme.dialogSurfaceBackground
 import io.legado.app.lib.theme.surface.SurfaceStyles
 import io.legado.app.lib.theme.surface.SurfaceStyle
 import io.legado.app.utils.SurfaceBackdrop
@@ -35,9 +34,15 @@ import kotlin.coroutines.CoroutineContext
 
 abstract class BaseDialogFragment(
     @LayoutRes layoutID: Int,
-    private val adaptationSoftKeyboard: Boolean = false,
-    private val useLegacySurfaceStyle: Boolean = false
+    private val adaptationSoftKeyboard: Boolean = false
 ) : DialogFragment(layoutID) {
+
+    protected enum class ChromeMode {
+        HEADERLESS,
+        FULL_SCREEN_TOOL,
+    }
+
+    protected open val chromeMode: ChromeMode = ChromeMode.HEADERLESS
 
     private var onDismissListener: OnDismissListener? = null
 
@@ -72,15 +77,11 @@ abstract class BaseDialogFragment(
             })
         } else {
             dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
-            if (useLegacySurfaceStyle) {
-                dialog?.applyAdaptiveDim()
-            } else {
-                view?.let { root ->
-                    dialog?.applyAdaptiveDim(
-                        dialogSurfaceView(root),
-                        dialogSurfaceStyle(requireContext())
-                    )
-                }
+            view?.let { root ->
+                dialog?.applyAdaptiveDim(
+                    dialogSurfaceView(root),
+                    dialogSurfaceStyle(requireContext())
+                )
             }
         }
     }
@@ -102,18 +103,14 @@ abstract class BaseDialogFragment(
             view.setOnClickListener { dismiss() }
         }
         if (!AppConfig.isEInkMode) {
-            if (useLegacySurfaceStyle) {
-                view.background = requireContext().dialogSurfaceBackground
-            } else {
-                SurfaceBackdrop.installStatic(
-                    dialogSurfaceView(view),
-                    dialogSurfaceStyle(requireContext())
-                )
-            }
+            SurfaceBackdrop.installStatic(
+                dialogSurfaceView(view),
+                dialogSurfaceStyle(requireContext())
+            )
             view.applyUiBodyTypeface(requireContext())
         }
         onFragmentCreated(view, savedInstanceState)
-        if (!useLegacySurfaceStyle) {
+        if (chromeMode == ChromeMode.HEADERLESS) {
             dialogSurfaceView(view).applyHeaderlessDialogChrome()
         }
         observeLiveBus()

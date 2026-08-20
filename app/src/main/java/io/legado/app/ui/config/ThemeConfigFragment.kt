@@ -179,8 +179,7 @@ class ThemeConfigFragment : PreferenceFragment(),
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
         when (menuItem.itemId) {
             R.id.menu_theme_mode -> {
-                AppConfig.isNightTheme = !AppConfig.isNightTheme
-                ThemeConfig.applyDayNight(requireContext())
+                ThemeConfig.toggleLightDarkTheme(requireContext())
                 return true
             }
         }
@@ -305,7 +304,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogAlpha)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogAlpha, 20)
+                putPrefInt(PreferKey.dialogAlpha, 50)
             }
             .show {
                 putPrefInt(PreferKey.dialogAlpha, it.coerceIn(0, 100))
@@ -319,7 +318,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogBlur)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogBlur, 50)
+                putPrefInt(PreferKey.dialogBlur, 100)
             }
             .show {
                 putPrefInt(PreferKey.dialogBlur, it.coerceIn(0, 100))
@@ -442,6 +441,11 @@ class ThemeConfigFragment : PreferenceFragment(),
             } else {
                 value
             }
+
+            PreferKey.uiLayoutAlpha -> preference.summary = getString(
+                R.string.ui_layout_alpha_value,
+                AppConfig.uiLayoutAlpha
+            )
 
             PreferKey.bookshelfCoverAlpha -> preference.summary = getString(
                 R.string.bookshelf_cover_alpha_value,

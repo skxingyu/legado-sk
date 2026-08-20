@@ -1,6 +1,7 @@
 package io.legado.app.help.book
 
 import android.os.Build
+import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.AppPattern.spaceRegex
@@ -98,6 +99,28 @@ class ContentProcessor private constructor(
         chineseConvert: Boolean = true,
         reSegment: Boolean = true
     ): BookContent {
+        if (book.isAudio) {
+            val transcript = AudioTextMapping.parse(chapter.getVariable("lyric"))
+            val contents = arrayListOf<String>()
+            if (includeTitle) {
+                contents += chapter.getDisplayTitle(
+                    getTitleReplaceRules(),
+                    useReplace = useReplace && book.getUseReplaceRule(),
+                    replaceBook = book.toReplaceBook()
+                )
+            }
+            // 音频正文按显示顺序输出：普通段落与 <usehtml>…</usehtml> 结构块
+            // 交错保留原位，结构块交给 TextChapterLayout 的现有 HTML 渲染
+            val displayContents = transcript.displayContents(ReadBookConfig.paragraphIndent)
+            if (displayContents.isEmpty()) {
+                contents += appCtx.getString(R.string.audio_chapter_no_transcript)
+            } else {
+                contents += displayContents
+            }
+            return BookContent(false, contents, null)
+        }
+
+        // 原有的普通书处理逻辑
         var mContent = content
         var sameTitleRemoved = false
         var effectiveReplaceRules: ArrayList<ReplaceRule>? = null

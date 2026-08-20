@@ -44,6 +44,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
@@ -59,8 +60,6 @@ import io.legado.app.help.TextViewTagHandler
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.getRemoteUrl
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isVideo
@@ -69,6 +68,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.ui.book.bindBookMediaBadge
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
@@ -88,13 +88,10 @@ import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.edit.BookInfoEditActivity
-import io.legado.app.ui.book.manga.ReadMangaActivity
-import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadBookActivity.Companion.RESULT_DELETED
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.model.SourceCallBack
@@ -104,7 +101,7 @@ import io.legado.app.ui.book.toc.BookTocLoadingActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.video.VideoPlayerActivity
+import io.legado.app.utils.defaultReadingActivityClass
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -620,6 +617,7 @@ class BookInfoActivity :
 
     private fun showBook(book: Book) = binding.run {
         showCover(book)
+        binding.root.bindBookMediaBadge(book.type)
         tvName.text = book.name
         tvAuthor.text = getString(R.string.author_show, book.getRealAuthor())
         tvOrigin.text = getString(R.string.origin_show, book.originName)
@@ -1792,36 +1790,22 @@ class BookInfoActivity :
                     .putExtra("name", book.name)
                     .putExtra("author", book.author)
                     .putExtra("bookUrl", book.bookUrl)
+                    .putExtra(
+                        BookMediaType.EXTRA_MEDIA_TYPE,
+                        BookMediaType.fromBookType(book.type)
+                    )
                     .putExtra("inBookshelf", viewModel.inBookshelf)
                     .putExtra("chapterChanged", chapterChanged)
             )
             return
         }
-        when {
-            book.isAudio -> readBookResult.launch(
-                Intent(this, AudioPlayActivity::class.java)
-                    .putExtra("bookUrl", book.bookUrl)
-                    .putExtra("inBookshelf", viewModel.inBookshelf)
-            )
-            book.isVideo -> readBookResult.launch(
-                Intent(this, VideoPlayerActivity::class.java)
-                    .putExtra("bookUrl", book.bookUrl)
-                    .putExtra("inBookshelf", viewModel.inBookshelf)
-            )
-
-            else -> readBookResult.launch(
-                Intent(
-                    this,
-                    when {
-                        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
-                        else -> ReadBookActivity::class.java
-                    }
-                )
-                    .putExtra("bookUrl", book.bookUrl)
-                    .putExtra("inBookshelf", viewModel.inBookshelf)
-                    .putExtra("chapterChanged", chapterChanged)
-            )
+        val readIntent = Intent(this, book.defaultReadingActivityClass())
+            .putExtra("bookUrl", book.bookUrl)
+            .putExtra("inBookshelf", viewModel.inBookshelf)
+        if (!book.isVideo) {
+            readIntent.putExtra("chapterChanged", chapterChanged)
         }
+        readBookResult.launch(readIntent)
     }
 
     override val oldBook: Book?

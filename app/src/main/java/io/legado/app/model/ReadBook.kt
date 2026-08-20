@@ -9,14 +9,17 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReadRecentBook
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.AudioTextMapping
 import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isPdf
@@ -293,22 +296,20 @@ object ReadBook : CoroutineScope by MainScope() {
         }.onError {
             AppLog.put("拉取阅读进度失败", it)
         }.onSuccess { progress ->
-            if (progress == null || progress.durChapterIndex < book.durChapterIndex ||
-                (progress.durChapterIndex == book.durChapterIndex
-                        && progress.durChapterPos < book.durChapterPos)
-            ) {
-                // 服务器没有进度或者进度比服务器快，上传现有进度
-                Coroutine.async {
-                    AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
-                    book.update()
+            when (progress?.compareWith(book)) {
+                null,
+                BookProgressComparison.LOCAL_NEWER -> {
+                    Coroutine.async {
+                        AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        book.update()
+                    }
                 }
-            } else if (progress.durChapterIndex > book.durChapterIndex ||
-                progress.durChapterPos > book.durChapterPos
-            ) {
-                // 进度比服务器慢，执行传入动作
-                newProgressAction?.invoke(progress)
-            } else {
-                syncSuccessAction?.invoke()
+                BookProgressComparison.REMOTE_NEWER -> {
+                    newProgressAction?.invoke(progress)
+                }
+                BookProgressComparison.SAME -> {
+                    syncSuccessAction?.invoke()
+                }
             }
         }
     }
@@ -882,9 +883,10 @@ object ReadBook : CoroutineScope by MainScope() {
                         }
                         callBack?.onLayoutPageCompleted(index, page)
                     }
+                    migrateLegacyAudioProgress(book, textChapter)
                     if (upContent) callBack?.upContent(offset, !available && resetPageOffset)
                     curPageChanged()
-                    callBack?.contentLoadFinish()
+                    callBack?.contentLoadFinish("loadChapter")
                 }
 
                 -1 -> prevChapterLoadingLock.withLock {
@@ -924,6 +926,34 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         chapterLoadingJobs[chapter.index] = job
         job.start()
+    }
+
+    private fun migrateLegacyAudioProgress(book: Book, textChapter: TextChapter) {
+        if (!book.isAudio || book.getAudioProgressVersion() >= 1) return
+
+        val legacyAudioPosition = book.durChapterPos.coerceAtLeast(0)
+        val mapping = AudioTextMapping.parse(textChapter.chapter.getVariable("lyric"))
+        val layoutParagraphs = textChapter.getParagraphs(false)
+        val layoutBinding = if (mapping.hasTimeMapping) {
+            textChapter.bindAudioTextMapping(mapping)
+        } else {
+            null
+        }
+        val paragraphIndex = layoutBinding?.layoutParagraphAt(legacyAudioPosition)
+        val paragraph = paragraphIndex?.let {
+            layoutParagraphs.getOrNull(it)
+        }
+        val textPosition = paragraph?.chapterPosition ?: 0
+        book.setSourceAudioProgress(textChapter.chapter.index, legacyAudioPosition)
+        book.durChapterPos = textPosition
+        durChapterPos = textPosition
+        book.setAudioProgressVersion(1)
+        book.update()
+        AppLog.putDebug(
+            "Audio progress migrated: book=${book.bookUrl}, chapter=${textChapter.chapter.index}, " +
+                    "audioMs=$legacyAudioPosition, textPosition=$textPosition, " +
+                    "mapped=${paragraph != null}"
+        )
     }
 
     suspend fun contentLoadFinishAwait(
@@ -974,9 +1004,10 @@ object ReadBook : CoroutineScope by MainScope() {
                         }
                         callBack?.onLayoutPageCompleted(index, page)
                     }
+                    migrateLegacyAudioProgress(book, textChapter)
                     if (upContent) callBack?.upContent(offset, !available && resetPageOffset)
                     curPageChanged()
-                    callBack?.contentLoadFinish()
+                    callBack?.contentLoadFinish("contentLoadAwait")
                 }
 
                 -1 -> {
@@ -1223,7 +1254,7 @@ object ReadBook : CoroutineScope by MainScope() {
 
         fun pageChanged()
 
-        fun contentLoadFinish()
+        fun contentLoadFinish(trigger: String = "chapter_load")
 
         fun upPageAnim(upRecorder: Boolean = false)
 

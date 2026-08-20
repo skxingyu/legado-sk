@@ -1,0 +1,82 @@
+package io.legado.app.ui.about
+
+import android.content.Context
+import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import androidx.recyclerview.widget.LinearLayoutManager
+import io.legado.app.R
+import io.legado.app.base.adapter.ItemViewHolder
+import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.constant.AppLog
+import io.legado.app.databinding.DialogRecyclerViewBinding
+import io.legado.app.databinding.ItemAiLogBinding
+import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.widget.dialog.TextDialog
+import io.legado.app.utils.LogUtils
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.viewbindingdelegate.viewBinding
+import splitties.views.onClick
+import java.util.Date
+
+class AiLogDialog : BaseLogDialogFragment() {
+
+    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
+    private val adapter by lazy { LogAdapter(requireContext()) }
+
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        binding.run {
+            toolBar.setBackgroundColor(primaryColor)
+            toolBar.setTitle(R.string.ai_log)
+            toolBar.inflateMenu(R.menu.app_log)
+            toolBar.setOnMenuItemClickListener(this@AiLogDialog)
+            recyclerView.layoutManager = LinearLayoutManager(requireContext())
+            recyclerView.adapter = adapter
+        }
+        adapter.setItems(AppLog.aiLogs)
+    }
+
+    override fun clearLogs(onCleared: () -> Unit) {
+        AppLog.clearAi()
+        onCleared()
+    }
+
+    override fun copyAllLogs() {
+        requireContext().sendToClip(AppLog.formatLogs(AppLog.aiLogs))
+    }
+
+    inner class LogAdapter(context: Context) :
+        RecyclerAdapter<Triple<Long, String, Throwable?>, ItemAiLogBinding>(context) {
+
+        override fun getViewBinding(parent: ViewGroup): ItemAiLogBinding {
+            return ItemAiLogBinding.inflate(inflater, parent, false)
+        }
+
+        override fun convert(
+            holder: ItemViewHolder,
+            binding: ItemAiLogBinding,
+            item: Triple<Long, String, Throwable?>,
+            payloads: MutableList<Any>
+        ) {
+            binding.textTime.text = LogUtils.logTimeFormat.format(Date(item.first))
+            binding.textMessage.text = item.second.lineSequence()
+                .filter { it.isNotBlank() }
+                .take(2)
+                .joinToString(" · ")
+        }
+
+        override fun registerListener(holder: ItemViewHolder, binding: ItemAiLogBinding) {
+            binding.root.onClick {
+                getItem(holder.layoutPosition)?.let { item ->
+                    showDialogFragment(
+                        TextDialog(
+                            getString(R.string.ai_log),
+                            AppLog.formatLogs(listOf(item))
+                        )
+                    )
+                }
+            }
+        }
+    }
+}

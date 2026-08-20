@@ -34,7 +34,6 @@ import android.telephony.TelephonyManager
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.view.animation.LinearInterpolator
@@ -64,8 +63,10 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.model.ReadAloud
+import io.legado.app.model.ReadAloudUiState
 import io.legado.app.model.ReadBook
 import io.legado.app.receiver.MediaButtonReceiver
+import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.utils.LogUtils
@@ -79,7 +80,6 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeSharedPreferences
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefInt
-import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -93,6 +93,7 @@ import splitties.systemservices.notificationManager
 import splitties.systemservices.powerManager
 import splitties.systemservices.telephonyManager
 import splitties.systemservices.wifiManager
+import kotlin.math.abs
 
 /**
  * 朗读服务
@@ -121,13 +122,21 @@ abstract class BaseReadAloudService : BaseService(),
         var runningClass: Class<*>? = null
             private set
 
+        @Volatile
+        var readAloudProgress: ReadAloudProgress? = null
+            private set
+
+        fun publishReadAloudProgress(progress: ReadAloudProgress) {
+            readAloudProgress = progress
+            postEvent(EventBus.READ_ALOUD_PROGRESS, progress)
+        }
+
         fun isPlay(): Boolean {
             return isRun && !pause
         }
 
         private const val TAG = "BaseReadAloudService"
         private const val MIN_READ_ALOUD_PRELOAD_LENGTH = 300
-
     }
 
     private val useWakeLock = appCtx.getPrefBoolean(PreferKey.readAloudWakeLock, false)
@@ -139,7 +148,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
     private val wifiLock by lazy {
         @Suppress("DEPRECATION")
-        wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "legado:AudioPlayService")
+        wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "legado:ReadAloudService")
             ?.apply {
                 setReferenceCounted(false)
             }
@@ -158,6 +167,21 @@ abstract class BaseReadAloudService : BaseService(),
     internal var readAloudNumber: Int = 0
     internal var textChapter: TextChapter? = null
     internal var pageIndex = 0
+
+    /**
+     * 统一朗读会话的当前章节身份：BookChapter.index。
+     * TTS 与书源音频都以它为共同章节身份；正文 TextChapter 只负责显示与字幕映射，
+     * 不再决定音频当前正在播放哪一章。
+     */
+    internal var currentChapterIndex: Int = -1
+
+    /**
+     * 会话章节身份是否可以在正文 TextChapter 未就绪时建立。
+     * 书源音频（SourceAudio）覆盖为 true：当前章节只认 BookChapter.index，
+     * 正文未加载 / 未完成排版 / 无正文时也能启动播放；
+     * TTS / HTTP TTS 必须等正文排版完成才能朗读，保持原前置条件。
+     */
+    protected open val sessionChapterCanStartWithoutText: Boolean get() = false
     private var needResumeOnAudioFocusGain = false
     private var needResumeOnCallStateIdle = false
     private var registeredPhoneStateListener = false
@@ -171,12 +195,26 @@ abstract class BaseReadAloudService : BaseService(),
     private var floatingCoverView: ImageView? = null
     private var floatingPlayPauseView: ImageView? = null
     private var floatingLoadingAnimator: ObjectAnimator? = null
+    private var floatingCoverAnimator: ObjectAnimator? = null
     private var appFloatingActivity: Activity? = null
-    private var readBookActivityActive = false
-    private var currentAvoidanceSource: String? = null
-    private var currentAvoidanceY: Int = 0
+    private var readAloudDialogFloatingHost: ReadAloudFloatingHost? = null
+    private enum class FloatingHostMode {
+        NONE,
+        APPLICATION_PANEL,
+        DESKTOP_OVERLAY,
+    }
+
+    private var floatingHostMode = FloatingHostMode.NONE
+    private data class FloatingAvoidanceBounds(
+        val topOnScreen: Int,
+        val bottomOnScreen: Int,
+    )
+
+    private val avoidanceBounds = mutableMapOf<String, FloatingAvoidanceBounds>()
+    private var dragBaseYOnScreen: Int? = null
     private var rebuildFloatingJob: Job? = null
-    private val isDesktopFloating: Boolean get() = floatingWindowManager != null
+    private val isDesktopFloating: Boolean
+        get() = floatingHostMode == FloatingHostMode.DESKTOP_OVERLAY
     private val floatingHeight get() = 50.dpToPx()
     private val floatingMinY get() = 24.dpToPx()
     private val appFloatingLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
@@ -184,18 +222,19 @@ abstract class BaseReadAloudService : BaseService(),
         override fun onActivityStarted(activity: Activity) = Unit
         override fun onActivityResumed(activity: Activity) {
             appFloatingActivity = activity
-            if (AppConfig.readAloudHideFloatingWindow) {
+            if (activity is AudioPlayActivity) {
                 removeReadAloudFloatingWindow()
                 upReadAloudNotification()
                 return
             }
-            if (AppConfig.readAloudHideFloatingInReadBook) {
-                if (isDesktopFloating) removeReadAloudFloatingWindow()
-                if (activity is ReadBookActivity) {
-                    removeReadAloudFloatingWindow()
-                } else {
-                    showAppReadAloudFloatingWindow()
-                }
+            if (activity is ReadBookActivity && !ReadAloudUiState.readerMenuVisible) {
+                removeReadAloudFloatingWindow()
+                upReadAloudNotification()
+                return
+            }
+            if (AppConfig.readAloudHideFloatingWindow) {
+                removeReadAloudFloatingWindow()
+                upReadAloudNotification()
                 return
             }
             if (AppConfig.readAloudFloatOnDesktop && canDrawFloatingWindow()) {
@@ -213,7 +252,14 @@ abstract class BaseReadAloudService : BaseService(),
                 appFloatingActivity = null
             }
         }
-        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivityStopped(activity: Activity) {
+            if (isRun &&
+                (activity is AudioPlayActivity || activity is ReadBookActivity) &&
+                canDrawFloatingWindow()
+            ) {
+                showReadAloudFloatingWindow()
+            }
+        }
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) {
             if (appFloatingActivity === activity) {
@@ -246,7 +292,6 @@ abstract class BaseReadAloudService : BaseService(),
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     private fun showReadAloudFloatingWindow() {
         if (!isMainThread()) {
             lifecycleScope.launch(Main) {
@@ -259,18 +304,34 @@ abstract class BaseReadAloudService : BaseService(),
             upReadAloudNotification()
             return
         }
-        if (floatingView != null) {
+        if (appFloatingActivity is AudioPlayActivity) {
+            removeReadAloudFloatingWindow()
+            upReadAloudNotification()
             return
         }
-        if (AppConfig.readAloudHideFloatingInReadBook) {
-            if (readBookActivityActive) return
-            showAppReadAloudFloatingWindow()
+        val activeReader = ReadBookActivity.activeActivity()
+        val reader = appFloatingActivity as? ReadBookActivity ?: activeReader
+        if (activeReader != null && !ReadAloudUiState.readerMenuVisible) {
+            removeReadAloudFloatingWindow()
+            upReadAloudNotification()
+            return
+        }
+        if (floatingView != null) {
+            if (!isDesktopFloating && reader == null) {
+                removeReadAloudFloatingWindow()
+                upReadAloudNotification()
+            } else if (!isDesktopFloating && reader != null) {
+                ensureAppReadAloudFloatingHost(resolveAppReadAloudFloatingHost(reader))
+            }
             return
         }
         if (canDrawFloatingWindow()) {
             showDesktopReadAloudFloatingWindow()
+        } else if (reader != null) {
+            showAppReadAloudFloatingWindow(reader)
         } else {
-            showAppReadAloudFloatingWindow()
+            removeReadAloudFloatingWindow()
+            upReadAloudNotification()
         }
     }
 
@@ -298,28 +359,19 @@ abstract class BaseReadAloudService : BaseService(),
             floatingWindowManager = windowManager
             floatingParams = params
             floatingView = view
+            floatingHostMode = FloatingHostMode.DESKTOP_OVERLAY
             onReadAloudFloatingAttached(view)
         }.onFailure {
             AppLog.put("显示朗读悬浮窗失败\n${it.localizedMessage}", it)
         }
     }
 
-    private fun showAppReadAloudFloatingWindow() {
-        val activity = appFloatingActivity ?: ReadBookActivity.activeActivity() ?: return
-        val root = activity.window?.decorView as? FrameLayout ?: return
+    private fun showAppReadAloudFloatingWindow(activity: ReadBookActivity) {
         runCatching {
             val view = createReadAloudFloatingView()
-            floatingView = view
-            root.addView(
+            addAppReadAloudFloatingWindow(
+                resolveAppReadAloudFloatingHost(activity),
                 view,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    floatingHeight
-                ).apply {
-                    gravity = Gravity.START or Gravity.TOP
-                    leftMargin = readAloudFloatingX()
-                    topMargin = readAloudFloatingYInRoot(root)
-                }
             )
             onReadAloudFloatingAttached(view)
         }.onFailure {
@@ -328,11 +380,70 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
+    private fun resolveAppReadAloudFloatingHost(
+        activity: ReadBookActivity,
+    ): ReadAloudFloatingHost {
+        readAloudDialogFloatingHost?.let { return it }
+        val token = activity.window?.decorView?.windowToken
+            ?: error("ReadBookActivity window token is unavailable for the read-aloud panel")
+        return ReadAloudFloatingHost(activity.windowManager, token)
+    }
+
+    private fun addAppReadAloudFloatingWindow(
+        host: ReadAloudFloatingHost,
+        view: View,
+    ) {
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            floatingHeight,
+            WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.START or Gravity.TOP
+            x = readAloudFloatingX()
+            y = readAloudFloatingY()
+            token = host.token
+            title = "ReadAloudFloating"
+        }
+        host.windowManager.addView(view, params)
+        floatingWindowManager = host.windowManager
+        floatingParams = params
+        floatingView = view
+        floatingHostMode = FloatingHostMode.APPLICATION_PANEL
+    }
+
+    private fun ensureAppReadAloudFloatingHost(host: ReadAloudFloatingHost) {
+        val view = floatingView ?: return
+        if (floatingParams?.token == host.token) return
+        detachFloatingView(view)
+        try {
+            addAppReadAloudFloatingWindow(host, view)
+            onReadAloudFloatingAttached(view)
+        } catch (error: Throwable) {
+            clearReadAloudFloatingRefs()
+            throw error
+        }
+    }
+
+    private fun detachFloatingView(view: View) {
+        val windowManager = checkNotNull(floatingWindowManager) {
+            "Floating WindowManager is missing while a read-aloud panel is attached"
+        }
+        windowManager.removeView(view)
+        floatingWindowManager = null
+        floatingParams = null
+        floatingHostMode = FloatingHostMode.NONE
+    }
+
     private fun onReadAloudFloatingAttached(view: View) {
-        attachReadAloudFloatingTouch(view)
+        updateReadAloudFloatingVisibility(true)
         updateReadAloudFloatingCover()
         updateReadAloudFloatingPlayState()
-        applyReadAloudFloatingAvoidance(currentAvoidanceY)
+        applyReadAloudFloatingAvoidance()
     }
 
     private fun createReadAloudFloatingView(): View {
@@ -402,7 +513,7 @@ abstract class BaseReadAloudService : BaseService(),
             }
         }
         container.addView(closeView, LinearLayout.LayoutParams(iconSize, iconSize))
-        return FrameLayout(this).apply {
+        return ReadAloudFloatingLayout(this).apply {
             addView(
                 container,
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, height)
@@ -438,6 +549,7 @@ abstract class BaseReadAloudService : BaseService(),
             }
         )
         updateFloatingLoadingAnimation()
+        updateFloatingCoverAnimation()
     }
 
     private fun updateFloatingLoadingAnimation() {
@@ -458,6 +570,30 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
+    private fun updateFloatingCoverAnimation(restart: Boolean = false) {
+        val view = floatingCoverView ?: return
+        if (AppConfig.readAloudCoverRotation && isPlay() && !loading) {
+            if (!restart && floatingCoverAnimator?.isStarted == true) return
+            floatingCoverAnimator?.cancel()
+            val startRotation = view.rotation
+            floatingCoverAnimator = ObjectAnimator.ofFloat(
+                view,
+                View.ROTATION,
+                startRotation,
+                startRotation + 360f
+            ).apply {
+                duration = AppConfig.readAloudCoverRotationDuration.toLong()
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                start()
+            }
+        } else {
+            floatingCoverAnimator?.cancel()
+            floatingCoverAnimator = null
+            view.rotation = 0f
+        }
+    }
+
     private fun removeReadAloudFloatingWindow() {
         if (!isMainThread()) {
             lifecycleScope.launch(Main) {
@@ -465,27 +601,32 @@ abstract class BaseReadAloudService : BaseService(),
             }
             return
         }
-        floatingView?.let { view ->
-            runCatching {
-                if (isDesktopFloating) {
-                    floatingWindowManager?.removeView(view)
-                } else {
-                    (view.parent as? FrameLayout)?.removeView(view)
-                }
-            }
-        }
+        floatingView?.let(::detachFloatingView)
         clearReadAloudFloatingRefs()
     }
 
     private fun clearReadAloudFloatingRefs() {
         floatingLoadingAnimator?.cancel()
         floatingLoadingAnimator = null
+        floatingCoverAnimator?.cancel()
+        floatingCoverAnimator = null
         floatingPlayPauseView?.rotation = 0f
+        floatingCoverView?.rotation = 0f
         floatingView = null
         floatingParams = null
         floatingWindowManager = null
+        floatingHostMode = FloatingHostMode.NONE
+        avoidanceBounds.clear()
+        dragBaseYOnScreen = null
         floatingCoverView = null
         floatingPlayPauseView = null
+        updateReadAloudFloatingVisibility(false)
+    }
+
+    private fun updateReadAloudFloatingVisibility(visible: Boolean) {
+        if (ReadAloudUiState.readAloudFloatingVisible == visible) return
+        ReadAloudUiState.setReadAloudFloatingVisible(visible)
+        postEvent(EventBus.READ_ALOUD_FLOATING_VISIBILITY, visible)
     }
 
     private fun removeAppReadAloudFloatingWindow() {
@@ -496,38 +637,11 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun openReadAloudBook() {
-        if (readBookActivityActive) {
-            postEvent(EventBus.OPEN_READ_ALOUD_DIALOG, true)
-            return
-        }
-        ReadBook.book?.let { book ->
-            val chapterPos = currentReadAloudChapterPos()
-            ReadBook.saveRead()
-            startActivityForBook(book) {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra("bookUrl", book.bookUrl)
-                putExtra("index", currentReadAloudChapterIndex())
-                putExtra("chapterPos", chapterPos)
-                putExtra("fromReadAloudFloating", true)
-                putExtra("inBookshelf", ReadBook.inBookshelf)
-            }
-        }
+        ReadAloud.openAudioPlayActivity(this)
     }
 
     private fun isMainThread(): Boolean {
         return Looper.myLooper() == Looper.getMainLooper()
-    }
-
-    private fun currentReadAloudChapterPos(): Int {
-        return if (isRun) {
-            (readAloudNumber + 1).coerceAtLeast(0)
-        } else {
-            ReadBook.durChapterPos
-        }
-    }
-
-    private fun currentReadAloudChapterIndex(): Int {
-        return textChapter?.chapter?.index ?: ReadBook.durChapterIndex
     }
 
     private fun defaultReadAloudFloatingX() = 18.dpToPx()
@@ -575,112 +689,98 @@ abstract class BaseReadAloudService : BaseService(),
         return y + navigationBarHeight
     }
 
-    private fun readAloudFloatingYInRoot(root: View): Int {
-        val rootLocation = IntArray(2)
-        root.getLocationOnScreen(rootLocation)
-        return (readAloudFloatingY() - rootLocation[1]).coerceAtLeast(0)
-    }
-
     private fun updateReadAloudFloatingPosition(view: View, x: Int, y: Int) {
         val fixedX = x.coerceAtLeast(0)
-        val params = floatingParams
-        val manager = floatingWindowManager
-        if (params != null && manager != null) {
-            params.x = fixedX
-            params.y = coerceReadAloudDesktopFloatingY(y)
-            runCatching { manager.updateViewLayout(view, params) }
-        } else {
-            val fixedY = coerceReadAloudFloatingY(y)
-            (view.layoutParams as? FrameLayout.LayoutParams)?.let {
-                val root = view.parent as? View ?: return@let
-                it.gravity = Gravity.START or Gravity.TOP
-                it.leftMargin = fixedX
-                it.topMargin = (fixedY - rootTopOnScreen(root)).coerceAtLeast(0)
-                view.layoutParams = it
-            }
+        val params = checkNotNull(floatingParams) {
+            "Floating layout params are missing while moving the read-aloud panel"
         }
+        val manager = checkNotNull(floatingWindowManager) {
+            "Floating WindowManager is missing while moving the read-aloud panel"
+        }
+        val requestedScreenY = if (isDesktopFloating) desktopYToScreenY(y) else y
+        dragBaseYOnScreen = coerceReadAloudFloatingY(requestedScreenY)
+        params.x = fixedX
+        params.y = resolveFloatingWindowY(view)
+        manager.updateViewLayout(view, params)
     }
 
     private fun saveReadAloudFloatingPosition(x: Int, y: Int) {
         appCtx.putPrefInt(PreferKey.readAloudFloatX, x.coerceAtLeast(0))
-        val screenY = if (isDesktopFloating) desktopYToScreenY(y) else y
-        appCtx.putPrefInt(PreferKey.readAloudFloatY, coerceReadAloudFloatingY(screenY))
+        val fallbackScreenY = if (isDesktopFloating) desktopYToScreenY(y) else y
+        appCtx.putPrefInt(
+            PreferKey.readAloudFloatY,
+            dragBaseYOnScreen ?: coerceReadAloudFloatingY(fallbackScreenY),
+        )
+        dragBaseYOnScreen = null
+        applyReadAloudFloatingAvoidance()
     }
 
-    private fun rootTopOnScreen(root: View): Int {
-        val rootLocation = IntArray(2)
-        root.getLocationOnScreen(rootLocation)
-        return rootLocation[1]
-    }
-
-    private fun attachReadAloudFloatingTouch(view: View) {
-        val listener = ReadAloudFloatingTouchListener(view)
-        fun attach(target: View) {
-            target.setOnTouchListener(listener)
-            if (target is ViewGroup) {
-                for (index in 0 until target.childCount) {
-                    attach(target.getChildAt(index))
-                }
-            }
-        }
-        attach(view)
-    }
-
-    private inner class ReadAloudFloatingTouchListener(
-        private val dragView: View
-    ) : View.OnTouchListener {
+    private inner class ReadAloudFloatingLayout(context: Context) : FrameLayout(context) {
         private var initialX = 0
         private var initialY = 0
         private var initialTouchX = 0f
         private var initialTouchY = 0f
-        private var isClick = true
+        private var dragging = false
 
-        override fun onTouch(v: View, event: MotionEvent): Boolean {
+        init {
+            isClickable = true
+        }
+
+        override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    val frameParams = dragView.layoutParams as? FrameLayout.LayoutParams
-                    initialX = floatingParams?.x ?: frameParams?.leftMargin ?: 0
-                    initialY = floatingParams?.y ?: (
-                            (frameParams?.topMargin ?: 0) +
-                                    ((dragView.parent as? View)?.let { rootTopOnScreen(it) } ?: 0)
-                            )
+                    val params = checkNotNull(floatingParams) {
+                        "Floating layout params are missing when dragging starts"
+                    }
+                    initialX = params.x
+                    initialY = params.y
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
-                    isClick = true
+                    dragging = false
                     return false
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
                     if (kotlin.math.abs(dx) > 6.dpToPx() || kotlin.math.abs(dy) > 6.dpToPx()) {
-                        isClick = false
-                        updateReadAloudFloatingPosition(dragView, initialX + dx, initialY + dy)
+                        dragging = true
                         return true
                     }
                 }
-
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!isClick) {
-                        val frameParams = dragView.layoutParams as? FrameLayout.LayoutParams
-                        saveReadAloudFloatingPosition(
-                            floatingParams?.x ?: frameParams?.leftMargin ?: initialX,
-                            floatingParams?.y ?: (
-                                    (frameParams?.topMargin ?: initialY) +
-                                            ((dragView.parent as? View)?.let { rootTopOnScreen(it) } ?: 0)
-                                    )
-                        )
-                    }
-                    return !isClick
+                    return dragging
                 }
             }
-            return false
+            return dragging
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (!dragging) return super.onTouchEvent(event)
+            when (event.action) {
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - initialTouchX).toInt()
+                    val dy = (event.rawY - initialTouchY).toInt()
+                    updateReadAloudFloatingPosition(this, initialX + dx, initialY + dy)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val params = checkNotNull(floatingParams) {
+                        "Floating layout params are missing when dragging ends"
+                    }
+                    saveReadAloudFloatingPosition(
+                        params.x,
+                        params.y,
+                    )
+                    dragging = false
+                }
+            }
+            return true
         }
     }
 
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
         super.onCreate()
+        readAloudProgress = null
         isRun = true
         pause = false
         runningClass = this::class.java
@@ -689,6 +789,7 @@ abstract class BaseReadAloudService : BaseService(),
         initBroadcastReceiver()
         initPhoneStateListener()
         application.registerActivityLifecycleCallbacks(appFloatingLifecycleCallbacks)
+        appFloatingActivity = ReadBookActivity.activeActivity()
         upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
         setTimer(AppConfig.ttsTimer)
         showReadAloudFloatingWindow()
@@ -716,29 +817,27 @@ abstract class BaseReadAloudService : BaseService(),
             val startPos = it.getInt("startPos")
             newReadAloud(play, pageIndex, startPos)
         }
-        observeEvent<Bundle>(EventBus.READ_ALOUD_FLOATING_AVOIDANCE) {
-            val source = it.getString("source").orEmpty()
-            val y = it.getInt("y")
-            onReadAloudFloatingAvoidance(source, y)
+        observeEvent<ReadAloudFloatingObstruction>(EventBus.READ_ALOUD_FLOATING_AVOIDANCE) {
+            onReadAloudFloatingAvoidance(it)
+        }
+        observeEvent<ReadAloudDialogFloatingPresentation>(
+            EventBus.READ_ALOUD_DIALOG_FLOATING_PRESENTATION
+        ) {
+            readAloudDialogFloatingHost = it.host
+            showReadAloudFloatingWindow()
         }
         observeEvent<Boolean>(EventBus.READ_BOOK_ACTIVITY_ACTIVE) {
-            readBookActivityActive = it
-            if (AppConfig.readAloudHideFloatingInReadBook) {
-                if (it) {
-                    removeReadAloudFloatingWindow()
-                } else if (appFloatingActivity != null) {
-                    showReadAloudFloatingWindow()
-                }
+            if (it) {
+                appFloatingActivity = ReadBookActivity.activeActivity() ?: appFloatingActivity
+                showReadAloudFloatingWindow()
             } else {
-                if (it) {
-                    appFloatingActivity = ReadBookActivity.activeActivity() ?: appFloatingActivity
-                    showReadAloudFloatingWindow()
-                } else {
-                    currentAvoidanceSource = null
-                    currentAvoidanceY = 0
-                    applyReadAloudFloatingAvoidance(0)
-                }
+                avoidanceBounds.clear()
+                dragBaseYOnScreen = null
+                applyReadAloudFloatingAvoidance()
             }
+        }
+        observeEvent<Boolean>(EventBus.READ_MAIN_MENU_VISIBILITY) {
+            showReadAloudFloatingWindow()
         }
         observeSharedPreferences { _, key ->
             when (key) {
@@ -755,9 +854,13 @@ abstract class BaseReadAloudService : BaseService(),
                     upReadAloudNotification()
                     postEvent(PreferKey.readAloudHideFloatingWindow, "")
                 }
-                PreferKey.readAloudHideFloatingInReadBook -> {
-                    rebuildReadAloudFloatingWindow()
-                    postEvent(PreferKey.readAloudHideFloatingInReadBook, "")
+                PreferKey.readAloudCoverRotation -> {
+                    updateFloatingCoverAnimation()
+                    postEvent(PreferKey.readAloudCoverRotation, "")
+                }
+                PreferKey.readAloudCoverRotationDuration -> {
+                    updateFloatingCoverAnimation(restart = true)
+                    postEvent(PreferKey.readAloudCoverRotationDuration, "")
                 }
             }
         }
@@ -782,59 +885,69 @@ abstract class BaseReadAloudService : BaseService(),
         rebuildReadAloudFloatingWindowDelay()
     }
 
-    private fun onReadAloudFloatingAvoidance(source: String, y: Int) {
-        if (source.isBlank()) {
+    private fun onReadAloudFloatingAvoidance(obstruction: ReadAloudFloatingObstruction) {
+        if (obstruction.source.isBlank()) {
             return
         }
-        if (y > 0) {
-            currentAvoidanceSource = source
-            currentAvoidanceY = y
-            applyReadAloudFloatingAvoidance(y)
-        } else if (source == currentAvoidanceSource) {
-            currentAvoidanceSource = null
-            currentAvoidanceY = 0
-            applyReadAloudFloatingAvoidance(0)
+        if (obstruction.active) {
+            check(
+                obstruction.topOnScreen >= 0 &&
+                    obstruction.bottomOnScreen > obstruction.topOnScreen
+            ) {
+                "Read-aloud floating obstruction has invalid bounds: " +
+                    "[${obstruction.topOnScreen}, ${obstruction.bottomOnScreen}]"
+            }
+            avoidanceBounds[obstruction.source] = FloatingAvoidanceBounds(
+                obstruction.topOnScreen,
+                obstruction.bottomOnScreen,
+            )
+        } else {
+            avoidanceBounds.remove(obstruction.source)
+        }
+        applyReadAloudFloatingAvoidance()
+    }
+
+    private fun applyReadAloudFloatingAvoidance() {
+        val view = floatingView ?: return
+        val params = checkNotNull(floatingParams) {
+            "Floating layout params are missing while applying read-aloud avoidance"
+        }
+        val manager = checkNotNull(floatingWindowManager) {
+            "Floating WindowManager is missing while applying read-aloud avoidance"
+        }
+        val targetY = resolveFloatingWindowY(view)
+        if (params.y != targetY) {
+            params.y = targetY
+            manager.updateViewLayout(view, params)
         }
     }
 
-    private fun applyReadAloudFloatingAvoidance(obstructionTop: Int) {
-        val view = floatingView ?: return
-        val baseY = readAloudFloatingY()
+    private fun resolveFloatingWindowY(view: View): Int {
         val height = view.height.takeIf { it > 0 } ?: floatingHeight
+        val targetScreenY = resolveFloatingScreenY(height)
+        return if (isDesktopFloating) screenYToDesktopY(targetScreenY) else targetScreenY
+    }
+
+    private fun resolveFloatingScreenY(height: Int): Int {
         val gap = 10.dpToPx()
-        val params = floatingParams
-        val manager = floatingWindowManager
-        if (params != null && manager != null) {
-            val baseDesktopY = readAloudDesktopFloatingY()
-            val targetY = if (obstructionTop > 0) {
-                minOf(baseDesktopY, screenYToDesktopY(obstructionTop) - height - gap)
-                    .coerceAtLeast(floatingMinY)
-            } else {
-                baseDesktopY
+        val minY = floatingMinY
+        val maxY = (floatingUsableHeight() - height - gap).coerceAtLeast(minY)
+        val baseY = (dragBaseYOnScreen ?: readAloudFloatingY()).coerceIn(minY, maxY)
+        val candidates = linkedSetOf(baseY)
+        avoidanceBounds.values.forEach { bounds ->
+            candidates += (bounds.topOnScreen - height - gap).coerceIn(minY, maxY)
+            candidates += (bounds.bottomOnScreen + gap).coerceIn(minY, maxY)
+        }
+        return candidates
+            .asSequence()
+            .filter { candidate ->
+                avoidanceBounds.values.none { bounds ->
+                    candidate + height + gap > bounds.topOnScreen &&
+                        candidate < bounds.bottomOnScreen + gap
+                }
             }
-            if (params.y != targetY) {
-                params.y = targetY
-                runCatching { manager.updateViewLayout(view, params) }
-            }
-            return
-        }
-        val frameParams = view.layoutParams as? FrameLayout.LayoutParams ?: return
-        val activity = appFloatingActivity ?: return
-        val root = activity.window?.decorView as? FrameLayout ?: return
-        val rootLocation = IntArray(2)
-        root.getLocationOnScreen(rootLocation)
-        val targetY = if (obstructionTop > 0) {
-            minOf(baseY, obstructionTop - height - gap)
-                .coerceAtLeast(rootLocation[1] + floatingMinY)
-        } else {
-            baseY
-        }
-        val targetTopMargin = (targetY - rootLocation[1]).coerceAtLeast(0)
-        if (frameParams.topMargin != targetTopMargin) {
-            frameParams.gravity = Gravity.START or Gravity.TOP
-            frameParams.topMargin = targetTopMargin
-            view.layoutParams = frameParams
-        }
+            .minByOrNull { candidate -> abs(candidate - baseY) }
+            ?: error("No usable position remains for the read-aloud floating window")
     }
 
     override fun onDestroy() {
@@ -845,6 +958,7 @@ abstract class BaseReadAloudService : BaseService(),
         loading = false
         if (runningClass == this::class.java) {
             runningClass = null
+            readAloudProgress = null
         }
         abandonFocus()
         unregisterReceiver(broadcastReceiver)
@@ -874,6 +988,15 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.upTtsSpeechRate -> upSpeechRate(true)
             IntentAction.prevParagraph -> prevP()
             IntentAction.nextParagraph -> nextP()
+            IntentAction.seekReadAloudProgress -> seekToReadAloudProgress(
+                intent.getIntExtra("chapterIndex", -1),
+                intent.getIntExtra("position", -1)
+            )
+            IntentAction.seekReadAloudTextPosition -> seekToReadAloudTextPosition(
+                intent.getIntExtra("chapterIndex", -1),
+                intent.getIntExtra("chapterPosition", -1)
+            )
+            IntentAction.setSpeed -> setPlaybackSpeed(intent.getFloatExtra("speed", Float.NaN))
             IntentAction.prev -> prevChapter()
             IntentAction.next -> nextChapter()
             IntentAction.addTimer -> addTimer()
@@ -885,9 +1008,27 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
         execute(executeContext = IO) {
-            val chapter = ReadBook.curTextChapter ?: return@execute
-            if (!prepareReadAloudChapter(chapter, pageIndex, startPos)) {
+            val textChapter = ReadBook.curTextChapter
+            if (!sessionChapterCanStartWithoutText) {
+                val chapter = textChapter ?: return@execute
+                if (!prepareReadAloudChapter(chapter, pageIndex, startPos)) {
+                    return@execute
+                }
+                launch(Main) {
+                    if (play) play() else pageChanged = true
+                }
                 return@execute
+            }
+            // 书源音频：会话章节身份先由统一阅读目标（ReadBook.durChapterIndex）确定，
+            // 正文 TextChapter 只在 index 与该目标相同时用于段落/LRC 准备，绝不反向决定当前章节。
+            currentChapterIndex = ReadBook.durChapterIndex
+            textChapter?.takeIf { tc ->
+                tc.chapter.index == currentChapterIndex &&
+                    tc.isCompleted && tc.pageSize > 0
+            }?.let { tc ->
+                if (!prepareReadAloudChapter(tc, pageIndex, startPos)) {
+                    return@execute
+                }
             }
             launch(Main) {
                 if (play) play() else pageChanged = true
@@ -903,6 +1044,7 @@ abstract class BaseReadAloudService : BaseService(),
         startPos: Int
     ): Boolean {
         textChapter = chapter
+        currentChapterIndex = chapter.chapter.index
         if (!chapter.isCompleted) {
             return false
         }
@@ -948,6 +1090,7 @@ abstract class BaseReadAloudService : BaseService(),
             }
         }
         paragraphStartPos = pos
+        publishParagraphProgress()
         return true
     }
 
@@ -1009,7 +1152,7 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
-    private fun stopReadAloudOnInvalidPosition(message: String) {
+    protected fun stopReadAloudOnInvalidPosition(message: String) {
         AppLog.putDebug(message)
         lifecycleScope.launch(Main) {
             stopSelf()
@@ -1037,10 +1180,123 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun upSpeechRate(reset: Boolean = false)
 
     fun upTtsProgress(progress: Int) {
+        publishParagraphProgress()
+        postReadAloudTextPosition(progress)
+    }
+
+    protected fun postReadAloudTextPosition(progress: Int) {
+        val chapterIndex = currentChapterIndex.takeIf { it >= 0 } ?: ReadBook.durChapterIndex
+        if (chapterIndex == ReadBook.durChapterIndex) {
+            ReadBook.durChapterPos = progress
+            ReadBook.book?.durChapterPos = progress
+        }
         postEvent(EventBus.TTS_PROGRESS, Bundle().apply {
-            putInt("chapterIndex", textChapter?.chapter?.index ?: ReadBook.durChapterIndex)
+            putInt("chapterIndex", chapterIndex)
             putInt("chapterPos", progress)
         })
+    }
+
+    private fun publishParagraphProgress() {
+        val chapter = textChapter ?: return
+        if (contentList.isEmpty() || nowSpeak !in contentList.indices) {
+            return
+        }
+        publishReadAloudProgress(
+            ReadAloudProgress(
+                chapterIndex = chapter.chapter.index,
+                position = nowSpeak,
+                total = contentList.size,
+                kind = ReadAloudProgress.Kind.PARAGRAPH,
+            )
+        )
+    }
+
+    protected open fun seekToReadAloudProgress(chapterIndex: Int, position: Int) {
+        val chapter = textChapter ?: run {
+            stopReadAloudOnInvalidPosition("Read aloud seek failed: chapter is missing")
+            return
+        }
+        if (chapter.chapter.index != chapterIndex) {
+            AppLog.putDebug(
+                "Ignore stale read aloud seek: requestedChapter=$chapterIndex, " +
+                        "currentChapter=${chapter.chapter.index}"
+            )
+            publishParagraphProgress()
+            return
+        }
+        if (position !in contentList.indices) {
+            stopReadAloudOnInvalidPosition(
+                "Read aloud seek paragraph is out of range: " +
+                        "paragraph=$position, total=${contentList.size}"
+            )
+            return
+        }
+        val paragraphs = chapter.getParagraphs(readAloudByPage)
+        val paragraph = paragraphs.getOrNull(position) ?: run {
+            stopReadAloudOnInvalidPosition(
+                "Read aloud paragraph mapping is inconsistent: " +
+                        "content=${contentList.size}, layout=${paragraphs.size}, " +
+                        "paragraph=$position"
+            )
+            return
+        }
+        val targetPageIndex = chapter.getPageIndexByCharIndex(paragraph.chapterPosition)
+        if (targetPageIndex !in 0 until chapter.pageSize) {
+            stopReadAloudOnInvalidPosition(
+                "Read aloud seek page is invalid: page=$targetPageIndex, " +
+                        "paragraph=$position"
+            )
+            return
+        }
+
+        val resumeAfterSeek = !pause
+        playStop()
+        nowSpeak = position
+        readAloudNumber = paragraph.chapterPosition
+        paragraphStartPos = 0
+        pageIndex = targetPageIndex
+        AppLog.putDebug(
+            "Read aloud seek: chapter=$chapterIndex, paragraph=$position, " +
+                    "chapterPosition=$readAloudNumber, page=$pageIndex"
+        )
+        upTtsProgress(readAloudNumber + 1)
+        if (resumeAfterSeek) {
+            play()
+        }
+    }
+
+    protected open fun seekToReadAloudTextPosition(
+        chapterIndex: Int,
+        chapterPosition: Int
+    ) {
+        val chapter = textChapter ?: run {
+            stopReadAloudOnInvalidPosition("Read aloud text seek failed: chapter is missing")
+            return
+        }
+        if (chapter.chapter.index != chapterIndex) {
+            AppLog.putDebug(
+                "Ignore stale read aloud text seek: requestedChapter=$chapterIndex, " +
+                        "currentChapter=${chapter.chapter.index}"
+            )
+            publishParagraphProgress()
+            return
+        }
+        val paragraphs = chapter.getParagraphs(readAloudByPage)
+        val position = paragraphs.indexOfFirst { chapterPosition in it.chapterIndices }
+        if (position !in contentList.indices) {
+            stopReadAloudOnInvalidPosition(
+                "Read aloud text seek mapping is inconsistent: chapterPosition=$chapterPosition, " +
+                        "paragraph=$position, content=${contentList.size}, layout=${paragraphs.size}"
+            )
+            return
+        }
+        seekToReadAloudProgress(chapterIndex, position)
+    }
+
+    protected open fun setPlaybackSpeed(speed: Float) {
+        stopReadAloudOnInvalidPosition(
+            "Read aloud engine does not support direct playback speed: ${this::class.java.name}"
+        )
     }
 
     protected fun upReadAloudLoading(loading: Boolean) {
@@ -1086,12 +1342,7 @@ abstract class BaseReadAloudService : BaseService(),
             upTtsProgress(readAloudNumber + 1)
             play()
         } else {
-            toLast = true
-            if (ReadBook.readAloudPageDetached) {
-                switchDetachedReadAloudChapterByOffset(-1, toLast = true)
-            } else {
-                ReadBook.moveToPrevChapter(true, fromReadAloud = true)
-            }
+            advanceToPrevChapter(toLast = true)
         }
     }
 
@@ -1367,7 +1618,10 @@ abstract class BaseReadAloudService : BaseService(),
             .setContentTitle(nTitle)
             .setContentText(nSubtitle)
             .setContentIntent(
-                activityPendingIntent<ReadBookActivity>("activity")
+                activityPendingIntent<AudioPlayActivity>("readAloudPlayer") {
+                    putExtra("bookUrl", ReadBook.book?.bookUrl)
+                    putExtra("readAloudSession", true)
+                }
             )
             .setVibrate(null)
             .setSound(null)
@@ -1434,21 +1688,60 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun aloudServicePendingIntent(actionStr: String): PendingIntent?
 
     open fun prevChapter() {
-        toLast = false
         resumeReadAloudInternal()
-        if (ReadBook.readAloudPageDetached) {
-            switchDetachedReadAloudChapterByOffset(-1, toLast = false)
-        } else {
-            ReadBook.moveToPrevChapter(true, toLast = false, fromReadAloud = true)
-        }
+        advanceToPrevChapter(toLast = false)
     }
 
     open fun nextChapter() {
         ReadBook.upReadTime()
         AppLog.putDebug("${currentReadAloudChapterTitle()} 朗读结束跳转下一章并朗读")
         resumeReadAloudInternal()
+        advanceToNextChapter()
+    }
+
+    /**
+     * 统一推进到上一章。
+     * 书源音频（sessionChapterCanStartWithoutText）：以 BookChapter.index 立即推进，不等待正文 TextChapter。
+     * 上一章正文已预加载完成时，moveToPrevChapter 的正文链路会经 curPageChanged 接管启动（附带段落进度）；
+     * 预加载未完成时正文链路不会启动，音频必须立即以统一阅读目标（ReadBook.durChapterIndex）推进并播放，
+     * 阅读页正文有则随后同步，无则音频继续。TTS / HTTP TTS 保持原有正文前置逻辑。
+     */
+    private fun advanceToPrevChapter(toLast: Boolean) {
+        this.toLast = toLast
+        if (ReadBook.readAloudPageDetached) {
+            switchDetachedReadAloudChapterByOffset(-1, toLast)
+        } else if (sessionChapterCanStartWithoutText) {
+            val prevTextReady = ReadBook.prevTextChapter?.isCompleted == true
+            if (!ReadBook.moveToPrevChapter(true, toLast = toLast, fromReadAloud = true)) {
+                return
+            }
+            if (!prevTextReady) {
+                currentChapterIndex = ReadBook.durChapterIndex
+                nowSpeak = 0
+                play()
+            }
+        } else {
+            ReadBook.moveToPrevChapter(true, toLast = toLast, fromReadAloud = true)
+        }
+    }
+
+    /**
+     * 统一推进到下一章，语义同 [advanceToPrevChapter]。
+     */
+    private fun advanceToNextChapter() {
         if (ReadBook.readAloudPageDetached) {
             switchDetachedReadAloudChapterByOffset(1, toLast = false)
+        } else if (sessionChapterCanStartWithoutText) {
+            val nextTextReady = ReadBook.nextTextChapter?.isCompleted == true
+            if (!ReadBook.moveToNextChapter(true, fromReadAloud = true)) {
+                stopSelf()
+                return
+            }
+            if (!nextTextReady) {
+                currentChapterIndex = ReadBook.durChapterIndex
+                nowSpeak = 0
+                play()
+            }
         } else {
             if (!ReadBook.moveToNextChapter(true, fromReadAloud = true)) {
                 stopSelf()
@@ -1461,7 +1754,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun switchDetachedReadAloudChapterByOffset(offset: Int, toLast: Boolean) {
-        val sourceIndex = textChapter?.chapter?.index ?: run {
+        val sourceIndex = currentChapterIndex.takeIf { it >= 0 } ?: run {
             stopReadAloudOnInvalidPosition("Detached read aloud chapter is missing")
             return
         }
@@ -1476,6 +1769,17 @@ abstract class BaseReadAloudService : BaseService(),
         }
         playStop()
         upReadAloudLoading(true)
+        if (sessionChapterCanStartWithoutText) {
+            // 书源音频：切章只认 BookChapter.index，不依赖正文 TextChapter，
+            // 直接以目标章节建立会话身份并播放；段落进度随之复位，避免旧章节映射串位。
+            currentChapterIndex = targetIndex
+            this@BaseReadAloudService.toLast = toLast
+            nowSpeak = 0
+            lifecycleScope.launch(Main) {
+                play()
+            }
+            return
+        }
         execute(executeContext = IO) {
             val chapter = ReadBook.loadTextChapterForReadAloud(targetIndex, lifecycleScope)
                 ?: run {

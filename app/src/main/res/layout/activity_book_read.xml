@@ -31,6 +31,83 @@
         android:src="@drawable/ic_cursor_right"
         android:visibility="invisible" />
 
+    <LinearLayout
+        android:id="@+id/read_aloud_page_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/read_aloud_compact_panel_height"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="0dp"
+        android:background="@drawable/bg_read_aloud_page_panel"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/read_aloud_compact_panel_padding_horizontal"
+        android:paddingEnd="@dimen/read_aloud_compact_panel_padding_horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/btn_read_aloud_original_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:drawableStart="@drawable/ic_replay"
+            android:drawablePadding="@dimen/read_aloud_compact_panel_icon_padding"
+            android:drawableTint="@android:color/white"
+            android:gravity="center"
+            android:minWidth="@dimen/read_aloud_compact_panel_original_min_width"
+            android:paddingStart="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:paddingEnd="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:text="@string/read_aloud_original_progress"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/read_aloud_compact_panel_text_size" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="@dimen/read_aloud_compact_panel_divider_height"
+            android:background="#38FFFFFF" />
+
+        <TextView
+            android:id="@+id/btn_read_aloud_from_current_page"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:drawableStart="@drawable/ic_forward"
+            android:drawablePadding="@dimen/read_aloud_compact_panel_icon_padding"
+            android:drawableTint="@android:color/white"
+            android:gravity="center"
+            android:minWidth="@dimen/read_aloud_compact_panel_from_page_min_width"
+            android:paddingStart="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:paddingEnd="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:text="@string/read_aloud_from_current_page"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/read_aloud_compact_panel_text_size" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/read_aloud_playback_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/read_aloud_compact_panel_height"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="0dp"
+        android:background="@drawable/bg_read_aloud_page_panel"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/read_aloud_compact_panel_padding_horizontal"
+        android:paddingEnd="@dimen/read_aloud_compact_panel_padding_horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/btn_read_aloud_playback"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:minWidth="@dimen/read_aloud_compact_panel_playback_min_width"
+            android:paddingStart="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:paddingEnd="@dimen/read_aloud_compact_panel_button_padding_horizontal"
+            android:text="@string/read_aloud_pause_playback"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/read_aloud_compact_panel_text_size" />
+
+    </LinearLayout>
+
     <io.legado.app.ui.book.read.ReadMenu
         android:id="@+id/read_menu"
         android:layout_width="match_parent"
@@ -49,55 +126,14 @@
         android:layout_height="wrap_content"
         android:visibility="gone" />
 
-    <LinearLayout
-        android:id="@+id/read_aloud_page_panel"
-        android:layout_width="wrap_content"
-        android:layout_height="36dp"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="28dp"
-        android:background="@drawable/bg_read_aloud_page_panel"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/btn_read_aloud_original_progress"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:drawableStart="@drawable/ic_replay"
-            android:drawablePadding="5dp"
-            android:drawableTint="@android:color/white"
-            android:gravity="center"
-            android:minWidth="86dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="8dp"
-            android:text="@string/read_aloud_original_progress"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="18dp"
-            android:background="#38FFFFFF" />
-
-        <TextView
-            android:id="@+id/btn_read_aloud_from_current_page"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:drawableStart="@drawable/ic_forward"
-            android:drawablePadding="5dp"
-            android:drawableTint="@android:color/white"
-            android:gravity="center"
-            android:minWidth="92dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="4dp"
-            android:text="@string/read_aloud_from_current_page"
-            android:textColor="@android:color/white"
-            android:textSize="13sp" />
-
-    </LinearLayout>
+    <View
+        android:id="@+id/read_aloud_dialog_outside_tap"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
 
     <View
         android:id="@+id/navigation_bar"

@@ -509,5 +509,3 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
 }
 
 
-
-

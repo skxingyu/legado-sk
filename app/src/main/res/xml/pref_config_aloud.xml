@@ -50,6 +50,35 @@
 
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"
+            android:key="readAloudCoverRotation"
+            android:summary="@string/read_aloud_cover_rotation_summary"
+            android:title="@string/read_aloud_cover_rotation"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:defaultValue="10000"
+            android:dependency="readAloudCoverRotation"
+            android:key="readAloudCoverRotationDuration"
+            android:summary="@string/read_aloud_cover_rotation_duration_summary"
+            android:title="@string/read_aloud_cover_rotation_duration"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:defaultValue="3000"
+            android:key="readAloudScrollFollowTimeout"
+            android:summary="@string/read_aloud_scroll_follow_timeout_summary"
+            android:title="@string/read_aloud_scroll_follow_timeout_title"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:defaultValue="500"
+            android:key="readAloudProgressPollInterval"
+            android:summary="@string/read_aloud_progress_poll_interval_summary"
+            android:title="@string/read_aloud_progress_poll_interval_title"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="true"
             android:key="readAloudHideFloatingWindow"
             android:summary="@string/read_aloud_hide_floating_window_summary"
             android:title="@string/read_aloud_hide_floating_window"
@@ -57,17 +86,37 @@
 
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="false"
-            android:key="readAloudFloatOnDesktop"
-            android:summary="@string/read_aloud_float_on_desktop_summary"
-            android:title="@string/read_aloud_float_on_desktop"
+            android:key="readAloudHidePlaybackPanel"
+            android:summary="@string/read_aloud_hide_playback_panel_summary"
+            android:title="@string/read_aloud_hide_playback_panel"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:defaultValue="10"
+            android:key="readAloudPlaybackPanelDuration"
+            android:summary="@string/read_aloud_playback_panel_duration_summary"
+            android:title="@string/read_aloud_playback_panel_duration"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="false"
+            android:key="readAloudHidePagePanel"
+            android:summary="@string/read_aloud_hide_page_panel_summary"
+            android:title="@string/read_aloud_hide_page_panel"
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"
-            android:dependency="readAloudHideFloatingWindow"
-            android:key="readAloudHideFloatingInReadBook"
-            android:summary="@string/read_aloud_hide_floating_in_read_book_summary"
-            android:title="@string/read_aloud_hide_floating_in_read_book"
+            android:key="readAloudPanelOnPageFooter"
+            android:summary="@string/read_aloud_panel_on_page_footer_summary"
+            android:title="@string/read_aloud_panel_on_page_footer"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="false"
+            android:key="readAloudFloatOnDesktop"
+            android:summary="@string/read_aloud_float_on_desktop_summary"
+            android:title="@string/read_aloud_float_on_desktop"
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference

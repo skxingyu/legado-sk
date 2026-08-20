@@ -412,10 +412,12 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         super.onPause()
         if (ReadManga.inBookshelf) {
             ReadManga.saveRead()
-            if (AppConfig.syncBookProgressPlus) {
-                ReadManga.syncProgress()
-            } else {
-                ReadManga.uploadProgress()
+            if (!BuildConfig.DEBUG) {
+                if (AppConfig.syncBookProgressPlus) {
+                    ReadManga.syncProgress()
+                } else {
+                    ReadManga.uploadProgress()
+                }
             }
         }
         if (!BuildConfig.DEBUG) {
@@ -694,6 +696,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             bookInfoActivity.launch {
                 putExtra("name", it.name)
                 putExtra("author", it.author)
+                putExtra("bookUrl", it.bookUrl)
             }
         }
     }

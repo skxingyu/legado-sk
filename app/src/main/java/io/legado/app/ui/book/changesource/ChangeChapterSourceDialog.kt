@@ -53,10 +53,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 
-class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source, useLegacySurfaceStyle = true),
+class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_change_source),
     Toolbar.OnMenuItemClickListener,
     ChangeChapterSourceAdapter.CallBack,
     ChangeChapterTocAdapter.Callback {
+
+    protected override val chromeMode: ChromeMode = ChromeMode.FULL_SCREEN_TOOL
 
     constructor(name: String, author: String, chapterIndex: Int, chapterTitle: String) : this() {
         arguments = Bundle().apply {
