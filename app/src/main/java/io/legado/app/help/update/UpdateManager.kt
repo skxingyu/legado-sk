@@ -88,7 +88,7 @@ object UpdateManager {
         val resp = okHttpClient.newCallStrResponse(retry = 1) {
             url(GITHUB_API)
             header("Accept", "application/vnd.github+json")
-            header("User-Agent", "LegadoC/${AppConst.appInfo.versionName}")
+            header("User-Agent", "LegadoSK/${AppConst.appInfo.versionName}")
         }
         val body = resp.body ?: throw IOException("empty response")
         val releases = GSON.fromJson(body, Array<GitHubRelease>::class.java)?.toList() ?: emptyList()

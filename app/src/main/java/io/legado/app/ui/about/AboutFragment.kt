@@ -72,7 +72,7 @@ class AboutFragment : PreferenceFragmentCompat() {
     }
 
     /**
-     * 更新日志：优先从 GitHub 拉取最新 README（走设置的加速源），失败时回退到本地 assets
+     * 更新日志：优先从 GitHub 拉取最新 README（skxingyu/legado-sk），失败时回退到本地 assets
      */
     private fun showUpdateLog() {
         Coroutine.async {
