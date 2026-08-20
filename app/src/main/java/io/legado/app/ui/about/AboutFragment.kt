@@ -91,12 +91,8 @@ class AboutFragment : PreferenceFragmentCompat() {
 
     private suspend fun fetchReadmeFromGithub(): String? {
         return runCatching {
-            val url = UpdateManager.resolveAcceleratedUrl(
-                requireContext(),
-                "https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md"
-            )
             okHttpClient.newCallStrResponse(retry = 1) {
-                url(url)
+                url("https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md")
                 header("User-Agent", "LegadoSK/${appInfo.versionName}")
             }.body
         }.getOrNull()

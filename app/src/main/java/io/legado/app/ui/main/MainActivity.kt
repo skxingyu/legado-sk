@@ -297,10 +297,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             if (!privacyPolicy()) return@launch
             //版本更新
             upVersion()
-            //自动检查更新
-            if (getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
-                UpdateManager.checkUpdate(this@MainActivity)
-            }
             //设置本地密码
             setLocalPassword()
             notifyAppCrash()
