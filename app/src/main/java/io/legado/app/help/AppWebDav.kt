@@ -3,7 +3,6 @@ package io.legado.app.help
 import android.net.Uri
 import io.legado.app.R
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -360,7 +359,7 @@ object AppWebDav {
         try {
             val bookProgress = BookProgress(book)
             val json = GSON.toJson(bookProgress)
-            val url = getProgressUrl(book.name, book.author, bookProgress.mediaType)
+            val url = getProgressUrl(book.name, book.author)
             WebDav(url, authorization).upload(json.toByteArray(), "application/json")
             book.syncTime = System.currentTimeMillis()
             onSuccess?.invoke()
@@ -378,8 +377,7 @@ object AppWebDav {
             val json = GSON.toJson(bookProgress)
             val url = getProgressUrl(
                 bookProgress.name,
-                bookProgress.author,
-                bookProgress.mediaType
+                bookProgress.author
             )
             WebDav(url, authorization).upload(json.toByteArray(), "application/json")
             onSuccess?.invoke()
@@ -391,21 +389,16 @@ object AppWebDav {
 
     private fun getProgressUrl(
         name: String,
-        author: String,
-        @BookMediaType.Type mediaType: Int
+        author: String
     ): String {
-        return bookProgressUrl + getProgressFileName(name, author, mediaType)
+        return bookProgressUrl + getProgressFileName(name, author)
     }
 
     private fun getProgressFileName(
         name: String,
-        author: String,
-        @BookMediaType.Type mediaType: Int
+        author: String
     ): String {
-        val mediaSuffix = if (mediaType == BookMediaType.text) "" else "_media_$mediaType"
-        return UrlUtil.replaceReservedChar(
-            "${name}_${author}$mediaSuffix".normalizeFileName()
-        ) + ".json"
+        return UrlUtil.replaceReservedChar("${name}_${author}".normalizeFileName()) + ".json"
     }
 
     /**
@@ -414,8 +407,7 @@ object AppWebDav {
     suspend fun getBookProgress(book: Book): BookProgress? {
         val url = getProgressUrl(
             book.name,
-            book.author,
-            BookMediaType.fromBookType(book.type)
+            book.author
         )
         kotlin.runCatching {
             val authorization = authorization ?: return null
@@ -443,8 +435,7 @@ object AppWebDav {
         appDb.bookDao.all.forEach { book ->
             val progressFileName = getProgressFileName(
                 book.name,
-                book.author,
-                BookMediaType.fromBookType(book.type)
+                book.author
             )
             val webDavFile = map[progressFileName]
             webDavFile ?: return@forEach
