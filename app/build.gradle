@@ -57,6 +57,8 @@ android {
         targetSdk 36
         versionCode buildVersionCode
         versionName version
+        // 只保留简体中文，其余语言资源一律裁剪（瘦身）
+        resConfigs "zh"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         project.ext.set("archivesBaseName", name + "_" + version)
 
