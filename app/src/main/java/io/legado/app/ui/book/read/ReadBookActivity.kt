@@ -1793,9 +1793,11 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun restartReadAloudPanelTimeout() {
         if (readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL) return
         handler.removeCallbacks(collapseReadAloudPanel)
+        val stayDurationSeconds = AppConfig.readAloudPlaybackPanelDuration
+        if (stayDurationSeconds <= 0) return // 0 = 一直停留，不自动折叠
         handler.postDelayed(
             collapseReadAloudPanel,
-            AppConfig.readAloudPlaybackPanelDuration * 1_000L
+            stayDurationSeconds * 1_000L
         )
     }
 

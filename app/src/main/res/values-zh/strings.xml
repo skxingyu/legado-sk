@@ -209,7 +209,8 @@
     <string name="read_aloud_hide_playback_panel_summary">不显示临时的暂停/继续播放小悬浮窗，直接在页脚中央显示操作。</string>
     <string name="read_aloud_playback_panel_duration">小悬浮窗停留时长</string>
     <string name="read_aloud_playback_panel_duration_summary">连续 %s 秒无操作后，将暂停/继续或原进度/从本页听收进页脚中央。</string>
-    <string name="read_aloud_playback_panel_duration_dialog_title">小悬浮窗停留时长（秒）</string>
+    <string name="read_aloud_playback_panel_duration_forever_summary">一直停留，无操作也不会自动收进页脚。</string>
+    <string name="read_aloud_playback_panel_duration_dialog_title">小悬浮窗停留时长（秒，0 为一直停留）</string>
     <string name="read_aloud_hide_page_panel">隐藏跨页小悬浮窗</string>
     <string name="read_aloud_hide_page_panel_summary">不显示临时的原进度/从本页听小悬浮窗，直接在页脚中央显示展开入口。</string>
     <string name="read_aloud_panel_on_page_footer">小悬浮窗放在页脚内</string>

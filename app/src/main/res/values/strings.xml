@@ -210,7 +210,8 @@
     <string name="read_aloud_hide_playback_panel_summary">Skip the temporary pause/resume floating panel and show the action directly in the center of the page footer.</string>
     <string name="read_aloud_playback_panel_duration">Compact panel display time</string>
     <string name="read_aloud_playback_panel_duration_summary">After %s seconds without interaction, move the pause/resume or original/from-page actions to the center of the page footer.</string>
-    <string name="read_aloud_playback_panel_duration_dialog_title">Compact panel display time (seconds)</string>
+    <string name="read_aloud_playback_panel_duration_forever_summary">Always stays; never moves to the page footer on its own.</string>
+    <string name="read_aloud_playback_panel_duration_dialog_title">Compact panel display time (seconds; 0 = always stays)</string>
     <string name="read_aloud_hide_page_panel">Hide cross-page read-aloud panel</string>
     <string name="read_aloud_hide_page_panel_summary">Skip the temporary original-position/from-page panel and show its expand action directly in the center of the page footer.</string>
     <string name="read_aloud_panel_on_page_footer">Place compact read-aloud panels inside page footer</string>

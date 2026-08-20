@@ -1571,8 +1571,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudHidePlaybackPanel
         get() = appCtx.getPrefBoolean(PreferKey.readAloudHidePlaybackPanel, false)
 
-    const val DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION = 10
-    const val MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION = 1
+    const val DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION = 0
+    const val MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION = 0
     const val MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION = 300
 
     var readAloudPlaybackPanelDuration: Int

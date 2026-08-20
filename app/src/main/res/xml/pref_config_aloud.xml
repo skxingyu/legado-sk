@@ -92,7 +92,7 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference
-            android:defaultValue="10"
+            android:defaultValue="0"
             android:key="readAloudPlaybackPanelDuration"
             android:summary="@string/read_aloud_playback_panel_duration_summary"
             android:title="@string/read_aloud_playback_panel_duration"
