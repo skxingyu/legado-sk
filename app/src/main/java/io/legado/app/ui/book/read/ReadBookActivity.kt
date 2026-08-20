@@ -470,7 +470,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         ReadBook.cancelPreDownloadTask()
         unregisterReceiver(timeBatteryReceiver)
         upSystemUiVisibility()
-        if (!BuildConfig.DEBUG && ReadBook.inBookshelf) {
+        if (ReadBook.inBookshelf) {
+            // SK 定制：退出时自动同步进度（不限制 DEBUG 构建）
             if (AppConfig.syncBookProgressPlus) {
                 ReadBook.syncProgress()
             } else {

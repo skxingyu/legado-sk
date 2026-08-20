@@ -412,12 +412,11 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         super.onPause()
         if (ReadManga.inBookshelf) {
             ReadManga.saveRead()
-            if (!BuildConfig.DEBUG) {
-                if (AppConfig.syncBookProgressPlus) {
-                    ReadManga.syncProgress()
-                } else {
-                    ReadManga.uploadProgress()
-                }
+            // SK 定制：退出时自动同步进度（不限制 DEBUG 构建）
+            if (AppConfig.syncBookProgressPlus) {
+                ReadManga.syncProgress()
+            } else {
+                ReadManga.uploadProgress()
             }
         }
         if (!BuildConfig.DEBUG) {
