@@ -119,11 +119,14 @@ object UpdateManager {
 
     /**
      * 从 APK 资产文件名解析 versionCode：
-     * legado_app_3.26.081303_10539.apk -> 10539
+     * legado_sk_3.26.081303_10539.apk -> 10539
+     * legado_sk_3.26.082015c_10014_arm64-v8a.apk -> 10014（兼容末尾 ABI 后缀）
+     * 不能从 tag 解析：tag 是版本名格式（v3.26.082015c），里面的数字是 MMddHH，
+     * 提取出来会是假版本号，永远大于真实 versionCode，导致误报"发现新版本"。
      */
     private fun parseVersionCodeFromAssetName(name: String?): Long? {
         name ?: return null
-        return Regex("_(\\d+)\\.apk$", RegexOption.IGNORE_CASE)
+        return Regex("_(\\d+)(?:_[\\w-]+)?\\.apk$", RegexOption.IGNORE_CASE)
             .find(name)?.groupValues?.get(1)?.toLongOrNull()
     }
 

@@ -441,7 +441,8 @@ object AppWebDav {
             webDavFile ?: return@forEach
             if (webDavFile.lastModify <= book.syncTime) {
                 //本地同步时间大于上传时间不用同步
-                return
+                //SK 定制：必须 return@forEach 跳过当前书，裸 return 会中断整批拉取（10003 修复、10012 移植时回归，10015 再修）
+                return@forEach
             }
             getBookProgress(book)?.let { bookProgress ->
                 if (bookProgress.compareWith(book) == BookProgressComparison.REMOTE_NEWER) {
