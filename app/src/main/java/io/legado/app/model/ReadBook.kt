@@ -82,6 +82,13 @@ object ReadBook : CoroutineScope by MainScope() {
     var skipReadAloudSyncOnce = false
     var readAloudPageDetached = false
         private set
+
+    /**
+     * 阅读页翻页手势/动画进行中（由 PageDelegate.isRunning 同步）。
+     * 朗读联动据此避开用户正在进行的翻页，防止段切换瞬间把页面拉回朗读位置。
+     */
+    @Volatile
+    var pageTurnAnimating = false
     private var pendingReadAloudChapterSync = false
     var prevTextChapter: TextChapter? = null
     var curTextChapter: TextChapter? = null

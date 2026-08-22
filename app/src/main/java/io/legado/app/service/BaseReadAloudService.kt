@@ -1179,16 +1179,21 @@ abstract class BaseReadAloudService : BaseService(),
 
     abstract fun upSpeechRate(reset: Boolean = false)
 
-    fun upTtsProgress(progress: Int) {
+    fun upTtsProgress(progress: Int, force: Boolean = false) {
         publishParagraphProgress()
-        postReadAloudTextPosition(progress)
+        postReadAloudTextPosition(progress, force)
     }
 
-    protected fun postReadAloudTextPosition(progress: Int) {
+    protected fun postReadAloudTextPosition(progress: Int, force: Boolean = false) {
         val chapterIndex = currentChapterIndex.takeIf { it >= 0 } ?: ReadBook.durChapterIndex
         if (chapterIndex == ReadBook.durChapterIndex) {
-            ReadBook.durChapterPos = progress
-            ReadBook.book?.durChapterPos = progress
+            // 页面跟随中才回写阅读位置：用户已脱钩或正在翻页时，
+            // 朗读进度不得覆盖用户所在位置（否则渲染基准被拉回朗读处，页面往前跳）；
+            // TTS_PROGRESS 事件照常发布，UI 层按自身状态决定是否展示
+            if (force || isReadBookPageFollowing()) {
+                ReadBook.durChapterPos = progress
+                ReadBook.book?.durChapterPos = progress
+            }
         }
         postEvent(EventBus.TTS_PROGRESS, Bundle().apply {
             putInt("chapterIndex", chapterIndex)
@@ -1259,7 +1264,8 @@ abstract class BaseReadAloudService : BaseService(),
             "Read aloud seek: chapter=$chapterIndex, paragraph=$position, " +
                     "chapterPosition=$readAloudNumber, page=$pageIndex"
         )
-        upTtsProgress(readAloudNumber + 1)
+        // 用户主动定位朗读进度，强制同步阅读位置
+        upTtsProgress(readAloudNumber + 1, force = true)
         if (resumeAfterSeek) {
             play()
         }
@@ -1309,14 +1315,34 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.ALOUD_STATE, if (loading) Status.LOADING else Status.PLAY)
     }
 
+    /**
+     * 阅读页是否仍跟随朗读。
+     *
+     * readAloudPageDetached 要等用户翻页 commit（setPageIndex→curPageChanged）才置位，
+     * 翻页手势/动画进行中存在窗口期；段切换恰好撞上时，联动翻页 + upContent 会把
+     * 用户刚翻过去的页面按旧朗读位置重渲染（表现为往前跳几页）。
+     * pageTurnAnimating 由 PageDelegate.isRunning 同步，封死该窗口期；
+     * durChapterIndex 不一致说明用户已翻到其他章节浏览，段内联动同样暂停。
+     */
+    private fun isReadBookPageFollowing(): Boolean {
+        if (ReadBook.readAloudPageDetached) {
+            return false
+        }
+        if (ReadBook.pageTurnAnimating) {
+            return false
+        }
+        val serviceChapter = currentChapterIndex.takeIf { it >= 0 } ?: return true
+        return ReadBook.durChapterIndex == serviceChapter
+    }
+
     internal fun moveReadBookToPrevPageForReadAloud() {
-        if (!ReadBook.readAloudPageDetached) {
+        if (isReadBookPageFollowing()) {
             ReadBook.moveToPrevPage()
         }
     }
 
     internal fun moveReadBookToNextPageForReadAloud() {
-        if (!ReadBook.readAloudPageDetached) {
+        if (isReadBookPageFollowing()) {
             ReadBook.moveToNextPage()
         }
     }
@@ -1798,7 +1824,8 @@ abstract class BaseReadAloudService : BaseService(),
             if (!prepareReadAloudChapter(chapter, startPageIndex, 0)) {
                 return@execute
             }
-            upTtsProgress(readAloudNumber + 1)
+            // 朗读跨章切换，强制同步阅读位置到新章节起点/末尾
+            upTtsProgress(readAloudNumber + 1, force = true)
             launch(Main) {
                 play()
             }
