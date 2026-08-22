@@ -31,7 +31,7 @@ internal fun parseBookSourceJson(
         }
 
         json.isJsonObject() -> {
-            val jsonObject: JsonObject = GSON.fromJsonObject(json).getOrThrow()
+            val jsonObject = GSON.fromJsonObject<JsonObject>(json).getOrThrow()
             if (jsonObject.has("sourceUrls")) {
                 if (!allowSourceUrls) {
                     throw NoStackTraceException("不是书源")
