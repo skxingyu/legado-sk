@@ -38,14 +38,11 @@ import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
-import io.legado.app.constant.BookMediaType
 import io.legado.app.constant.AppConst
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.ui.book.toc.BookTocLoadingActivity
 import splitties.systemservices.clipboardManager
 import splitties.systemservices.connectivityManager
 import splitties.systemservices.uiModeManager
@@ -66,16 +63,8 @@ fun Context.startActivityForBook(
     book: Book,
     configIntent: Intent.() -> Unit = {},
 ) {
-    if (appDb.bookChapterDao.getChapterCount(book.bookUrl) <= 0) {
-        startActivity<BookTocLoadingActivity> {
-            putExtra("name", book.name)
-            putExtra("author", book.author)
-            putExtra("bookUrl", book.bookUrl)
-            putExtra(BookMediaType.EXTRA_MEDIA_TYPE, BookMediaType.fromBookType(book.type))
-            apply(configIntent)
-        }
-        return
-    }
+    // 恢复与喵公子版一致：书架/搜索等入口直接进阅读页，目录由阅读页后台加载。
+    // 阻塞式 BookTocLoadingActivity 中转会让慢源/失效源看起来像"点了没反应"。
     val intent = Intent(this, book.defaultReadingActivityClass())
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     intent.putExtra("bookUrl", book.bookUrl)
