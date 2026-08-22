@@ -3112,7 +3112,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             lifecycleScope.launch(IO) {
                 if (BaseReadAloudService.isPlay()) {
                     ReadBook.curTextChapter?.let { textChapter ->
-                        if (ReadBook.readAloudPageDetached || ReadBook.durChapterIndex != chapterIndex) {
+                        // 与服务端 isReadBookPageFollowing() 守卫对齐：翻页动画期间
+                        // 不写 durChapterPos、不重渲染，否则会打断用户正在进行的
+                        // 翻页并把页面拉回朗读位置（表现为往前跳几页）
+                        if (ReadBook.readAloudPageDetached
+                            || ReadBook.pageTurnAnimating
+                            || ReadBook.durChapterIndex != chapterIndex
+                        ) {
                             return@let
                         }
                         ReadBook.durChapterPos = chapterStart

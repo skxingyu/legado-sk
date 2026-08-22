@@ -27,8 +27,6 @@ import io.legado.app.lib.theme.surface.SurfaceStyle
 import splitties.systemservices.windowManager
 import java.util.WeakHashMap
 
-private val preparedDialogWindowAlphas = WeakHashMap<Window, Float>()
-private val dialogBlurGenerations = WeakHashMap<Window, Int>()
 private val movedAlertTitlePanels = WeakHashMap<View, Boolean>()
 
 fun AlertDialog.applyTint(): AlertDialog {
@@ -269,25 +267,13 @@ fun Dialog.applyDialogSurfaceBlur(
     if (AppConfig.isEInkMode) return
 
     val hostWindow = context.findActivity()?.window
-    val generation = (dialogBlurGenerations[dialogWindow] ?: 0) + 1
-    dialogBlurGenerations[dialogWindow] = generation
     SurfaceBackdrop.installStatic(target, style)
 
-    fun revealWindow() {
-        if (dialogBlurGenerations[dialogWindow] != generation) return
-        val alpha = preparedDialogWindowAlphas[dialogWindow] ?: return
-        if (dialogWindow.decorView.isAttachedToWindow) {
-            preparedDialogWindowAlphas.remove(dialogWindow)
-            dialogWindow.attributes = dialogWindow.attributes.apply { this.alpha = alpha }
-        }
-    }
-
-    // Do not hide the dialog (alpha=0) while PixelCopy runs. On transparent
+    // Do not hide the dialog while PixelCopy runs. On transparent
     // hosts such as OnLineImportActivity this left the import sheet invisible,
     // so the first tap dismissed it and finishOnDismiss finished the activity.
     val hostTranslucent = context.isTranslucentActivity()
     if (style.blurRadiusPx <= 0 || hostWindow == null || hostTranslucent) {
-        revealWindow()
         return
     }
     SurfaceBackdrop.apply(
