@@ -48,17 +48,19 @@
 
 ### 本机环境与正式命令
 
-- JDK: `C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot`
-- Android SDK: `D:\AI\audio\android-sdk`
-- Gradle user home: `D:\AI\audio\android-gradle-user-home`
+- JDK: `D:\code\tool\jdk-17.0.20+8`
+- Android SDK: `D:\code\tool\sdk`（build-tools 实际版本 `36.1.0`）
+- Gradle: `D:\code\tool\gradle-dist\gradle-8.14.4`（源码目录无 gradlew 时直接用该发行版 `bin\gradle.bat`）
+- Gradle user home: `D:\code\tool\gradle-home`
+- 编译目录：`D:\code\legado-sk-build`（Gradle 拒绝非 ASCII 路径，禁止在中文路径源码目录直接编译；用 robocopy `/MIR` 同步并排除 `.git`、`build`、`.gradle`、`*.apk`）
 - Gradle wrapper: `8.14.4`; compileSdk: `36`
 
 ```powershell
 $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-$env:ANDROID_HOME = 'D:\AI\audio\android-sdk'
-$env:ANDROID_SDK_ROOT = 'D:\AI\audio\android-sdk'
-$env:GRADLE_USER_HOME = 'D:\AI\audio\android-gradle-user-home'
+$env:JAVA_HOME = 'D:\code\tool\jdk-17.0.20+8'
+$env:ANDROID_HOME = 'D:\code\tool\sdk'
+$env:ANDROID_SDK_ROOT = 'D:\code\tool\sdk'
+$env:GRADLE_USER_HOME = 'D:\code\tool\gradle-home'
 $env:Path = @(
   "$env:JAVA_HOME\bin",
   "$env:ANDROID_HOME\cmdline-tools\latest\bin",
@@ -67,7 +69,7 @@ $env:Path = @(
 
 $versionCode = <new-version-code>
 $versionName = '3.26.<MMddHH>' # appC automatically appends c
-.\gradlew.bat ':app:assembleAppC' '-Pabi=arm64-v8a' "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
+D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppC' '-Pabi=arm64-v8a' "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
 ```
 
 ### 长命令和构建失败
@@ -84,8 +86,8 @@ $versionName = '3.26.<MMddHH>' # appC automatically appends c
 
 ```powershell
 $apk = 'D:\code\legado-sk-build\app\build\outputs\apk\app\c\legado_sk_<version>_<code>.apk'
-& "$env:ANDROID_HOME\build-tools\36.0.0\aapt.exe" dump badging $apk
-& "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" verify --print-certs $apk
+& "$env:ANDROID_HOME\build-tools\36.1.0\aapt.exe" dump badging $apk
+& "$env:ANDROID_HOME\build-tools\36.1.0\apksigner.bat" verify --print-certs $apk
 ```
 
 交付前确认：包名 `io.legado.app.c`、版本号递增、中文名 `阅读SK`、`arm64-v8a`、产物来自 `appC`，且 `apksigner` 退出码为 0。部分 `META-INF` 条目未受签名保护的提示可接受。
@@ -223,6 +225,6 @@ uiautomator2 / ADB
 
 仅保留最近一次已交付版本，下一次覆盖安装必须在此基础上递增：
 
-- `3.26.081703c` / `10632`，2026-08-15，已正式构建、APK 校验并安装到雷电模拟器。书源脚本对 `Book.setUseReplaceRule(false)` 的越权调用已由 `BookScriptObject` 单独拒绝，不冻结完整 `Book`；以该书源书籍详情“刷新”回归后，日志明确记录调用被拒绝，封面与 239 章目录仍加载成功，书籍配置未被写入 `useReplaceRule=false`，阅读正常进入。
+- `3.26.082213c` / `10017`，2026-08-22，已正式构建、APK 校验并发布 GitHub Release（tag `v3.26.082213-10017`，Latest）。内容：上游 legadoC 三项修复（PR#8/#9/#10）+ 听书翻页竞态修复。下一次交付在此基础上递增（下一版本号为 `10018`）。
 
 每次交付后当场更新本节。历史发布信息应从 Git、GitHub Release 或提交记录查询，不在本文件累积。
