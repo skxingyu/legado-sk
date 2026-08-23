@@ -59,7 +59,6 @@ import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
-import io.legado.app.help.update.UpdateManager
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.UiCorner
