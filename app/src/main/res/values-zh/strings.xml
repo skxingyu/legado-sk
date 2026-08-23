@@ -1784,8 +1784,6 @@
     <string name="update_check_failed">检查更新失败</string>
     <string name="update_check_now">立即检查更新</string>
     <string name="update_check_now_desc">手动检测 GitHub 是否有新版本</string>
-    <string name="update_check_pre">接收预发布版本</string>
-    <string name="update_check_pre_desc">开启后「立即检查更新」与启动时自动检查会同时检测 GitHub 的 Pre-release 版本（未验证，可能不稳定）</string>
     <string name="ai_chat_cancelled">已停止生成</string>
     <string name="bookshelf_tag_manage">管理标签</string>
     <string name="bookshelf_tag_all">全部</string>

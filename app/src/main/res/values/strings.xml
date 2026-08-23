@@ -886,8 +886,6 @@
     <string name="update_check_failed">Update check failed</string>
     <string name="update_check_now">Check for updates now</string>
     <string name="update_check_now_desc">Manually check GitHub for a new version</string>
-    <string name="update_check_pre">Receive pre-release updates</string>
-    <string name="update_check_pre_desc">When enabled, update checks (manual and automatic) will also detect GitHub pre-releases (untested, may be unstable)</string>
     <string name="ai_chat_cancelled">Generation stopped</string>
     <string name="bookshelf_tag_manage">管理标签</string>
     <string name="bookshelf_tag_all">全部</string>
