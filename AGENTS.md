@@ -1,7 +1,7 @@
 # 阅读SK / legado-sk 项目总则
 
-> 本文件是项目唯一的长期规则来源。它只保留可复用的原则、流程、环境约束和当前交付状态；一次性排障过程、界面细节、截图和临时记录不写入这里。
-> 规则只写在 `AGENTS.md`。`docs` 下仅保留 `api.md` 与截图。
+> 本文件是项目的长期规则来源，只保留可复用的原则、流程、环境约束和当前交付状态；一次性排障过程、界面细节、截图和临时记录不写入这里。
+> 规则以 `AGENTS.md` 为准；配套外部文档（工作目录 `D:\OneDrive\桌面\Ai\legado-sk\`）：`项目文档.md`（方案进度与版本时间线，两文件冲突时以其为最高标准）、`编译注意事项与排错手册.md`（每次编译前必读）。`docs` 下仅保留 `api.md` 与截图。
 
 ## 1. 核心工作原则
 
@@ -18,22 +18,29 @@
 
 ## 2. 设备与测试边界
 
-### 真机禁令
+### 真机设备
 
-- 绝对禁止对用户真机执行任何操作，包括所有 `adb` 子命令、截图、点击、安装、卸载、push/pull 和 shell。
-- 真机问题只能依据用户描述、代码和用户提供的日志排查；高级调试工具不是例外。
+| 设备 | 型号 | 序列号 |
+|---|---|---|
+| 手机 | 华为 MAR-AL00 | `9HQDU19903003356` |
+| 平板 | 联想 TB-9707F | `HA1KAPWG` |
+
+- 所有 `adb` 命令必须显式带 `-s <serial>`；执行前确认目标设备，禁止裸 `adb`。
+- 真机安装统一 `adb -s <serial> install -r legado-sk-arm64-v8a.apk`（同 debug 签名，覆盖升级保数据）；最终验证由用户真机手动完成。
+- 换签名迁移数据走 run-as tar 打包流程：导出必须用 Python subprocess 二进制流（git bash `>` 重定向会 CRLF 污染 tar）；`pm uninstall -k` 不可行（数据绑定签名）。备份在 `D:\OneDrive\桌面\Ai\legado-sk\backup\`。
+- 真机问题优先依据用户描述、代码和用户提供的日志排查。
 
 ### 雷电模拟器
 
-- APK 安装、运行和调试只使用雷电模拟器（LDPlayer），启动程序路径为 `F:\down\雷电模拟器14去广告绿色版集成面具和LSP框架\雷电模拟器14-v14.0.7.7-去广告绿色版\LDPlayer14\dnplayer.exe`。未启动时可尝试启动；失败则请用户手动打开。（2026-08-21 确认，旧路径 `F:\leidian\LDPlayer14` 已失效）
-- 每条 `adb` 命令都必须显式带模拟器序列号，例如 `-s emulator-5554` 或 `-s 127.0.0.1:5555`。执行前确认目标确为模拟器；不确定时停止，禁止裸 `adb`。
+- APK 安装、运行和调试只使用雷电模拟器（LDPlayer），启动程序路径为 `F:\down\雷电模拟器14去广告绿色版集成面具和LSP框架\雷电模拟器14-v14.0.7.7-去广告绿色版\LDPlayer14\dnplayer.exe`。未启动时可尝试启动；失败则请用户手动打开。（2026-08-21 确认，旧路径 `F:\leidian\LDPlayer14` 已失效）模拟器当前已装 10018，后续覆盖安装版本须 ≥10018。
+- adb 序列号 `emulator-5554`，分辨率 1440x2560，模拟器内已配置 WebDAV。每条 `adb` 命令都必须显式带序列号，例如 `-s emulator-5554`。执行前确认目标确为模拟器；不确定时停止，禁止裸 `adb`。
 - 真实小说优先用于阅读功能验证。`C:\Users\user\Documents\leidian14\Pictures` 与模拟器 Pictures 目录互通，可作为导入素材。
 
 ### 验证闭环
 
-每次代码改动都按以下闭环执行：正式编译 `appC` APK -> 安装到已确认的雷电模拟器 -> 复现并回归验证。
+- 每次代码改动都按以下闭环执行：正式编译 `appC` APK -> 安装到已确认的雷电模拟器 -> 复现并回归验证；真机最终验证由用户手动完成。
+- AI 侧回归只在雷电模拟器执行；真机安装仅在用户明确指示下进行。
 
-- 模拟器不可用时不得改用真机。
 - 崩溃或行为异常时，先收集日志和复现证据，定位根因后修复，再重新正式编译和回归；不能报告未经验证的修复。
 - UI 改动必须覆盖受影响的交互、显示、主题/状态切换和关闭重开等生命周期，而不是只确认一张静态截图。
 
@@ -45,6 +52,7 @@
 - 覆盖安装前必须显式传入 `VERSION_CODE` 和 `VERSION_NAME`。新 `VERSION_CODE` 必须比最近一次交付大；`VERSION_NAME` 必须按 GMT+8 编译时刻单调递增，格式为 `3.26.MMddHH`。
 - `appC` flavor 会自动添加版本名后缀 `c`，传给 `-PVERSION_NAME` 的值不得包含 `c`。最终必须以 `aapt` 输出为准，产物版本名应为 `3.26.MMddHHc`。
 - 编译前先从模拟器已安装包确认版本；模拟器不可用时使用第 6 节的最近交付基线。确认新版本后，只删除 `app\build\outputs\apk\app\c` 中对应的旧 APK，绝不删除宽泛目录或源码。
+- 编译前必读工作目录《编译注意事项与排错手册.md》：环境清单、shell 选择策略（bash/PowerShell/Python）、标准编译流程、常见错误对照表、红线清单。
 
 ### 本机环境与正式命令
 
@@ -71,6 +79,10 @@ $versionCode = <new-version-code>
 $versionName = '3.26.<MMddHH>' # appC automatically appends c
 D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppC' '-Pabi=arm64-v8a' "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
 ```
+
+编译成功后必须把新 APK 复制回工作目录：
+1. 覆盖 `D:\OneDrive\桌面\Ai\legado-sk\legado-sk-arm64-v8a.apk`（「当前交付 APK」）。
+2. 按版本命名存入 `D:\OneDrive\桌面\Ai\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a.apk`。
 
 ### 长命令和构建失败
 
@@ -165,6 +177,18 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - [ ] Dialog/Alert/Popup 没有独立头栏；需要的操作在标准底部区，关闭、重开、主题变化和尺寸变化都不会让旧回调覆盖新表面。
 - [ ] 已在雷电模拟器回归：截图检查范围/圆角/透明度，uiautomator2 检查层级和可点击性；普通证据不足才按分层调试规则同时采集 Perfetto、Winscope 与 Frida。
 
+### 功能红线（历史踩坑，违反即回归）
+
+- **R8/混淆永久禁用**：legado 是重反射应用（书源引擎 / JS 桥 / 动态类加载），开启 `minifyEnabled` / `shrinkResources` 会破坏反射链并误删系统过渡动画，实测运行时卡顿（10009 已回退）。瘦身只允许资源层：图片重编码但保持文件名不变、删除零引用资源、`resConfigs "zh"` 语言裁剪。
+- **阅读进度同步三禁**（移植上游后逐项核对防回归）：
+  1. `BookProgress.compareWith` 禁止时间戳优先，只比较 `durChapterIndex` → `durChapterPos`；
+  2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
+  3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
+- **听书翻页竞态守卫必须保留**：`ReadBook.pageTurnAnimating` 同步、朗读联动与 `TTS_PROGRESS` 的页面跟随守卫（10017/10018 修复）不得在后续移植中被上游覆盖。
+- **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
+- **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
+- **语言裁剪边界**：`resConfigs "zh"` 后繁体及其他语言回退默认 `values/`（英文），属预期行为而非缺陷。
+
 ### 设置默认值
 
 每个设置的界面默认值与实际读取默认值必须一致：
@@ -208,12 +232,10 @@ uiautomator2 / ADB
 
 ## 5. 发布与版本控制
 
-### Release
-
-- 发布前重新执行第 3 节的 APK 验证。tag 必须为 `v<versionName>`，与 APK 版本名一致；`target_commitish` 指向 `own` 分支最新提交。
-- Release 正文通过 UTF-8 无 BOM JSON 文件提交：设置 `PYTHONUTF8=1`，用 `json.dump(..., ensure_ascii=False)` 生成，并使用 `curl.exe --data-binary "@<file>"`。不得将中文正文或二进制通过 PowerShell 文本管道传递。
-- APK 上传使用 `Content-Type: application/octet-stream` 和 `curl.exe --data-binary @<apk>`。
-- 发布后通过 API 和 GitHub 网页复查中文、排版、`draft=false`、`prerelease=false`、tag、目标提交、资产大小和下载 200；发现乱码则用 UTF-8 无 BOM JSON PATCH 后重新复查。
+- 发布前重新执行第 3 节的 APK 验证（aapt badging + apksigner verify）。
+- 推送代码：`git push origin main`（代理 31180/31181 已写入 git 全局配置，直接 push 即可）。
+- 用 gh CLI 分步发布，避免大文件上传中断：先 `gh release create "<tag>" --title "..." --notes-file "<CHANGELOG路径>"`（pre/Beta 版加 `--prerelease`），再 `gh release upload "<tag>" "<APK路径>"`；上传前 `unset HTTPS_PROXY HTTP_PROXY; export GODEBUG=http2client=0`（禁 http2 直连）。
+- tag 格式 `v3.26.<MMddHH>-<versionCode>`（如 `v3.26.082220-10018`）；发布后用 GitHub MCP `get_release_by_tag` 或网页复核 tag、目标提交、资产大小、中文排版与 Latest/prerelease 状态。
 
 ### Git
 
@@ -223,8 +245,10 @@ uiautomator2 / ADB
 
 ## 6. 当前交付基线
 
-仅保留最近一次已交付版本，下一次覆盖安装必须在此基础上递增：
+仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- `3.26.082213c` / `10017`，2026-08-22，已正式构建、APK 校验并发布 GitHub Release（tag `v3.26.082213-10017`，Latest）。内容：上游 legadoC 三项修复（PR#8/#9/#10）+ 听书翻页竞态修复。下一次交付在此基础上递增（下一版本号为 `10018`）。
+- 正式版（Latest）：`3.26.082213c` / `10017`，2026-08-22 发布（tag `v3.26.082213-10017`）。内容：上游 legadoC 三项修复（PR#8/#9/#10）+ 听书翻页竞态修复。
+- Pre 版：`3.26.082220c` / `10018`，2026-08-22 发布（tag `v3.26.082220-10018`，prerelease，提交 `27bd6e6`+`fb5fa26`）。内容：封死听书竞态 UI 层残留口子（TTS_PROGRESS 补 `pageTurnAnimating` 守卫）+ 死代码清理。回退锚点：备份分支 `backup-10017`（指向 `4e1b168`，本地+远程）。
+- 下一次交付 versionCode 从 `10019` 递增；模拟器当前已装 10018。
 
-每次交付后当场更新本节。历史发布信息应从 Git、GitHub Release 或提交记录查询，不在本文件累积。
+每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或工作目录《项目文档.md》第四节时间线查询，不在本文件累积。
