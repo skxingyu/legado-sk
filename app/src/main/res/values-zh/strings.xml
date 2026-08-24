@@ -1917,6 +1917,8 @@
     <string name="theme_export_failed">导出主题失败：%s</string>
     <string name="theme_zip_read_failed">无法读取主题 ZIP</string>
     <string name="theme_imported">主题已导入</string>
+    <string name="md3_theme_imported">MD3 主题包已导入（含日/夜两套）</string>
+    <string name="md3_theme_invalid">无效的 MD3 主题包</string>
     <string name="theme_import_failed">导入主题失败：%s</string>
     <string name="theme_apply_failed">应用主题失败：%s</string>
     <string name="theme_applied">主题已应用</string>

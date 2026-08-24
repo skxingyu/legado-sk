@@ -5,8 +5,12 @@ import android.net.Uri
 import androidx.annotation.Keep
 import androidx.core.graphics.toColorInt
 import androidx.documentfile.provider.DocumentFile
+import com.google.gson.JsonParser
+import com.google.gson.annotations.SerializedName
+import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppWebDav
+import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalFiles
@@ -21,6 +25,8 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
 import java.io.FileInputStream
+import java.util.Locale
+import java.util.zip.ZipFile
 
 object ThemePackageManager {
 
@@ -123,12 +129,15 @@ object ThemePackageManager {
         importZipInternal(zipFile, entry.remoteUpdatedAt).copy(source = Source.BOTH)
     }
 
-    suspend fun importZip(zipFile: File): Entry = withContext(IO) {
+    suspend fun importZip(zipFile: File): List<Entry> = withContext(IO) {
+        if (isMd3ThemePackage(zipFile)) {
+            return@withContext importMd3Internal(zipFile)
+        }
         val pkg = peekPackage(zipFile)
         if (themeExists(pkg.isNightTheme, pkg.name)) {
             throw IllegalArgumentException("已存在同名主题")
         }
-        importZipInternal(zipFile, 0L)
+        listOf(importZipInternal(zipFile, 0L))
     }
 
     suspend fun exportZip(entry: Entry): File = withContext(IO) {
@@ -547,10 +556,235 @@ object ThemePackageManager {
         val updatedAt: Long,
         val config: ThemeConfig.Config?
     )
-
     enum class Source {
         LOCAL,
         REMOTE,
         BOTH
     }
+
+    // region MD3 主题包导入（兼容 MD3-main 分支导出格式）
+
+    /** MD3 包清单文件名 */
+    private const val md3ManifestFileName = "manifest.json"
+
+    /** MD3 清单最大字节数，防止恶意超大文件 */
+    private const val maxMd3ManifestBytes = 2L * 1024 * 1024
+
+    /**
+     * MD3-main 分支主题包清单。
+     * 仅声明 SK 需要的字段；GSON 自动忽略导航图标、封面图集等未声明成员。
+     * 注意：GSON 经 Unsafe 实例化，缺失成员不会应用 Kotlin 默认值，
+     * 故引用型字段一律声明为可空并在使用处显式兜底。
+     */
+    @Keep
+    private data class Md3Manifest(
+        @SerializedName("formatVersion") val formatVersion: Int = 0,
+        @SerializedName("name") val name: String? = null,
+        @SerializedName("config") val config: Md3ThemeData? = null,
+        @SerializedName("assets") val assets: Map<String, String>? = null
+    )
+
+    /**
+     * MD3 扁平偏好参数中的颜色与背景部分。
+     * 颜色为 ARGB Int；MD3 颜色无 alpha 语义，转换时丢弃 alpha。
+     */
+    @Keep
+    private data class Md3ThemeData(
+        @SerializedName("isPureBlack") val isPureBlack: Boolean = false,
+        @SerializedName("themeColor") val themeColor: Int = 0,
+        @SerializedName("secondaryThemeColor") val secondaryThemeColor: Int = 0,
+        @SerializedName("themeBackgroundColor") val themeBackgroundColor: Int = 0,
+        @SerializedName("labelContainerColor") val labelContainerColor: Int = 0,
+        @SerializedName("themeColorNight") val themeColorNight: Int = 0,
+        @SerializedName("secondaryThemeColorNight") val secondaryThemeColorNight: Int = 0,
+        @SerializedName("themeBackgroundColorNight") val themeBackgroundColorNight: Int = 0,
+        @SerializedName("labelContainerColorNight") val labelContainerColorNight: Int = 0,
+        @SerializedName("bgImageLight") val bgImageLight: String? = null,
+        @SerializedName("bgImageDark") val bgImageDark: String? = null,
+        @SerializedName("bgImageBlurring") val bgImageBlurring: Int = 0,
+        @SerializedName("bgImageNBlurring") val bgImageNBlurring: Int = 0,
+        @SerializedName("fontScale") val fontScale: Int = 10
+    )
+
+    /**
+     * 嗅探 zip 是否为 MD3-main 格式主题包：
+     * 内含 manifest.json 且具备 formatVersion 与 config 成员即判定成立。
+     * 非 zip 或结构不符一律返回 false，交由原生 theme.json 流程报错。
+     */
+    private fun isMd3ThemePackage(zipFile: File): Boolean {
+        runCatching {
+            ZipFile(zipFile).use { zip ->
+                val entry = zip.getEntry(md3ManifestFileName) ?: return false
+                // size 为 -1 表示未知（流式写入），不能据此排除；仅拒绝明确超限
+                if (entry.size > maxMd3ManifestBytes) return false
+                val json = zip.getInputStream(entry).bufferedReader().use { it.readText() }
+                val root = JsonParser.parseString(json).asJsonObject
+                return root.has("formatVersion") && root.has("config")
+            }
+        }.onFailure { return false }
+        return false
+    }
+
+    private fun readMd3Manifest(zipFile: File): Md3Manifest {
+        ZipFile(zipFile).use { zip ->
+            val entry = zip.getEntry(md3ManifestFileName)
+                ?: throw IllegalArgumentException(appCtx.getString(R.string.md3_theme_invalid))
+            require(entry.size in 0..maxMd3ManifestBytes) {
+                appCtx.getString(R.string.md3_theme_invalid)
+            }
+            val json = zip.getInputStream(entry).bufferedReader().use { it.readText() }
+            val manifest = GSON.fromJsonObject<Md3Manifest>(json).getOrNull()
+                ?.takeIf { it.config != null }
+                ?: throw IllegalArgumentException(appCtx.getString(R.string.md3_theme_invalid))
+            return manifest
+        }
+    }
+
+    /**
+     * 导入 MD3 主题包。
+     * 一个 MD3 包同时携带日/夜两套配色，SK 一个主题包只承载一个日夜形态，
+     * 因此拆分为同名两份分别落入 day / night 目录；重复导入按目录重建语义覆盖更新。
+     */
+    private fun importMd3Internal(zipFile: File): List<Entry> {
+        val manifest = readMd3Manifest(zipFile)
+        val themeName = md3ThemeName(manifest.name, zipFile.name)
+        val entries = mutableListOf<Entry>()
+        for (isNight in listOf(false, true)) {
+            val dirName = themeName.normalizeFileName().ifBlank { "md3_${System.currentTimeMillis()}" }
+            val targetDir = localDir(isNight, dirName)
+            if (targetDir.exists()) {
+                FileUtils.delete(targetDir, deleteRootDir = true)
+            }
+            targetDir.mkdirs()
+            val config = buildMd3Config(manifest, isNight, zipFile, targetDir, themeName)
+            val pkg = Package(
+                name = themeName,
+                dirName = dirName,
+                isNightTheme = isNight,
+                updatedAt = System.currentTimeMillis(),
+                config = config
+            )
+            File(targetDir, packageFileName).writeText(GSON.toJson(pkg))
+            ThemeConfig.addConfig(resolveConfigPaths(pkg, targetDir))
+            entries.add(Entry(pkg, Source.LOCAL, localDir = targetDir, remoteUpdatedAt = 0L))
+        }
+        return entries
+    }
+
+    /** 主题命名回退链：清单 name → zip 文件名（排除时间戳等无意义名称）→ 固定默认值 */
+    private fun md3ThemeName(name: String?, zipFileName: String): String {
+        name?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        runCatching {
+            val base = zipFileName.substringAfterLast(File.separatorChar).substringBeforeLast('.')
+            base.takeIf {
+                it.isNotBlank() && !it.all(Char::isDigit) && !it.matches(Regex("import_\\d+"))
+            }?.let { return it }
+        }
+        return "MD3主题"
+    }
+
+    /**
+     * 将 MD3 参数映射为 SK 标准颜色主题配置。
+     * 背景图提取后以 background 前缀资产规范存入包目录，config 记相对路径，
+     * 由 resolveConfigPaths 在读取时解析为绝对路径。
+     */
+    private fun buildMd3Config(
+        manifest: Md3Manifest,
+        isNight: Boolean,
+        zipFile: File,
+        targetDir: File,
+        themeName: String
+    ): ThemeConfig.Config {
+        // readMd3Manifest 已校验 config 非空；assets 缺失时按空映射处理
+        val data = manifest.config ?: Md3ThemeData()
+        val assets = manifest.assets.orEmpty()
+        val assetRef = if (isNight) {
+            assets["background.dark"]
+                ?: assets["bgImageDark"]
+                ?: data.bgImageDark
+        } else {
+            assets["background.light"]
+                ?: assets["bgImageLight"]
+                ?: data.bgImageLight
+        }
+        var backgroundPath: String? = null
+        if (!assetRef.isNullOrBlank()) {
+            extractMd3Asset(zipFile, assetRef, targetDir, mainBackgroundPrefix)?.let { fileName ->
+                backgroundPath = fileName
+            }
+        }
+        return ThemeConfig.Config(
+            themeName = themeName,
+            isNightTheme = isNight,
+            primaryColor = md3ColorToHex(if (isNight) data.themeColorNight else data.themeColor),
+            accentColor = md3ColorToHex(if (isNight) data.secondaryThemeColorNight else data.secondaryThemeColor),
+            backgroundColor = md3ColorToHex(if (isNight) data.themeBackgroundColorNight else data.themeBackgroundColor),
+            bottomBackground = md3ColorToHex(if (isNight) data.labelContainerColorNight else data.labelContainerColor),
+            transparentNavBar = data.isPureBlack,
+            backgroundImgPath = backgroundPath,
+            backgroundImgBlur = (if (isNight) data.bgImageNBlurring else data.bgImageBlurring)
+                .coerceIn(0, 25),
+            // GSON 对缺失成员填 0 而非声明默认值 10；0 在 SK 语义中是非法缩放，
+            // 因此仅采纳 1..16 区间内的非默认值，避免把用户系统缩放写成 0
+            fontScale = data.fontScale.takeIf { it in 1..16 && it != 10 }
+        )
+    }
+
+    /**
+     * 提取 MD3 资产引用并写入包目录。
+     * 引用值有三种形态，按序尝试：zip 内路径（精确命中 → 以路径段结尾匹配）、Base64 数据。
+     * 成功返回写入的资产文件名，失败返回 null（背景缺失不阻断导入）。
+     */
+    private fun extractMd3Asset(
+        zipFile: File,
+        ref: String,
+        targetDir: File,
+        prefix: String
+    ): String? {
+        val normalizedRef = ref.replace('\\', '/')
+        var tempFile: File? = null
+        runCatching {
+            ZipFile(zipFile).use { zip ->
+                var entry = zip.getEntry(normalizedRef)
+                if (entry == null || entry.isDirectory) {
+                    entry = zip.entries().asSequence()
+                        .firstOrNull { !it.isDirectory && it.name.endsWith("/$normalizedRef") }
+                }
+                entry?.let {
+                    val tmp = tempDir.getFile("md3_asset_${System.nanoTime()}")
+                    zip.getInputStream(it).use { input ->
+                        tmp.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    tempFile = tmp
+                }
+            }
+        }
+        if (tempFile == null && !ref.contains('/')) {
+            runCatching {
+                EncoderUtils.base64DecodeToByteArray(ref)?.let { bytes ->
+                    val tmp = tempDir.getFile("md3_asset_${System.nanoTime()}")
+                    tmp.writeBytes(bytes)
+                    tempFile = tmp
+                }
+            }
+        }
+        val source = tempFile ?: return null
+        val suffix = source.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".jpg"
+        val target = File(targetDir, "$prefix$suffix")
+        return runCatching {
+            source.copyTo(target, overwrite = true)
+            target.name
+        }.getOrNull().also {
+            runCatching { source.delete() }
+        }
+    }
+
+    /** ARGB Int 转 #RRGGBB 十六进制字符串（丢弃 alpha，MD3 颜色本无 alpha 语义） */
+    private fun md3ColorToHex(color: Int): String {
+        val rgb = color and 0xFFFFFF
+        return String.format(Locale.US, "#%06X", rgb)
+    }
+
+    // endregion
+
 }

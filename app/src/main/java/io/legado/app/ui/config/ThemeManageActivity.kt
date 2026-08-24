@@ -1050,10 +1050,15 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     FileOutputStream(file).use { output -> input.copyTo(output) }
                 } ?: throw IllegalArgumentException(getString(R.string.theme_zip_read_failed))
                 ThemePackageManager.importZip(file)
-            }.onSuccess {
-                toastOnUi(getString(R.string.theme_imported))
+            }.onSuccess { entries ->
+                // 原生包恒返回单个 Entry；MD3 包固定拆分为日/夜两份
+                if (entries.size > 1) {
+                    toastOnUi(getString(R.string.md3_theme_imported))
+                } else {
+                    toastOnUi(getString(R.string.theme_imported))
+                }
                 loadThemes()
-                enqueueUploadIfNeeded(it)
+                entries.forEach { enqueueUploadIfNeeded(it) }
             }.onFailure {
                 if (it.isJobCancellation()) return@onFailure
                 toastOnUi(getString(R.string.theme_import_failed, it.localizedMessage))

@@ -2043,6 +2043,8 @@
     <string name="theme_export_failed">Failed to export theme: %s</string>
     <string name="theme_zip_read_failed">Unable to read theme ZIP</string>
     <string name="theme_imported">Theme imported</string>
+    <string name="md3_theme_imported">MD3 theme package imported (day &amp; night)</string>
+    <string name="md3_theme_invalid">Invalid MD3 theme package</string>
     <string name="theme_import_failed">Failed to import theme: %s</string>
     <string name="theme_apply_failed">Failed to apply theme: %s</string>
     <string name="theme_applied">Theme applied</string>
