@@ -1534,7 +1534,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         when {
             isAutoPage -> showDialogFragment<AutoReadDialog>()
             isShowingSearchResult -> binding.searchMenu.runMenuIn()
-            BaseReadAloudService.isRun -> showReadAloudDialog()
+            // 听书时也呼出普通主菜单: 长按「朗读」按钮才进入听书专属面板 (ReadMenu.onLongClick)
             else -> binding.readMenu.runMenuIn()
         }
     }
