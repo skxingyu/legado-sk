@@ -273,6 +273,14 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                         return true
                     }.onFailure {
                         currentCoroutineContext().ensureActive()
+                        // 目录加载失败时, 若数据库已有旧章节记录, 保留旧目录让用户能阅读已缓存内容
+                        val dbCount = appDb.bookChapterDao.getChapterCount(book.bookUrl)
+                        if (dbCount > 0) {
+                            ReadBook.onChapterListUpdated(book)
+                            // 外层调用方在返回 true 后会清空消息条, 故用 toast 确保提示可见
+                            context.toastOnUi(R.string.toc_load_failed_using_cache)
+                            return true
+                        }
                         ReadBook.upMsg(context.getString(R.string.error_load_toc))
                         return false
                     }
