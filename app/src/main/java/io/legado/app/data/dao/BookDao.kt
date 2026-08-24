@@ -178,6 +178,9 @@ interface BookDao {
     @Query("select exists(select 1 from books where name = :name and author = :author and mediaType = :mediaType)")
     fun has(name: String, author: String, @BookMediaType.Type mediaType: Int): Boolean
 
+    @Query("select exists(select 1 from books where origin = :origin)")
+    fun hasBookByOrigin(origin: String): Boolean
+
     @Query(
         """select exists(select 1 from books where type & ${BookType.local} > 0 
         and (originName = :fileName or (origin != '${BookType.localTag}' and origin like '%' || :fileName)))"""
@@ -211,6 +214,9 @@ interface BookDao {
 
     @Query("update books set durChapterPos = :pos where bookUrl = :bookUrl")
     fun upProgress(bookUrl: String, pos: Int)
+
+    @Query("update books set origin = :newOrigin where origin = :oldOrigin")
+    fun updateOrigin(newOrigin: String, oldOrigin: String)
 
     @Query("update books set `group` = :newGroupId where `group` = :oldGroupId")
     fun upGroup(oldGroupId: Long, newGroupId: Long)

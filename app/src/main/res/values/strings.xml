@@ -131,6 +131,7 @@
     <string name="offline_cache_t">Offline cache</string>
     <string name="offline_cache_s">cache the selected chapter(s) to Storage</string>
     <string name="change_origin">Change Origin</string>
+    <string name="migrate_book_origin_done">Book source URL changed. Associated books have been migrated to the new URL.</string>
     <string name="about_description">
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
     </string>
