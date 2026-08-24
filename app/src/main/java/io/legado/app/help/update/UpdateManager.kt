@@ -51,6 +51,9 @@ object UpdateManager {
     private data class ReleaseCandidate(
         val release: GitHubRelease,
         val versionCode: Long,
+        // versionName 中的编译时刻(MMddHH): 同 versionCode 时用于区分新旧,
+        // 保证 pre 转正的同号正式版能覆盖已安装的同号 pre 版
+        val versionKey: Long,
         val asset: GitHubAsset
     )
 
@@ -101,12 +104,27 @@ object UpdateManager {
             val asset = release.assets.firstOrNull { it.name?.endsWith(".apk", true) == true }
                 ?: return@mapNotNull null
             val code = parseVersionCodeFromAssetName(asset.name) ?: return@mapNotNull null
-            ReleaseCandidate(release, code, asset)
+            val versionKey = parseVersionKeyFromAssetName(asset.name)
+            ReleaseCandidate(release, code, versionKey, asset)
         }
-        // 在所有可下载候选中挑 versionCode 最高者，而不是列表第一个；
-        // 这样即使正式版比 Pre 版更新（版本号更高），也会正确下载正式版
-        val best = candidates.maxByOrNull { it.versionCode } ?: return null
-        if (best.versionCode <= AppConst.appInfo.versionCode) return null
+        // 候选排序三级键: versionCode > 正式版优先(pre 与正式同级时正式版胜出) > versionName 编译时刻;
+        // 这样同 versionCode 的 pre 转正场景, 正式版会排在已发布的 pre 之前被选中
+        val best = candidates.maxWithOrNull(
+            compareBy(
+                { it.versionCode },
+                { it.release.prerelease == false },
+                { it.versionKey }
+            )
+        ) ?: return null
+        // 更新判定: versionCode 更高, 或 versionCode 相同但线上编译时刻比本地新
+        // (覆盖「已安装同号 pre 版, 线上发布同号正式版」的更新检测);
+        // 若本地就是最新的同号正式版, 两个条件都不满足, 不会误报
+        val isNewer = best.versionCode > AppConst.appInfo.versionCode ||
+            (
+                best.versionCode == AppConst.appInfo.versionCode &&
+                    best.versionKey > versionNameSortKey(AppConst.appInfo.versionName)
+                )
+        if (!isNewer) return null
         val originalUrl = best.asset.browser_download_url ?: return null
         return UpdateInfo(
             tagName = best.release.tag_name ?: best.versionCode.toString(),
@@ -128,6 +146,31 @@ object UpdateManager {
         name ?: return null
         return Regex("_(\\d+)(?:_[\\w-]+)?\\.apk$", RegexOption.IGNORE_CASE)
             .find(name)?.groupValues?.get(1)?.toLongOrNull()
+    }
+
+    /**
+     * 从 APK 资产文件名解析 versionName 编译时刻键(MMddHH 数值):
+     * legado_sk_3.26.082507c_10020_arm64-v8a.apk -> 82507
+     * legado_sk_3.26.081303_10539.apk -> 81303
+     * 解析失败返回 Long.MIN_VALUE, 该候选仅失去同号次级比较能力, 主判定(versionCode)不受影响
+     */
+    private fun parseVersionKeyFromAssetName(name: String?): Long {
+        val versionName = name?.let {
+            Regex("_([0-9]+(?:\\.[0-9]+)+)[cC]?_\\d+").find(it)?.groupValues?.get(1)
+        }
+        return versionNameSortKey(versionName)
+    }
+
+    /**
+     * versionName -> 编译时刻数值键: "3.26.082507c" -> 82507
+     * 格式固定为 3.26.MMddHH[c], MMddHH 固定六位, 数值比较与时间先后一致
+     */
+    private fun versionNameSortKey(versionName: String?): Long {
+        return versionName
+            ?.substringAfterLast('.')
+            ?.trimEnd('c', 'C')
+            ?.toLongOrNull()
+            ?: Long.MIN_VALUE
     }
 
     /**
