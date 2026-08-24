@@ -980,23 +980,23 @@ class ReadStyleDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_book_
             ))
             addView(TextView(requireContext()).apply {
                 text = getString(R.string.import_str)
-                textSize = 14f
+                textSize = 15f
                 typeface = requireContext().uiTypeface()
-                setTextColor(primaryTextColor)
+                setTextColor(requireContext().accentColor)
                 setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_import, 0, 0, 0)
                 compoundDrawablePadding = 8.dpToPx()
                 compoundDrawablesRelative.forEach {
-                    it?.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
+                    it?.setColorFilter(requireContext().accentColor, PorterDuff.Mode.SRC_IN)
                 }
-                minHeight = 40.dpToPx()
+                minHeight = 44.dpToPx()
                 gravity = Gravity.CENTER_VERTICAL
                 background = UiCorner.opaqueRoundedStroke(
-                    Color.TRANSPARENT,
+                    ColorUtils.withAlpha(requireContext().accentColor, 0.10f),
                     UiCorner.actionRadius(requireContext()),
                     1.dpToPx(),
-                    ColorUtils.withAlpha(primaryTextColor, 0.45f)
+                    requireContext().accentColor
                 )
-                setPadding(12.dpToPx(), 0, 12.dpToPx(), 0)
+                setPadding(16.dpToPx(), 0, 16.dpToPx(), 0)
                 setOnClickListener { launchImportStyle() }
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
