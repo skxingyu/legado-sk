@@ -184,7 +184,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
   1. `BookProgress.compareWith` 禁止时间戳优先，只比较 `durChapterIndex` → `durChapterPos`；
   2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
   3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
-- **听书翻页竞态守卫必须保留**：`ReadBook.pageTurnAnimating` 同步、朗读联动与 `TTS_PROGRESS` 的页面跟随守卫（10017/10018 修复）不得在后续移植中被上游覆盖。
+- **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
 - **语言裁剪边界**：`resConfigs "zh"` 后繁体及其他语言回退默认 `values/`（英文），属预期行为而非缺陷。
@@ -249,6 +249,8 @@ uiautomator2 / ADB
 
 - 正式版（Latest）：`3.26.082714c` / `10021`，2026-08-27 发布（tag `v3.26.082714-10021`，提交 `a0d968f`）。内容：修复同号 pre 转正后无法触发内置更新的缺陷——更新候选排序改为三级键（versionCode → 正式版优先 → versionName 编译时刻 MMddHH），更新判定在 versionCode 相同时追加「线上编译时刻比本地新即提示」，使已装同号 pre 版的设备能收到转正正式版推送；pre 用户未开 updateCheckPre 开关也能收到（正式版不被 prerelease 过滤）。
 - ⚠️ 10021 存在「pre + 同号正式版」双 release：先发 pre `v3.26.082507-10021`（`3.26.082507c`，用于验证转正检测），再重编译同号正式版 `v3.26.082714-10021`（`3.26.082714c`，编译时刻更新）转正为 Latest。两者代码内容一致（同一提交 `a0d968f`），仅 versionName/编译时刻不同。模拟器实测：装 pre（未开 pre 开关）→「立即检查更新」成功提示同号正式版更新。
-- 下一次交付 versionCode 从 `10022` 递增。
+- 10022 为 pre（`v3.26.0828-10022`，提交 `3e8bcea`+`2a15b78`，DB 104→105），三项朗读修复的中间态方案，已被 10023 整体替换。
+- 🚧 **10023 已编译待验证**（`3.26.082907c` / 10023，提交 `a824a0f`，2026-08-29）：**整批移植上游 legadoC 8/26-8/27 朗读架构收束**——两原语（`setAloudStart` 双击换段 / `backToAloudProgress` 回原进度）+ 纯函数跟随规则 `shouldFollowAloudAdvance` + 派生脱节 `isViewBehindAloud`，替换 10022 的存储式方案；`readAloudByPage` 拆为 `pageSplit`（页间分段）+ `forcePageFollow`（强制追页），新增页首按段；朗读红字改绘制期投影；系统 TTS 预测换页 + HTTP 被动预测；位置事件 `READ_ALOUD_POSITION`（带 generation 防乱序）取代 `TTS_PROGRESS`。DB 仍为 105。**待模拟器回归 + 用户真机验证后转正发布**。
+- 下一次交付 versionCode 从 `10024` 递增（10023 验证后若需修 bug 则 10023 重编）。
 
 每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或工作目录《项目文档.md》第四节时间线查询，不在本文件累积。

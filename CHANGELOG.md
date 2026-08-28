@@ -1,5 +1,47 @@
 # 更新日志 / CHANGELOG
 
+## 3.26.082907c（versionCode 10023）— 2026-08-29
+
+### 整批移植上游 legadoC 朗读架构收束（替换 10022 存储式中间态）
+
+**朗读跟随体系重构**：采用上游「两个原语 + 纯函数跟随规则 + 派生脱节」，替换此前基于存储状态（`readAloudPageDetached`/跟随地板闩）的方案。
+
+- **两原语**：`setAloudStart`（双击换段，只写朗读起点不联动显示）/ `backToAloudProgress`（回原进度，把显示对齐朗读）。
+- **纯函数跟随规则** `shouldFollowAloudAdvance`：显示物理页 == 朗读出发页且位置前进才写显示进度并翻页；其余一律不动。显示永不被朗读事件拽向后退，「该跳才跳 / 回退不拽页」由这一条单调性规则全覆盖，不再需要地板闩。
+- **派生脱节** `isViewBehindAloud`：显示页 != 朗读页时 PAGE_ACTION 面板（回原进度/从本页读）自动出现，对齐后消失。
+- **位置事件重构**：`TTS_PROGRESS`（Bundle）→ `READ_ALOUD_POSITION`（`ReadAloudPositionUpdate`，含 previousPosition/switchConfirmed/**generation 防乱序**）；`ReadAloud.aloudPosition` 成为朗读位置唯一真相；引擎 `postReadAloudTextPosition` 只发布位置、**绝不直写显示进度**，翻页由 UI 侧观察者单点执行。
+
+**按页朗读拆分为两个开关**（`readAloudByPage` 删除，不做老配置迁移）：
+
+- `pageSplit` **页间分段**：跨页的段从页边界裂成真正的两个朗读单元（边界绝对精准，段间稍有停顿）。
+- `forcePageFollow` **强制追页**：翻到哪一页就相当于双击该页最上面的那一段开始朗读，视角始终停在朗读页。
+- `readAloudPageStartAtParagraph` **页首按段**（保留）：从本页读/强制追页落到某一页时，页首取本页第一个字还是第一个段落的首字。
+
+**朗读红字改绘制期投影**：
+
+- `TextLine.isReadAloud` 改为计算属性：本行段号 == 朗读段号且播放中才红字，删除存储式 `hasReadAloudSpan`/`upPageAloudSpan`/`removePageAloudSpan` 与高亮对账补偿。
+
+**预测换页**（页间分段关闭时按实测语速预估过页界提前翻页）：
+
+- 系统 TTS：按「文字量 + 实测朗读速率」估算读过页界时刻，提前发布位置事件；速率由上一句真实总时长滚动校准。
+- HTTP TTS：按「时长/字符」步长轮询播放进度扫过页界，流式无时长时用上一句实测步长兜底。
+
+**修复**
+
+- 双击跨页段落恢复回到真正段首（复用全章段首解析）；从本页读跨页段维持本页起点。
+- 用户主动上一章/下一章（syncView）派生判定跟随视角，视角在别处时只切朗读不动显示。
+- 修复朗读面板动画在 IO 线程启动导致的 `Animators may only be run on Looper threads` 崩溃。
+
+> 数据库版本保持 105；已装 10022 覆盖升级不迁移。此版本将 10022 的三项朗读修复并入更完整的架构方案。
+
+### 安装包
+
+| 文件 | 包名 | 说明 |
+|---|---|---|
+| `legado_sk_3.26.082907c_10023_arm64-v8a.apk` | `io.legado.app.c` | 待真机验证（32.2MB，可覆盖升级，保留数据） |
+
+---
+
 ## 3.26.082714c（versionCode 10021）— 2026-08-27
 
 ### 修复同号 pre 转正后无法触发内置更新
