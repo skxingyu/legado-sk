@@ -552,6 +552,7 @@ object ReadBook : CoroutineScope by MainScope() {
             readAloudPageDetached = true
             postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, true)
         }
+        clearAloudFollowFloor()
     }
 
     fun attachReadAloudPage() {
@@ -559,17 +560,63 @@ object ReadBook : CoroutineScope by MainScope() {
             readAloudPageDetached = false
             postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, false)
         }
+        clearAloudFollowFloor()
+    }
+
+    // —— 朗读跟随地板（补读期闸门）——
+    // 朗读起点被回退到当前显示位置之前时（双击跨页段首/从本页听回退），
+    // 语音先"补读"地板之前的内容；期间所有写显示进度的通道统一过闸门，
+    // 位置未到地板前拦截，页面不被拽回，追平后恢复跟随
+
+    private var aloudFollowFloorChapterIndex = -1
+    private var aloudFollowFloorPos = -1
+
+    @Synchronized
+    fun setAloudFollowFloor(chapterIndex: Int, floorPos: Int) {
+        aloudFollowFloorChapterIndex = chapterIndex
+        aloudFollowFloorPos = floorPos
+    }
+
+    @Synchronized
+    fun clearAloudFollowFloor() {
+        aloudFollowFloorChapterIndex = -1
+        aloudFollowFloorPos = -1
+    }
+
+    /**
+     * 跟随写显示进度前的统一闸门：位置已到地板或无地板时放行并顺带清闩，
+     * 未到地板时拦截，显示保持等待语音补读到位。
+     */
+    @Synchronized
+    fun aloudFollowAllowsWrite(chapterIndex: Int, chapterPos: Int): Boolean {
+        val floorChapter = aloudFollowFloorChapterIndex
+        if (floorChapter < 0) return true
+        if (floorChapter != chapterIndex || chapterPos >= aloudFollowFloorPos) {
+            aloudFollowFloorChapterIndex = -1
+            aloudFollowFloorPos = -1
+            return true
+        }
+        return false
     }
 
     /**
      * 朗读
      */
-    fun readAloud(play: Boolean = true, startPos: Int = 0) {
+    fun readAloud(play: Boolean = true, pageIndex: Int = durPageIndex, startPos: Int = 0) {
         book ?: return
         val textChapter = curTextChapter ?: return
         if (textChapter.isCompleted) {
-            ReadAloud.play(appCtx, play, startPos = startPos)
+            ReadAloud.play(appCtx, play, pageIndex = pageIndex, startPos = startPos)
         }
+    }
+
+    /**
+     * 章内字符位 → 指定页（默认当前显示页）的页内偏移，
+     * 用于 ReadAloud.play 的 startPos（引擎按 getReadLength(page) + startPos 定位起点）
+     */
+    fun aloudStartPosInPage(chapterPos: Int, page: Int = durPageIndex): Int {
+        val pageStart = curTextChapter?.getReadLength(page) ?: 0
+        return (chapterPos - pageStart).coerceAtLeast(0)
     }
 
     suspend fun loadTextChapterForReadAloud(

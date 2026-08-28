@@ -753,19 +753,57 @@ class ReadView(context: Context, attrs: AttributeSet) :
     private fun readAloudFromPoint(pos: Pair<Int, TextLine>) {
         val (chapterIndex, line) = pos
         ReadBook.attachReadAloudPage()
+        // 双击选择的对象是"这一段"，起点必须是全章真段首；
+        // 点击映射的页内段首查找越过不了页边界，跨页段落曾退化为本页首字
+        val paragraphStart = resolveTrueParagraphStart(line) ?: line.chapterPosition
         if (ReadBook.durChapterIndex != chapterIndex) {
             ReadBook.skipReadAloudSyncOnce = true
-            val opened = ReadBook.openChapter(chapterIndex, line.chapterPosition, false) {
+            val opened = ReadBook.openChapter(chapterIndex, paragraphStart, false) {
                 ReadBook.skipReadAloudSyncOnce = false
-                ReadBook.readAloud(startPos = line.pagePosition)
+                // openChapter 已把 durChapterPos/durPageIndex 定位到 paragraphStart 所在页，
+                // startPos 为段首相对该页的页内偏移
+                ReadBook.readAloud(startPos = ReadBook.aloudStartPosInPage(paragraphStart))
             }
             if (!opened) {
                 ReadBook.skipReadAloudSyncOnce = false
             }
+        } else if (paragraphStart >= ReadBook.durChapterPos) {
+            // 段首在当前显示位置或之后：原路径，直接定位朗读
+            ReadBook.durChapterPos = paragraphStart
+            ReadBook.readAloud(startPos = ReadBook.aloudStartPosInPage(paragraphStart))
         } else {
-            ReadBook.durChapterPos = line.chapterPosition
-            ReadBook.readAloud(startPos = line.pagePosition)
+            // 段首在当前显示位置之前（跨页段落）：开跟随地板，语音补读期间显示不动
+            //（详见 ReadBook.setAloudFollowFloor）；朗读引擎从段首所在页启动
+            ReadBook.setAloudFollowFloor(chapterIndex, ReadBook.durChapterPos)
+            val startPage = ReadBook.curTextChapter
+                ?.getPageIndexByCharIndex(paragraphStart)?.takeIf { it >= 0 }
+                ?: ReadBook.durPageIndex
+            ReadBook.readAloud(
+                pageIndex = startPage,
+                startPos = ReadBook.aloudStartPosInPage(paragraphStart, startPage)
+            )
         }
+    }
+
+    /**
+     * 全章视角的"真正段首"：行所属段落（全局段号）在全章中的起始位置。
+     * 段落跨页时段首在上一页，页内查找无法越过页边界，必须按
+     * TextChapter.paragraphs 的全局段号回退，与引擎朗读单元划分同源；
+     * 解析不到所属段落时返回 null，由调用方决定兜底。
+     */
+    private fun resolveTrueParagraphStart(line: TextLine): Int? {
+        sequenceOf(
+            ReadBook.curTextChapter,
+            ReadBook.prevTextChapter,
+            ReadBook.nextTextChapter,
+        ).filterNotNull().forEach { textChapter ->
+            val num = textChapter.getParagraphNum(line.chapterPosition + 1, false)
+            val paragraph = textChapter.paragraphs.getOrNull(num - 1)
+            if (paragraph?.realNum == line.paragraphNum) {
+                return paragraph.chapterPosition
+            }
+        }
+        return null
     }
 
     /**

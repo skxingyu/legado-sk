@@ -1982,6 +1982,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                         ReadBook.readAloud(startPos = line.pagePosition)
                     }
                 } else {
+                    // 从本页听起点（可见页首）可能早于当前阅读位置：
+                    // 开跟随地板，语音补读页首到原位置期间显示不被拽回
+                    if (line.chapterPosition < ReadBook.durChapterPos) {
+                        ReadBook.setAloudFollowFloor(index, ReadBook.durChapterPos)
+                    }
                     ReadBook.durChapterPos = line.chapterPosition
                     ReadBook.readAloud(startPos = line.pagePosition)
                 }
@@ -3119,6 +3124,12 @@ class ReadBookActivity : BaseReadBookActivity(),
                             || ReadBook.pageTurnAnimating
                             || ReadBook.durChapterIndex != chapterIndex
                         ) {
+                            return@let
+                        }
+                        // 跟随地板：补读期（语音位置未追回起点回退前的显示位置）
+                        // 不写显示进度、不重渲染，否则起点回退后第一个进度就会
+                        // 把页面拽回上一页（与双击跨页段首定位配套）
+                        if (!ReadBook.aloudFollowAllowsWrite(chapterIndex, chapterStart)) {
                             return@let
                         }
                         ReadBook.durChapterPos = chapterStart
