@@ -24,8 +24,21 @@ object DatabaseMigrations {
             migration_90_91, migration_91_92, migration_92_93, migration_93_94,
             migration_94_95, migration_95_96, migration_96_97, migration_97_98,
             migration_98_99, migration_99_100, migration_100_101, migration_101_102,
-            migration_102_103, migration_103_104,
+            migration_102_103, migration_103_104, migration_104_105,
         )
+    }
+
+    // 对齐上游 8815af8「按 bookUrl 区分书籍并移除复合唯一约束」：
+    // 10021 曾误发含 DB105 的包（编译目录残留上游代码），现有用户库版本可能已是 105，
+    // 必须提供 104→105 迁移路径，否则新包（104）在 105 库上降级崩溃
+    private val migration_104_105 = object : Migration(104, 105) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP INDEX IF EXISTS `index_books_name_author_mediaType`")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_books_name_author_mediaType` " +
+                    "ON `books` (`name`, `author`, `mediaType`)"
+            )
+        }
     }
 
     private val migration_103_104 = object : Migration(103, 104) {
