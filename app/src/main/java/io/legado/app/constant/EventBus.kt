@@ -6,7 +6,7 @@ object EventBus {
     const val UP_BOOKSHELF = "upBookToc"
     const val BOOKSHELF_REFRESH = "bookshelfRefresh"
     const val ALOUD_STATE = "aloud_state"
-    const val TTS_PROGRESS = "ttsStart"
+    const val READ_ALOUD_POSITION = "readAloudPosition"
     const val AUDIO_DS = "audioDs"
     const val READ_ALOUD_DS = "readAloudDs"
     const val READ_ALOUD_PROGRESS = "readAloudProgress" // 融合第一阶段：朗读进度更新
@@ -38,7 +38,6 @@ object EventBus {
     const val UPDATE_READ_ACTION_BAR = "updateReadActionBar"
     const val UP_SEEK_BAR = "upSeekBar"
     const val READ_ALOUD_PLAY = "readAloudPlay"
-    const val READ_ALOUD_PAGE_DETACHED = "readAloudPageDetached"
     const val OPEN_READ_ALOUD_DIALOG = "openReadAloudDialog"
     const val CLOSE_READ_ALOUD_DIALOG = "closeReadAloudDialog"
     const val READ_ALOUD_FLOATING_AVOIDANCE = "readAloudFloatingAvoidance"

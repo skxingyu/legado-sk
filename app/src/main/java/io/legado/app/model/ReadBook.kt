@@ -76,19 +76,19 @@ object ReadBook : CoroutineScope by MainScope() {
     var chapterSize = 0
     var simulatedChapterSize = 0
     var durChapterIndex = 0
+    /**
+     * 显示进度（用户正在读哪）：写者只允许三类——
+     * 1) 用户操作（翻页/跳转/切章）2) 数据同步（setProgress/loadContent/迁移）
+     * 3) 页面跟随规则（朗读位置事件经 shouldFollowAloudAdvance 判定的跟随写，
+     * 在 ReadBookActivity 观察者单点执行）。
+     * 朗读位置本身永不直写本字段；显示与朗读的脱节是派生事实
+     * （显示页 != 朗读页），不再有可存储的脱钩状态。
+     */
     var durChapterPos = 0
     var isLocalBook = true
     var chapterChanged = false
     var skipReadAloudSyncOnce = false
-    var readAloudPageDetached = false
-        private set
 
-    /**
-     * 阅读页翻页手势/动画进行中（由 PageDelegate.isRunning 同步）。
-     * 朗读联动据此避开用户正在进行的翻页，防止段切换瞬间把页面拉回朗读位置。
-     */
-    @Volatile
-    var pageTurnAnimating = false
     private var pendingReadAloudChapterSync = false
     var prevTextChapter: TextChapter? = null
     var curTextChapter: TextChapter? = null
@@ -343,23 +343,23 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    fun moveToNextPage(): Boolean {
+    fun moveToNextPage(fromReadAloud: Boolean = false): Boolean {
         var hasNextPage = false
         curTextChapter?.let {
             val nextPagePos = it.getNextPageLength(durChapterPos)
             if (nextPagePos >= 0) {
                 hasNextPage = true
-                it.getPage(durPageIndex)?.removePageAloudSpan()
                 durChapterPos = nextPagePos
                 callBack?.cancelSelect()
                 callBack?.upContent()
                 saveRead(true)
+                curPageChanged(fromReadAloud, syncReadAloud = false)
             }
         }
         return hasNextPage
     }
 
-    fun moveToPrevPage(): Boolean {
+    fun moveToPrevPage(fromReadAloud: Boolean = false): Boolean {
         var hasPrevPage = false
         curTextChapter?.let {
             val prevPagePos = it.getPrevPageLength(durChapterPos)
@@ -368,6 +368,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 durChapterPos = prevPagePos
                 callBack?.upContent()
                 saveRead(true)
+                curPageChanged(fromReadAloud, syncReadAloud = false)
             }
         }
         return hasPrevPage
@@ -475,11 +476,11 @@ object ReadBook : CoroutineScope by MainScope() {
         saveRead(true)
     }
 
-    fun setPageIndex(index: Int) {
+    fun setPageIndex(index: Int, fromReadAloud: Boolean = false) {
         recycleRecorders(durPageIndex, index)
         durChapterPos = curTextChapter?.getReadLength(index) ?: index
         saveRead(true)
-        curPageChanged()
+        curPageChanged(fromReadAloud)
     }
 
     fun recycleRecorders(beforeIndex: Int, afterIndex: Int) {
@@ -518,11 +519,15 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     /**
-     * 当前页面变化
+     * 当前页面变化。朗读驱动的翻页只通知显示层，不重新初始化朗读引擎；
+     * 章节切换仍通过 [syncReadAloud] 保持朗读会话与阅读页同步。
      */
-    private fun curPageChanged(fromReadAloud: Boolean = false) {
-        callBack?.pageChanged()
-        curTextChapter?.let {
+    private fun curPageChanged(
+        fromReadAloud: Boolean = false,
+        syncReadAloud: Boolean = true,
+    ) {
+        callBack?.pageChanged(fromReadAloud)
+        curTextChapter?.takeIf { syncReadAloud }?.let {
             if (BaseReadAloudService.isRun) {
                 if (skipReadAloudSyncOnce) {
                     skipReadAloudSyncOnce = false
@@ -531,14 +536,10 @@ object ReadBook : CoroutineScope by MainScope() {
                     if (syncFromReadAloud) {
                         if (it.isCompleted) {
                             pendingReadAloudChapterSync = false
-                            attachReadAloudPage()
                             readAloud(!BaseReadAloudService.pause)
                         } else {
                             pendingReadAloudChapterSync = true
                         }
-                    } else if (it.isCompleted) {
-                        pendingReadAloudChapterSync = false
-                        detachReadAloudPage()
                     }
                 }
             }
@@ -547,76 +548,19 @@ object ReadBook : CoroutineScope by MainScope() {
         preDownload()
     }
 
-    fun detachReadAloudPage() {
-        if (!readAloudPageDetached) {
-            readAloudPageDetached = true
-            postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, true)
-        }
-        clearAloudFollowFloor()
-    }
-
-    fun attachReadAloudPage() {
-        if (readAloudPageDetached) {
-            readAloudPageDetached = false
-            postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, false)
-        }
-        clearAloudFollowFloor()
-    }
-
-    // —— 朗读跟随地板（补读期闸门）——
-    // 朗读起点被回退到当前显示位置之前时（双击跨页段首/从本页听回退），
-    // 语音先"补读"地板之前的内容；期间所有写显示进度的通道统一过闸门，
-    // 位置未到地板前拦截，页面不被拽回，追平后恢复跟随
-
-    private var aloudFollowFloorChapterIndex = -1
-    private var aloudFollowFloorPos = -1
-
-    @Synchronized
-    fun setAloudFollowFloor(chapterIndex: Int, floorPos: Int) {
-        aloudFollowFloorChapterIndex = chapterIndex
-        aloudFollowFloorPos = floorPos
-    }
-
-    @Synchronized
-    fun clearAloudFollowFloor() {
-        aloudFollowFloorChapterIndex = -1
-        aloudFollowFloorPos = -1
-    }
-
-    /**
-     * 跟随写显示进度前的统一闸门：位置已到地板或无地板时放行并顺带清闩，
-     * 未到地板时拦截，显示保持等待语音补读到位。
-     */
-    @Synchronized
-    fun aloudFollowAllowsWrite(chapterIndex: Int, chapterPos: Int): Boolean {
-        val floorChapter = aloudFollowFloorChapterIndex
-        if (floorChapter < 0) return true
-        if (floorChapter != chapterIndex || chapterPos >= aloudFollowFloorPos) {
-            aloudFollowFloorChapterIndex = -1
-            aloudFollowFloorPos = -1
-            return true
-        }
-        return false
-    }
-
     /**
      * 朗读
      */
-    fun readAloud(play: Boolean = true, pageIndex: Int = durPageIndex, startPos: Int = 0) {
+    fun readAloud(
+        play: Boolean = true,
+        startPos: Int = 0,
+        pageIndex: Int = durPageIndex,
+    ) {
         book ?: return
         val textChapter = curTextChapter ?: return
         if (textChapter.isCompleted) {
             ReadAloud.play(appCtx, play, pageIndex = pageIndex, startPos = startPos)
         }
-    }
-
-    /**
-     * 章内字符位 → 指定页（默认当前显示页）的页内偏移，
-     * 用于 ReadAloud.play 的 startPos（引擎按 getReadLength(page) + startPos 定位起点）
-     */
-    fun aloudStartPosInPage(chapterPos: Int, page: Int = durPageIndex): Int {
-        val pageStart = curTextChapter?.getReadLength(page) ?: 0
-        return (chapterPos - pageStart).coerceAtLeast(0)
     }
 
     suspend fun loadTextChapterForReadAloud(
@@ -1306,7 +1250,7 @@ object ReadBook : CoroutineScope by MainScope() {
             success: (() -> Unit)? = null
         )
 
-        fun pageChanged()
+        fun pageChanged(fromReadAloud: Boolean = false)
 
         fun contentLoadFinish(trigger: String = "chapter_load")
 

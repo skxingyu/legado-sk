@@ -118,12 +118,6 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 val suppressReadAloudSync = fromReadAloudFloating && BaseReadAloudService.isRun
                 ReadBook.skipReadAloudSyncOnce = suppressReadAloudSync
                 val opened = openChapter(index, chapterPos) {
-                    if (BaseReadAloudService.isPlay()) {
-                        postEvent(EventBus.TTS_PROGRESS, Bundle().apply {
-                            putInt("chapterIndex", index)
-                            putInt("chapterPos", chapterPos)
-                        })
-                    }
                     if (suppressReadAloudSync) {
                         ReadBook.skipReadAloudSyncOnce = false
                     }

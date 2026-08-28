@@ -7,7 +7,6 @@ import android.os.Bundle
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.IntentAction
-import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.book.isAudio
@@ -25,11 +24,79 @@ import io.legado.app.utils.StringUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.getPrefBoolean
 import splitties.init.appCtx
+
+/** Absolute text position shared by every read-aloud engine and the reader UI. */
+data class ReadAloudPosition(
+    val chapterIndex: Int,
+    val chapterPosition: Int,
+)
+
+/** A position confirmed by the read-aloud engine, plus the position it replaces. */
+data class ReadAloudPositionUpdate(
+    val position: ReadAloudPosition,
+    val previousPosition: ReadAloudPosition?,
+    val switchConfirmed: Boolean,
+    val generation: Long,
+)
 
 object ReadAloud {
     const val SOURCE_AUDIO_ENGINE_ID = "sourceAudio"
+
+    @Volatile
+    var aloudPosition: ReadAloudPosition? = null
+        private set
+
+    private var pendingSwitchPosition: ReadAloudPosition? = null
+    private var positionGeneration = 0L
+
+    @Synchronized
+    fun beginPositionSwitch(position: ReadAloudPosition) {
+        pendingSwitchPosition = position
+    }
+
+    @Synchronized
+    fun cancelPositionSwitch() {
+        if (pendingSwitchPosition != null) {
+            AppLog.putDebug("[朗读] 切换取消 (pending=${pendingSwitchPosition})")
+        }
+        pendingSwitchPosition = null
+    }
+
+    /** The engine is the only authority allowed to update and publish this position. */
+    @Synchronized
+    fun publishAloudPosition(position: ReadAloudPosition): ReadAloudPositionUpdate {
+        val previousPosition = aloudPosition
+        aloudPosition = position
+        val generation = ++positionGeneration
+        val switchConfirmed = pendingSwitchPosition == position
+        if (switchConfirmed) {
+            pendingSwitchPosition = null
+        }
+        AppLog.putDebug(
+            "[朗读] 位置发布 ch:${position.chapterIndex} pos:${position.chapterPosition} " +
+                "gen:$generation confirmed:$switchConfirmed " +
+                "prev:${previousPosition?.let { "ch${it.chapterIndex}:${it.chapterPosition}" } ?: "null"}"
+        )
+        return ReadAloudPositionUpdate(position, previousPosition, switchConfirmed, generation).also {
+            postEvent(EventBus.READ_ALOUD_POSITION, it)
+        }
+    }
+
+    @Synchronized
+    fun isCurrentPosition(update: ReadAloudPositionUpdate): Boolean {
+        return update.generation == positionGeneration && update.position == aloudPosition
+    }
+
+    @Synchronized
+    fun clearAloudPosition() {
+        AppLog.putDebug(
+            "[朗读] 位置清空 (原=${aloudPosition?.let { "ch${it.chapterIndex}:${it.chapterPosition}" } ?: "null"})"
+        )
+        aloudPosition = null
+        positionGeneration++
+        pendingSwitchPosition = null
+    }
 
     val ttsEngine: String?
         get() = ReadBook.book?.let { book ->
@@ -123,10 +190,14 @@ object ReadAloud {
             )
         } else {
             val paragraphs = chapter.getParagraphs(
-                appCtx.getPrefBoolean(PreferKey.readAloudByPage, false)
+                AppConfig.pageSplit
             )
             if (paragraphs.isEmpty()) return null
-            val chapterPosition = ReadBook.book?.durChapterPos ?: 0
+            val chapterPosition = aloudPosition
+                ?.takeIf { it.chapterIndex == chapterIndex }
+                ?.chapterPosition
+                ?: ReadBook.book?.durChapterPos
+                ?: 0
             val position = paragraphs.indexOfLast {
                 chapterPosition >= it.chapterPosition
             }.coerceAtLeast(0)
@@ -168,7 +239,10 @@ object ReadAloud {
         pageIndex: Int = ReadBook.durPageIndex,
         startPos: Int = 0
     ) {
-        val serviceClass = commandClass() ?: return
+        val serviceClass = commandClass() ?: run {
+            cancelPositionSwitch()
+            return
+        }
         val intent = Intent(context, serviceClass)
         intent.action = IntentAction.play
         intent.putExtra("play", play)
@@ -178,6 +252,7 @@ object ReadAloud {
         try {
             context.startForegroundServiceCompat(intent)
         } catch (e: Exception) {
+            cancelPositionSwitch()
             val msg = "启动朗读服务出错\n${e.localizedMessage}"
             AppLog.put(msg, e)
             context.toastOnUi(msg)
@@ -273,10 +348,16 @@ object ReadAloud {
         }
     }
 
+    /**
+     * 上一章/下一章是用户显式传送：Intent 携带 syncView=true，
+     * 引擎跳章后会把显示视角同步到目标章（等效自动触发“回原进度”）。
+     * 引擎自然跨章不带该标记，视角是否跟随由跟随规则判定。
+     */
     fun prevChapter(context: Context) {
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, commandClass() ?: return)
             intent.action = IntentAction.prev
+            intent.putExtra("syncView", true)
             context.startForegroundServiceCompat(intent)
         }
     }
@@ -285,6 +366,7 @@ object ReadAloud {
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, commandClass() ?: return)
             intent.action = IntentAction.next
+            intent.putExtra("syncView", true)
             context.startForegroundServiceCompat(intent)
         }
     }

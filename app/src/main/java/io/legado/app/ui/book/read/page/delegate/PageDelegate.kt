@@ -57,15 +57,7 @@ abstract class PageDelegate(protected val readView: ReadView) {
     var mDirection = PageDirection.NONE
     var isCancel = false
 
-    /**
-     * 翻页手势/动画进行中标志。同步到 ReadBook.pageTurnAnimating，
-     * 供朗读联动等服务端逻辑判断用户是否正在翻页。
-     */
     var isRunning: Boolean = false
-        set(value) {
-            field = value
-            ReadBook.pageTurnAnimating = value
-        }
 
     var isStarted = false
 

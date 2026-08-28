@@ -672,7 +672,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         ) {
             removeCallbacks(pendingTap)
             clearPendingSingleTap()
-            readAloudFromPoint(readAloudPos)
+            callBack.restartFromParagraph(readAloudPos)
             return
         }
 
@@ -748,62 +748,6 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 click(AppConfig.clickActionTR)
             }
         }
-    }
-
-    private fun readAloudFromPoint(pos: Pair<Int, TextLine>) {
-        val (chapterIndex, line) = pos
-        ReadBook.attachReadAloudPage()
-        // 双击选择的对象是"这一段"，起点必须是全章真段首；
-        // 点击映射的页内段首查找越过不了页边界，跨页段落曾退化为本页首字
-        val paragraphStart = resolveTrueParagraphStart(line) ?: line.chapterPosition
-        if (ReadBook.durChapterIndex != chapterIndex) {
-            ReadBook.skipReadAloudSyncOnce = true
-            val opened = ReadBook.openChapter(chapterIndex, paragraphStart, false) {
-                ReadBook.skipReadAloudSyncOnce = false
-                // openChapter 已把 durChapterPos/durPageIndex 定位到 paragraphStart 所在页，
-                // startPos 为段首相对该页的页内偏移
-                ReadBook.readAloud(startPos = ReadBook.aloudStartPosInPage(paragraphStart))
-            }
-            if (!opened) {
-                ReadBook.skipReadAloudSyncOnce = false
-            }
-        } else if (paragraphStart >= ReadBook.durChapterPos) {
-            // 段首在当前显示位置或之后：原路径，直接定位朗读
-            ReadBook.durChapterPos = paragraphStart
-            ReadBook.readAloud(startPos = ReadBook.aloudStartPosInPage(paragraphStart))
-        } else {
-            // 段首在当前显示位置之前（跨页段落）：开跟随地板，语音补读期间显示不动
-            //（详见 ReadBook.setAloudFollowFloor）；朗读引擎从段首所在页启动
-            ReadBook.setAloudFollowFloor(chapterIndex, ReadBook.durChapterPos)
-            val startPage = ReadBook.curTextChapter
-                ?.getPageIndexByCharIndex(paragraphStart)?.takeIf { it >= 0 }
-                ?: ReadBook.durPageIndex
-            ReadBook.readAloud(
-                pageIndex = startPage,
-                startPos = ReadBook.aloudStartPosInPage(paragraphStart, startPage)
-            )
-        }
-    }
-
-    /**
-     * 全章视角的"真正段首"：行所属段落（全局段号）在全章中的起始位置。
-     * 段落跨页时段首在上一页，页内查找无法越过页边界，必须按
-     * TextChapter.paragraphs 的全局段号回退，与引擎朗读单元划分同源；
-     * 解析不到所属段落时返回 null，由调用方决定兜底。
-     */
-    private fun resolveTrueParagraphStart(line: TextLine): Int? {
-        sequenceOf(
-            ReadBook.curTextChapter,
-            ReadBook.prevTextChapter,
-            ReadBook.nextTextChapter,
-        ).filterNotNull().forEach { textChapter ->
-            val num = textChapter.getParagraphNum(line.chapterPosition + 1, false)
-            val paragraph = textChapter.paragraphs.getOrNull(num - 1)
-            if (paragraph?.realNum == line.paragraphNum) {
-                return paragraph.chapterPosition
-            }
-        }
-        return null
     }
 
     /**
@@ -1071,13 +1015,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
      */
     suspend fun aloudStartSelect() {
         val selectStartPos = curPage.selectStartPos
-        ReadBook.attachReadAloudPage()
         var pagePos = selectStartPos.relativePagePos
         val line = selectStartPos.lineIndex
         val column = selectStartPos.columnIndex
         while (pagePos > 0) {
-            if (!ReadBook.moveToNextPage()) {
-                ReadBook.moveToNextChapterAwait(false)
+            if (!ReadBook.moveToNextPage(fromReadAloud = true)) {
+                ReadBook.moveToNextChapterAwait(false, fromReadAloud = true)
             }
             pagePos--
         }
@@ -1098,6 +1041,19 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     fun getReadAloudPos(): Pair<Int, TextLine>? {
         return curPage.getReadAloudPos()
+    }
+
+    /** 清绘制缓存并重绘，让朗读红字按最新 aloudPosition 投影重新现算；
+     *  滚动模式可视区可能跨三页，三页缓存都要失效。 */
+    fun invalidateReadAloudHighlight() {
+        if (isScroll) {
+            for (relativePos in 0..2) {
+                curPage.relativePage(relativePos).invalidateAll()
+            }
+        } else {
+            curPage.textPage.invalidateAll()
+        }
+        curPage.invalidateContentView()
     }
 
     fun invalidateTextPage() {
@@ -1182,5 +1138,6 @@ class ReadView(context: Context, attrs: AttributeSet) :
         fun openSearchActivity(searchWord: String?)
         fun upSystemUiVisibility()
         fun sureNewProgress(progress: BookProgress)
+        fun restartFromParagraph(position: Pair<Int, TextLine>)
     }
 }

@@ -2,6 +2,9 @@ package io.legado.app.service
 
 import android.app.PendingIntent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.lifecycleScope
@@ -37,6 +40,22 @@ class TTSReadAloudService : BaseReadAloudService() {
     @Volatile
     private var activeUtteranceId: String? = null
 
+    // ---- 预测换页（页间分段 OFF 时的被动机制）----
+    // TTS 拿不到整段音频时长，按“文字量 + 实测语速”估算读过页界的时刻；
+    // onRangeStart 可用时用真实进度校准速率。契约：预测只影响位置事件的
+    // 发布时机（upTtsProgress），显示是否翻页仍由 UI 侧跟随规则判定。
+    private val predictHandler = Handler(Looper.getMainLooper())
+    private var predictRunnable: Runnable? = null
+    private var utteranceStartRealtime = 0L
+
+    @Volatile
+    private var lastRangeOffset = 0
+
+    // 实测朗读速率（字/毫秒）：由上一句 onDone 的真实总时长滚动校准，
+    // 初值按常见中文 TTS 语速约 480 字/分钟，只影响第一句的预估
+    @Volatile
+    private var measuredCharRate = 480.0 / 60_000.0
+
     private val TAG = "TTSReadAloudService"
 
     override fun onCreate() {
@@ -67,11 +86,60 @@ class TTSReadAloudService : BaseReadAloudService() {
         upSpeechRate()
     }
 
+    /**
+     * 当前朗读单元实际传给 TTS 的文本长度（段内续读时扣除起始偏移）。
+     */
+    private fun currentUtteranceTextLength(): Int {
+        val content = contentList.getOrNull(nowSpeak) ?: return 0
+        return (content.length - paragraphStartPos).coerceAtLeast(0)
+    }
+
+    private fun cancelPageBreakPrediction() {
+        predictRunnable?.let { predictHandler.removeCallbacks(it) }
+        predictRunnable = null
+    }
+
+    /**
+     * 预测换页调度：当前朗读单元跨越页边界时，按“页界前字符量 / 实测语速”
+     * 估算读过页界的时刻，到点发布一次前进位置事件。
+     * - 页间分段 ON 时单元已在页界裂开，本单元不跨页，天然不调度。
+     * - onRangeStart 已发布过界位置的，预测回调自动跳过（不重复发布）。
+     * - speakGeneration 防乱序：暂停/停止/出错重试后调度自动失效。
+     */
+    private fun schedulePageBreakPrediction(utteranceTextLength: Int) {
+        cancelPageBreakPrediction()
+        if (pageSplit) return
+        val chapter = textChapter ?: return
+        if (utteranceTextLength <= 0) return
+        if (pageIndex + 1 >= chapter.pageSize) return
+        val nextPageStart = chapter.getReadLength(pageIndex + 1)
+        val utteranceStart = readAloudNumber
+        val utteranceEnd = utteranceStart + utteranceTextLength
+        if (nextPageStart <= utteranceStart || nextPageStart >= utteranceEnd) return
+        val breakOffset = nextPageStart - utteranceStart
+        val delayMs = (breakOffset / measuredCharRate).toLong().coerceAtLeast(0L)
+        val generation = speakGeneration
+        AppLog.putDebug(
+            "[朗读] 预测换页调度 单元:$nowSpeak 长:$utteranceTextLength " +
+                "页界偏移:$breakOffset 延时:${delayMs}ms 速率:${(measuredCharRate * 60_000).toInt()}/min"
+        )
+        val runnable = Runnable {
+            predictRunnable = null
+            if (generation != speakGeneration || pause) return@Runnable
+            if (lastRangeOffset + utteranceStart >= nextPageStart) return@Runnable
+            AppLog.putDebug("[朗读] 预测换页触发 pos:$nextPageStart")
+            upTtsProgress(nextPageStart)
+        }
+        predictRunnable = runnable
+        predictHandler.postDelayed(runnable, delayMs)
+    }
+
     @Synchronized
-    fun clearTTS(forgetVoice: Boolean = false) {
+    private fun clearTTS(forgetVoice: Boolean = false) {
         activeUtteranceId = null
         queuedUntilIndex = -1
         speakGeneration++
+        cancelPageBreakPrediction()
         ttsInitGeneration++
         if (forgetVoice) {
             ttsVoiceName = null
@@ -149,6 +217,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         activeUtteranceId = null
         queuedUntilIndex = -1
         speakGeneration++
+        cancelPageBreakPrediction()
         retryParagraphKey = null
         retryingTtsInit = false
         textToSpeech?.runCatching {
@@ -159,6 +228,8 @@ class TTSReadAloudService : BaseReadAloudService() {
     @Synchronized
     private fun speakCurrentParagraph() {
         if (pause) return
+        // 发起新朗读单元前作废旧页界预测，新单元 onStart 时按最新光标重新调度
+        cancelPageBreakPrediction()
         val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
         while (nowSpeak < contentList.size) {
             var text = contentList[nowSpeak]
@@ -295,6 +366,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         activeUtteranceId = null
         queuedUntilIndex = -1
         speakGeneration++
+        cancelPageBreakPrediction()
         retryParagraphKey = null
         retryingTtsInit = false
         textToSpeech?.runCatching {
@@ -320,10 +392,14 @@ class TTSReadAloudService : BaseReadAloudService() {
                     if (pageIndex + 1 < it.pageSize
                         && readAloudNumber + 1 > it.getReadLength(pageIndex + 1)
                     ) {
+                        // 只推进引擎私有页光标，显示翻页由 UI 侧跟随规则处理
                         pageIndex++
-                        moveReadBookToNextPageForReadAloud()
                     }
                     upTtsProgress(readAloudNumber + 1)
+                    // 本朗读单元开始：记录计时基准并调度页界预测
+                    utteranceStartRealtime = SystemClock.elapsedRealtime()
+                    lastRangeOffset = 0
+                    schedulePageBreakPrediction(currentUtteranceTextLength())
                 }
             }
         }
@@ -342,12 +418,21 @@ class TTSReadAloudService : BaseReadAloudService() {
                 val msg =
                     "onRangeStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId start:$start end:$end frame:$frame"
                 LogUtils.d(TAG, msg)
+                // 引擎实时汇报朗读进度：用真实读速校准预测速率（指数平滑）
+                val now = SystemClock.elapsedRealtime()
+                val elapsed = now - utteranceStartRealtime
+                if (start > 0 && elapsed > 500) {
+                    val sample = start.toDouble() / elapsed
+                    measuredCharRate = measuredCharRate * 0.7 + sample * 0.3
+                }
+                lastRangeOffset = start
                 textChapter?.let {
                     if (pageIndex + 1 < it.pageSize
                         && readAloudNumber + start > it.getReadLength(pageIndex + 1)
                     ) {
+                        // 按引擎实时进度过页界：只推进引擎私有页光标并发布位置，
+                        // 显示翻页由 UI 侧跟随规则处理
                         pageIndex++
-                        moveReadBookToNextPageForReadAloud()
                         upTtsProgress(readAloudNumber + start)
                     }
                 }
@@ -369,6 +454,19 @@ class TTSReadAloudService : BaseReadAloudService() {
             val index = utteranceIndex(utteranceId) ?: return
             if (index < nowSpeak) return
             syncToUtteranceIndex(index)
+            // 本句真实总时长已知：先按它校准预测速率，再作废旧单元的页界预测
+            //（预加载队列中下一单元 onStart 时会按最新光标与速率重新调度）
+            val len = currentUtteranceTextLength()
+            val elapsed = SystemClock.elapsedRealtime() - utteranceStartRealtime
+            if (len > 0 && elapsed > 500) {
+                val sample = len.toDouble() / elapsed
+                measuredCharRate = measuredCharRate * 0.7 + sample * 0.3
+                AppLog.putDebug(
+                    "[朗读] 预测速率校准 len:$len 耗时:${elapsed}ms → " +
+                        "${(measuredCharRate * 60_000).toInt()}/min"
+                )
+            }
+            cancelPageBreakPrediction()
             activeUtteranceId = null
             retryParagraphKey = null
             if (!moveToNextParagraph()) {
