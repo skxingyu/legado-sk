@@ -308,6 +308,9 @@ object ReadBook : CoroutineScope by MainScope() {
                 BookProgressComparison.LOCAL_NEWER -> {
                     Coroutine.async {
                         AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        // SK 定制：uploadBookProgress(BookProgress) 重载不写 syncTime，
+                        // 增强同步路径下会导致每次冷启动都白跑一次网络拉取
+                        book.syncTime = System.currentTimeMillis()
                         book.update()
                     }
                 }
