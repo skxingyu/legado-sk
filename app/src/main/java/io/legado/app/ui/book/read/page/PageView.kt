@@ -111,6 +111,11 @@ class PageView(context: Context) : FrameLayout(context) {
             }
             return binding.llFooter.top..binding.llFooter.bottom
         }
+
+    /** 页脚是否已可测量（llFooter 已参与布局且有实际高度）。 */
+    val footerMeasurable: Boolean
+        get() = binding.llFooter.height > 0
+
     private val isClassicEpub: Boolean
         get() = ReadBook.book?.isEpub == true &&
             AppConfig.epubParseMode == AppConfig.EPUB_PARSE_MODE_CLASSIC

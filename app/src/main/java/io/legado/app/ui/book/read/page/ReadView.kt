@@ -72,6 +72,13 @@ class ReadView(context: Context, attrs: AttributeSet) :
     val curPage by lazy { PageView(context) }
     val nextPage by lazy { PageView(context) }
     val footerBounds: IntRange get() = curPage.footerBounds
+
+    /**
+     * 页脚是否已可测量（内容/布局就绪）。朗读悬浮窗定位依赖它：
+     * 页脚高度为 0 时 footerBounds 无法给出有效区间，悬浮窗应保持隐藏，
+     * 待页面布局完成后（upContent/fillPage 触发重新测量）再定位显示。
+     */
+    val footerMeasurable: Boolean get() = curPage.footerMeasurable
     val defaultAnimationSpeed: Int
         get() = AppConfig.pageAnimationSpeed
     private var pressDown = false

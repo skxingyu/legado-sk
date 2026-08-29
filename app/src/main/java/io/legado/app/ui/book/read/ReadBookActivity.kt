@@ -16,6 +16,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import androidx.activity.addCallback
@@ -1675,6 +1676,74 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    /**
+     * 计算朗读悬浮窗相对页面底部的 margin，使其对齐页脚（页脚内或页脚上方）。
+     * @return 可用的 margin 值；当页面/页脚布局尚未就绪（无法测得页脚或自身高度）时返回 null，
+     *         调用方应保持悬浮窗隐藏并延迟到就绪后再定位显示，避免以错误的贴底位置闪现。
+     */
+    private fun tryReadAloudPanelBottomMargin(panelHeight: Int): Int? {
+        if (panelHeight <= 0) return null
+        val readView = binding.readView
+        if (!readView.isLaidOut || readView.height <= 0) return null
+        if (!readView.footerMeasurable) return null
+        val footerBounds = readView.footerBounds
+        val panelBottom = if (AppConfig.readAloudPanelOnPageFooter) {
+            footerBounds.first + panelHeight
+        } else {
+            footerBounds.first
+        }
+        return readView.height - panelBottom
+    }
+
+    /**
+     * 定位朗读悬浮窗到正确位置后再显示（避免先以 bottomMargin=0 贴屏底闪现）。
+     * 当前流程：
+     *  1. 先尝试定位；readView/页脚尚未就绪时保持隐藏并注册 doOnLayout，就绪后再定位。
+     *  2. 定位完成、且 mode 校验仍成立时，才真正显示（设置按钮文案、淡入、上报避让）。
+     * 若 mode 校验不成立（面板已不应显示），则保持隐藏，绝不显示在错误位置。
+     */
+    private fun positionAndRevealReadAloudPanel(
+        panel: View,
+        panelMode: ReadAloudUiState.ReaderPanelMode,
+        onReveal: (() -> Unit)? = null,
+    ) {
+        // 面板高度由固定 dimens 决定（即使 GONE 未参与布局，layoutParams 也保留该值），
+        // 用 layoutParams.height 而非 panel.height（GONE 时实测为 0），保证能算出正确位置。
+        val panelHeight = (panel.layoutParams as? FrameLayout.LayoutParams)?.height
+            ?.takeIf { it > 0 }
+            ?: return
+        val margin = tryReadAloudPanelBottomMargin(panelHeight)
+        if (margin == null) {
+            // 页面/页脚布局尚未就绪：保持悬浮窗隐藏，待页面布局变化后再定位，
+            // 避免以错误的贴底位置闪现。页面内容异步加载完成后页脚即可测量。
+            val viewTree = binding.readView.viewTreeObserver
+            viewTree.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    viewTree.removeOnGlobalLayoutListener(this)
+                    positionAndRevealReadAloudPanel(panel, panelMode, onReveal)
+                }
+            })
+            return
+        }
+        val params = panel.layoutParams as? FrameLayout.LayoutParams
+            ?: return
+        if (params.bottomMargin != margin) {
+            params.bottomMargin = margin
+            panel.layoutParams = params
+        }
+        val shouldShow = readAloudPanelPresentation == ReadAloudPanelPresentation.PANEL &&
+            readAloudPanelMode == panelMode &&
+            ReadAloudUiState.readerPanelMode(
+                BaseReadAloudService.isRun,
+                isViewBehindAloud(),
+            ) == panelMode
+        if (!shouldShow) {
+            panel.gone()
+            return
+        }
+        onReveal?.invoke()
+    }
+
     private fun showReadAloudPlaybackPanel() {
         if (!BaseReadAloudService.isRun) return
         if (
@@ -1687,25 +1756,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         ) {
             return
         }
-        binding.readAloudPlaybackPanel.visible()
-        binding.readAloudPlaybackPanel.doOnLayout {
-            if (
-                readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL ||
-                readAloudPanelMode != ReadAloudUiState.ReaderPanelMode.PLAYBACK ||
-                ReadAloudUiState.readerPanelMode(
-                BaseReadAloudService.isRun,
-                isViewBehindAloud(),
-            ) != ReadAloudUiState.ReaderPanelMode.PLAYBACK
-            ) {
-                return@doOnLayout
-            }
-            val params = binding.readAloudPlaybackPanel.layoutParams as? FrameLayout.LayoutParams
-                ?: return@doOnLayout
-            val bottomMargin = readAloudPanelBottomMargin(binding.readAloudPlaybackPanel.height)
-            if (params.bottomMargin != bottomMargin) {
-                params.bottomMargin = bottomMargin
-                binding.readAloudPlaybackPanel.layoutParams = params
-            }
+        positionAndRevealReadAloudPanel(
+            binding.readAloudPlaybackPanel,
+            ReadAloudUiState.ReaderPanelMode.PLAYBACK,
+        ) {
             binding.btnReadAloudPlayback.setText(
                 if (BaseReadAloudService.pause) {
                     R.string.read_aloud_resume_playback
@@ -1822,25 +1876,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         ) {
             return
         }
-        binding.readAloudPagePanel.visible()
-        binding.readAloudPagePanel.doOnLayout {
-            if (
-                readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL ||
-                readAloudPanelMode != ReadAloudUiState.ReaderPanelMode.PAGE_ACTION ||
-                ReadAloudUiState.readerPanelMode(
-                BaseReadAloudService.isRun,
-                isViewBehindAloud(),
-            ) != ReadAloudUiState.ReaderPanelMode.PAGE_ACTION
-            ) {
-                return@doOnLayout
-            }
-            val params = binding.readAloudPagePanel.layoutParams as? FrameLayout.LayoutParams
-                ?: return@doOnLayout
-            val bottomMargin = readAloudPanelBottomMargin(binding.readAloudPagePanel.height)
-            if (params.bottomMargin != bottomMargin) {
-                params.bottomMargin = bottomMargin
-                binding.readAloudPagePanel.layoutParams = params
-            }
+        positionAndRevealReadAloudPanel(
+            binding.readAloudPagePanel,
+            ReadAloudUiState.ReaderPanelMode.PAGE_ACTION,
+        ) {
             fadeReadAloudPanel(binding.readAloudPagePanel, true)
             postReadAloudFloatingAvoidanceForView(
                 EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_PAGE_PANEL,
@@ -1852,17 +1891,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun hideReadAloudPagePanel(immediate: Boolean = false) {
         fadeReadAloudPanel(binding.readAloudPagePanel, false, immediate)
         clearReadAloudFloatingAvoidance(EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_PAGE_PANEL)
-    }
-
-    private fun readAloudPanelBottomMargin(panelHeight: Int): Int {
-        check(panelHeight > 0) { "Read-aloud panel has no measurable height" }
-        val footerBounds = binding.readView.footerBounds
-        val panelBottom = if (AppConfig.readAloudPanelOnPageFooter) {
-            footerBounds.first + panelHeight
-        } else {
-            footerBounds.first
-        }
-        return binding.readView.height - panelBottom
     }
 
     private fun fadeReadAloudPanel(view: View, show: Boolean, immediate: Boolean = false) {
