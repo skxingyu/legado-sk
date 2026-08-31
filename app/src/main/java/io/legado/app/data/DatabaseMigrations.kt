@@ -55,7 +55,7 @@ object DatabaseMigrations {
                 END
                 """.trimIndent()
             )
-            db.execSQL("DROP INDEX `index_books_name_author`")
+            db.execSQL("DROP INDEX IF EXISTS `index_books_name_author`")
             db.execSQL(
                 "CREATE UNIQUE INDEX `index_books_name_author_mediaType` " +
                     "ON `books` (`name`, `author`, `mediaType`)"

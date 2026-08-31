@@ -427,6 +427,13 @@ object AppWebDav {
                 if (json.isJson()) {
                     return GSON.fromJsonObject<BookProgress>(json).getOrNull()
                 }
+                // SK 定制（审查修复 N1）：HTTP 下载成功但内容非合法 JSON（文件被写坏、
+                // 半途上传残留、BOM/多余字符），绝不能当成"云端无进度"而上传本地进度覆盖。
+                // 走下方 exists() 判定：文件确实存在则抛异常中止上传；仅空文件（byteArray 为空）
+                // 保持原路径视为无有效内容。
+                if (byteArray.isNotEmpty()) {
+                    error("进度文件内容不是合法 JSON: ${json.take(80)}")
+                }
             }
         }.onFailure {
             currentCoroutineContext().ensureActive()
