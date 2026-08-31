@@ -133,6 +133,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun resetData(book: Book) {
         releaseAndCancel()
+        // SK 定制（审查修复 M2）：切书时清空朗读位置，避免跨书串扰。
+        // 不清的话，aloudPosition 仍是上一本的章节/位置，isViewBehindAloud() 会
+        // 因 durChapterIndex != position.chapterIndex 恒 true，误弹「回原进度」面板，
+        // 点击还会用上一本章节号对当前书 openChapter 跳到无关章节。
+        ReadAloud.clearAloudPosition()
         ReadBook.book = book
         readRecord.deviceId = AppConst.androidId
         readRecord.bookName = book.name
