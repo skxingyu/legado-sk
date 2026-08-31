@@ -1,5 +1,35 @@
 # 更新日志 / CHANGELOG
 
+## 3.26.0831c（versionCode 10025）— 2026-08-31（Pre）
+
+### 代码审查修复（M1-M4 + N1 + L2）与切书闪退修复
+
+基于全项目代码审查（《代码审查报告-复审.md》）的高性价比批次，修复以下问题：
+
+**朗读边界加固：**
+
+- **修复朗读悬浮窗避让崩溃**：避让源上报非法 bounds（旋转/窗口切换/异常 insets）时不再抛 `IllegalArgumentException` 崩溃朗读服务，改为记录并忽略；避让区覆盖全部可用区间时不再抛 `IllegalStateException`，改为回退到基准位置。
+- **修复切书跨书串扰**：`ReadBook.resetData` 切书时清空朗读位置，避免上一本的章节/位置污染当前书，误弹「回原进度」面板或跳转到无关章节。
+- **修复上一段越界**：`prevP` 补 `pageIndex > 0` 下界，避免 `pageIndex` 变 `-1` 导致朗读停读。
+- **修复段落索引越界**：`prevP`/`nextP` 的 `paragraphs[nowSpeak]` 改用 `getOrNull` 防御，避免 `IndexOutOfBoundsException`。
+
+**进度同步数据安全：**
+
+- **修复云端损坏进度文件被覆盖**：`getBookProgress` 在云端文件存在但内容非合法 JSON（写坏/半途残留）时抛异常中止上传，不再被当作「云端无进度」而用本地旧进度覆盖云端。
+- **迁移脚本补 `DROP INDEX IF EXISTS`**：`migration_103_104` 与 `migration_104_105` 对齐。
+
+**切书闪退修复（用户实测确认）：**
+
+- **修复听书切书闪退**：`positionAndRevealReadAloudPanel` 原手写 `viewTreeObserver.addOnGlobalLayoutListener` 捕获过期 `ViewTreeObserver` 引用，切书/Activity 重建 View 树后该 observer `not alive`，回调里 `removeOnGlobalLayoutListener` 抛 `IllegalStateException` 导致闪退。改用 KTX `doOnLayout`（内部动态取当前 observer 且带 `isAlive` 守卫）+ `isAttachedToWindow` 守卫。
+
+### 安装包
+
+| 文件 | 包名 | 说明 |
+|---|---|---|
+| `legado_sk_3.26.0831c_10025_arm64-v8a.apk` | `io.legado.app.c` | Pre 版（32.20MB，可覆盖升级，保留数据） |
+
+---
+
 ## 3.26.082912c（versionCode 10024）— 2026-08-29（Pre）
 
 ### 修复听书底部悬浮窗「先贴屏底后回正」
