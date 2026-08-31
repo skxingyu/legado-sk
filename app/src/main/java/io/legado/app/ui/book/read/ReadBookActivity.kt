@@ -1716,13 +1716,16 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (margin == null) {
             // 页面/页脚布局尚未就绪：保持悬浮窗隐藏，待页面布局变化后再定位，
             // 避免以错误的贴底位置闪现。页面内容异步加载完成后页脚即可测量。
-            val viewTree = binding.readView.viewTreeObserver
-            viewTree.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-                override fun onGlobalLayout() {
-                    viewTree.removeOnGlobalLayoutListener(this)
+            // 修复（崩溃）：原手写 viewTreeObserver.addOnGlobalLayoutListener 捕获了
+            // 旧 ViewTreeObserver 引用，切书/Activity 重建 View 树后该 observer "not alive"，
+            // 回调里 removeOnGlobalLayoutListener 抛 IllegalStateException 导致闪退。
+            // 改用 KTX doOnLayout（内部动态取当前 observer 且带 isAlive 守卫），
+            // 并加 isAttachedToWindow 守卫，Activity 销毁后不再继续定位悬浮窗。
+            binding.readView.doOnLayout {
+                if (binding.readView.isAttachedToWindow) {
                     positionAndRevealReadAloudPanel(panel, panelMode, onReveal)
                 }
-            })
+            }
             return
         }
         val params = panel.layoutParams as? FrameLayout.LayoutParams
