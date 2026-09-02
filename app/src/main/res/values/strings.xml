@@ -16,7 +16,7 @@
     <string name="ai_chapter_purify_stream_phase_activity">working</string>
     <string name="ai_chapter_purify_stream_progress">Chapter %1$d batch %2$d/%3$d: %4$s, %5$s tokens, %6$.1f tok/s, elapsed %7$ds</string>
     <!--App-->
-    <string name="app_name">阅读 C</string>
+    <string name="app_name">阅读SK</string>
     <string name="app_name_a">阅读R·A</string>
     <string name="app_name_s" translatable="false">阅读R Plus</string>
     <string name="receiving_shared_label">阅读R·搜索</string>
@@ -166,7 +166,7 @@
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
     </string>
     <string name="app_share_description">
-        阅读 C\nhttps://github.com/CCSSNE/legadoC
+        阅读SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">Version %s</string>
     <string name="pt_background_verification">Background-verification</string>
@@ -241,7 +241,8 @@
     <string name="read_aloud_hide_playback_panel_summary">Skip the temporary pause/resume floating panel and show the action directly in the center of the page footer.</string>
     <string name="read_aloud_playback_panel_duration">Compact panel display time</string>
     <string name="read_aloud_playback_panel_duration_summary">After %s seconds without interaction, move the pause/resume or original/from-page actions to the center of the page footer.</string>
-    <string name="read_aloud_playback_panel_duration_dialog_title">Compact panel display time (seconds)</string>
+    <string name="read_aloud_playback_panel_duration_forever_summary">Always stays; never moves to the page footer on its own.</string>
+    <string name="read_aloud_playback_panel_duration_dialog_title">Compact panel display time (seconds; 0 = always stays)</string>
     <string name="read_aloud_hide_page_panel">Hide cross-page read-aloud panel</string>
     <string name="read_aloud_hide_page_panel_summary">Skip the temporary original-position/from-page panel and show its expand action directly in the center of the page footer.</string>
     <string name="read_aloud_panel_on_page_footer">Place compact read-aloud panels inside page footer</string>
@@ -792,7 +793,6 @@
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="join_qq_group">Join QQ group</string>
     <string name="bg_image_per">Set the background image requires storage permission</string>
     <string name="input_book_source_url">Input book source address</string>
     <string name="del_file">Delete file</string>
@@ -1685,13 +1685,7 @@
     <string name="use_replace">Use replace</string>
     <string name="scope_title">Act on the title</string>
     <string name="scope_content">Act on the content</string>
-    <string name="join_qq_channel">Join QQ channel</string>
     <string name="qq_channel_summary">点击加入阅读QQ频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
-    <string name="telegram_channel_summary">长按复制 QQ 群号</string>
-    <string name="qq_group_url">https://qun.qq.com/universal-share/share?ac=1&amp;authKey=DjJiNVMOKfQWe3Tz2pQhpzCWV79FiKXtG0ApFXK2xrW%2BMjMDk%2BXZT784JjNJq8TY&amp;busi_data=eyJncm91cENvZGUiOiIxMTAxODczMzM4IiwidG9rZW4iOiJOeVdUYWtZaUI1bG9oM21NNkUyUFFuc2hmODY5NUUxVjFkVmMrd0hYeDMyN1dyNXptWlp5UEVPOHA3dDRENGVSIiwidWluIjoiMjgzMTgzNTgzMSJ9&amp;data=kNYZB_IOxrKSE7bIMccDv9yiYlaW0blrCKX2ZIbs1RTo5SoT3tryoyBSOKOq6meXNocy0JYPuZW5qmJDtoCmAA&amp;svctype=4&amp;tempid=h5_group_info</string>
-    <string name="qq_group_number">1101873338</string>
-    <string name="qq_group_number_copied">群号已复制</string>
     <string name="menu_refresh_dur">Refresh the current chapter</string>
     <string name="menu_refresh_after">Refresh the chapter after</string>
     <string name="menu_refresh_all">Refresh all chapters</string>
@@ -2157,11 +2151,11 @@
     <string name="video_setting">视频设置</string>
     <string name="video_setting_summary">自动播放、全屏播放等配置</string>
     <string name="history">历史记录</string>
-    <string name="app_name_sigma">阅读 C</string>
+    <string name="app_name_sigma">阅读SK</string>
     <string name="about_description_sigma">主打优化听书体验</string>
-    <string name="contributors_summary_sigma">https://github.com/CCSSNE/legadoC</string>
+    <string name="contributors_summary_sigma">https://github.com/skxingyu/legado-sk</string>
     <string name="app_share_description_sigma">
-        阅读 C\nhttps://github.com/CCSSNE/legadoC
+        阅读SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="sure_cache_book">是否确认开始缓存？</string>
     <string name="non_printable_set">不可视字符设定</string>
@@ -2605,4 +2599,8 @@ Selected text or question:
     <string name="tts_engine_v2_fetch_done">Voice catalog updated</string>
     <string name="tts_engine_v2_fetch_empty">Voice catalog is empty; fetch voices first</string>
     <string name="tts_engine_v2_no_pickable_engine">No bindable read-aloud engine. Import or create a script engine first.</string>
+    <string name="md3_theme_imported">MD3 theme package imported (day &amp; night)</string>
+    <string name="md3_theme_invalid">Invalid MD3 theme package</string>
+    <string name="toc_load_failed_using_cache">TOC load failed, showing cached chapters</string>
+    <string name="migrate_book_origin_done">Book source URL changed. Associated books have been migrated to the new URL.</string>
 </resources>

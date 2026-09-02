@@ -43,11 +43,6 @@ class AboutFragment : PreferenceFragmentCompat() {
         addPreferencesFromResource(R.xml.about)
         findPreference<Preference>("update_log")?.summary =
             "${getString(R.string.version)} ${appInfo.versionName}"
-        findPreference<io.legado.app.lib.prefs.Preference>("telegram")?.onLongClick {
-            requireContext().sendToClip(getString(R.string.qq_group_number))
-            toastOnUi(R.string.qq_group_number_copied)
-            true
-        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -58,8 +53,14 @@ class AboutFragment : PreferenceFragmentCompat() {
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             "contributors" -> openUrl(R.string.repo_url)
-            "telegram" -> openUrl(R.string.qq_group_url)
             "update_log" -> showUpdateLog()
+            "updateCheckNow" -> {
+                val ctx = requireContext()
+                Coroutine.async {
+                    UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)
+                }
+                return true
+            }
             "mail" -> requireContext().sendMail(getString(R.string.email))
             "license" -> showMdFile(getString(R.string.license), "LICENSE.md")
             "disclaimer" -> showMdFile(getString(R.string.disclaimer), "disclaimer.md")
@@ -92,13 +93,11 @@ class AboutFragment : PreferenceFragmentCompat() {
 
     private suspend fun fetchReadmeFromGithub(): String? {
         return runCatching {
-            val url = UpdateManager.resolveAcceleratedUrl(
-                requireContext(),
-                "https://raw.githubusercontent.com/CCSSNE/legadoC/own/README.md"
-            )
+            // SK 定制（1f96bd8）：直连 raw.githubusercontent.com，去掉 legadoC 的
+            // resolveAcceleratedUrl 加速封装（README 非 APK 下载，无需加速）
             okHttpClient.newCallStrResponse(retry = 1) {
-                url(url)
-                header("User-Agent", "LegadoC/${appInfo.versionName}")
+                url("https://raw.githubusercontent.com/skxingyu/legado-sk/main/README.md")
+                header("User-Agent", "LegadoSK/${appInfo.versionName}")
             }.body
         }.getOrNull()
     }

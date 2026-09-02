@@ -192,10 +192,6 @@ class ThemeConfigFragment : PreferenceFragment(),
         when (key) {
             PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(getPrefString(key))
             PreferKey.mainTransparentStatusBar -> recreateActivities()
-            PreferKey.uiLayoutAlpha -> {
-                upPreferenceSummary(PreferKey.uiLayoutAlpha)
-                recreateActivities()
-            }
             PreferKey.bookshelfCoverAlpha -> {
                 upPreferenceSummary(PreferKey.bookshelfCoverAlpha)
                 recreateActivities()
@@ -245,7 +241,6 @@ class ThemeConfigFragment : PreferenceFragment(),
             PreferKey.bookInfoBgImageN -> selectBookInfoBgAction(true)
             PreferKey.dialogAlpha -> showDialogAlphaDialog()
             PreferKey.dialogBlur -> showDialogBlurDialog()
-            PreferKey.uiLayoutAlpha -> showUiLayoutAlphaDialog()
             PreferKey.bookshelfCoverAlpha -> showBookshelfCoverAlphaDialog()
             "themeList" -> startActivity<ThemeManageActivity>()
             "theme_manage" -> startActivity<ThemeManageActivity>()
@@ -263,20 +258,6 @@ class ThemeConfigFragment : PreferenceFragment(),
 
         }
         return super.onPreferenceTreeClick(preference)
-    }
-
-    private fun showUiLayoutAlphaDialog() {
-        SeekBarDialog(requireContext())
-            .setTitle(getString(R.string.ui_layout_alpha))
-            .setMaxValue(100)
-            .setMinValue(0)
-            .setValue(AppConfig.uiLayoutAlpha)
-            .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.uiLayoutAlpha, 50)
-            }
-            .show {
-                putPrefInt(PreferKey.uiLayoutAlpha, it.coerceIn(0, 100))
-            }
     }
 
     private fun showBookshelfCoverAlphaDialog() {

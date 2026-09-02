@@ -222,4 +222,10 @@ interface BookDao {
 
     @Query("delete from books where type & ${BookType.notShelf} > 0")
     fun deleteNotShelfBook()
+
+    @Query("select exists(select 1 from books where origin = :origin)")
+    fun hasBookByOrigin(origin: String): Boolean
+
+    @Query("update books set origin = :newOrigin where origin = :oldOrigin")
+    fun updateOrigin(newOrigin: String, oldOrigin: String)
 }

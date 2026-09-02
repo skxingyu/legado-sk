@@ -95,7 +95,7 @@ object BackupConfig {
         PreferKey.bookInfoBgImage,
         PreferKey.bookInfoBgImageBlurring,
         PreferKey.uiCornerScale,
-        PreferKey.uiLayoutAlpha,
+        // SK 定制：全局界面透明度强制为 0，从备份列表中排除
         PreferKey.bookshelfCoverAlpha,
         PreferKey.uiCornerSearchFollow,
         PreferKey.uiCornerReplyFollow,

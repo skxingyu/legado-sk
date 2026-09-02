@@ -87,17 +87,33 @@ private fun moveAlertTitleIntoBody(panel: View) {
     if (movedAlertTitlePanels.put(topPanel, true) == null) {
         val title = topPanel.findFirstTitleText()
         if (title != null) {
-            (title.parent as? ViewGroup)?.removeView(title)
-            val customPanel = panel.findViewById<ViewGroup>(androidx.appcompat.R.id.customPanel)
-                ?.takeIf { it.visibility != View.GONE }
-            if (customPanel == null) {
-                moveAlertTitleIntoContentPanel(panel, title)
+            // SK 定制：复合 customTitle（调用方自建的标题行，可含操作按钮等控件）必须整体迁移；
+            // 否则抽出单个文本后，同容器内的交互控件会随 topPanel 一并 GONE 丢弃。
+            val parent = title.parent as? ViewGroup
+            val isCompositeCustomTitle =
+                parent != null &&
+                    parent !== topPanel &&
+                    parent.id != androidx.appcompat.R.id.title_template
+            if (isCompositeCustomTitle && parent != null) {
+                (parent.parent as? ViewGroup)?.removeView(parent)
+                migrateAlertTitle(panel, parent)
             } else {
-                moveAlertTitleIntoCustomPanel(customPanel, title)
+                (title.parent as? ViewGroup)?.removeView(title)
+                migrateAlertTitle(panel, title)
             }
         }
     }
     topPanel.visibility = View.GONE
+}
+
+private fun migrateAlertTitle(panel: View, title: View) {
+    val customPanel = panel.findViewById<ViewGroup>(androidx.appcompat.R.id.customPanel)
+        ?.takeIf { it.visibility != View.GONE }
+    if (customPanel == null) {
+        moveAlertTitleIntoContentPanel(panel, title)
+    } else {
+        moveAlertTitleIntoCustomPanel(customPanel, title)
+    }
 }
 
 private fun moveAlertTitleIntoContentPanel(panel: View, title: View) {

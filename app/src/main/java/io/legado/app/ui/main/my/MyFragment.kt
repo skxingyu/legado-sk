@@ -19,9 +19,7 @@ import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.update.UpdateManager
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.prefs.EditTextPreference
 import io.legado.app.lib.prefs.NameListPreference
 import io.legado.app.lib.prefs.SwitchPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
@@ -215,8 +213,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                     false
                 }
             }
-            findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)?.isVisible =
-                getPrefString(PreferKey.updateAccelerator) == "custom"
             updateSettingsEntryVisibility()
         }
 
@@ -248,20 +244,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                         WebService.start(requireContext())
                     } else {
                         WebService.stop(requireContext())
-                    }
-                }
-
-                PreferKey.updateAccelerator -> {
-                    findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)
-                        ?.isVisible = sharedPreferences?.getString(key, "none") == "custom"
-                }
-
-                PreferKey.updateCheckOnStart -> {
-                    if (requireContext().getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
-                        val ctx = requireContext()
-                        Coroutine.async {
-                            UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)
-                        }
                     }
                 }
 
@@ -552,14 +534,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
 
                 "ai_setting" -> startActivity<ConfigActivity> {
                     putExtra("configTag", ConfigTag.AI_CONFIG)
-                }
-
-                "updateCheckNow" -> {
-                    val ctx = requireContext()
-                    Coroutine.async {
-                        UpdateManager.checkUpdate(ctx, showUpToDate = true, showError = true)
-                    }
-                    return true
                 }
 
                 "fileManage" -> startActivity<FileManageActivity>()

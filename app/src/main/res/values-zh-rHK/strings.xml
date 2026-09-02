@@ -125,7 +125,7 @@
         \u3000\u3000這是一款使用 Kotlin 全新開發的開源的閲讀應用程式，歡迎你的加入。
     </string>
     <string name="app_share_description">
-        閲讀 C\nhttps://github.com/CCSSNE/legadoC
+        閱讀SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">Version %s</string>
     <string name="pt_background_verification">後臺校驗書源</string>
@@ -510,7 +510,6 @@
     <string name="theme">主題</string>
     <string name="theme_mode">主題模式</string>
     <string name="theme_mode_desc">選擇主題模式</string>
-    <string name="join_qq_group">加入QQ羣</string>
     <string name="bg_image_per">獲取背景圖片需存儲權限</string>
     <string name="input_book_source_url">輸入書源網址</string>
     <string name="del_file">刪除文件</string>
@@ -1009,10 +1008,7 @@
     <string name="use_replace">使用替换</string>
     <string name="scope_title">作用于标题</string>
     <string name="scope_content">作用于正文</string>
-    <string name="join_qq_channel">加入QQ频道</string>
     <string name="qq_channel_summary">点击加入阅读QQ频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
-    <string name="telegram_channel_summary">長按複製 QQ 群號</string>
     <string name="menu_refresh_dur">刷新当前章节</string>
     <string name="menu_refresh_after">刷新之后章节</string>
     <string name="menu_refresh_all">刷新全部章节</string>
@@ -1380,4 +1376,6 @@
     <string name="disable_all_toast">關閉所有底部彈窗</string>
     <string name="disable_all_toast_summary">不顯示應用程式透過 Toast 發出的所有底部彈窗，包括書源彈窗</string>
     <string name="reverse_toc_display">&#x53CD;&#x5411;&#x986F;&#x793A;</string>
+    <string name="toc_load_failed_using_cache">目錄載入失敗，已使用本地快取目錄</string>
+    <string name="migrate_book_origin_done">書源地址變更，已自動遷移書架上該書源的關聯書籍</string>
 </resources>

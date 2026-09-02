@@ -924,12 +924,16 @@ abstract class BaseReadAloudService : BaseService(),
             return
         }
         if (obstruction.active) {
-            check(
-                obstruction.topOnScreen >= 0 &&
-                    obstruction.bottomOnScreen > obstruction.topOnScreen
+            // SK 定制（审查修复）：bounds 来自外部上报（旋转/窗口切换/异常 insets 时可为非法区间），
+            // 抛 IllegalArgumentException 会直接崩溃朗读服务；改为记录并跳过该避让源。
+            if (obstruction.topOnScreen < 0 ||
+                obstruction.bottomOnScreen <= obstruction.topOnScreen
             ) {
-                "Read-aloud floating obstruction has invalid bounds: " +
-                    "[${obstruction.topOnScreen}, ${obstruction.bottomOnScreen}]"
+                AppLog.put(
+                    "朗读悬浮窗避让源 bounds 非法，忽略: " +
+                        "[${obstruction.topOnScreen}, ${obstruction.bottomOnScreen}]"
+                )
+                return
             }
             avoidanceBounds[obstruction.source] = FloatingAvoidanceBounds(
                 obstruction.topOnScreen,
@@ -981,7 +985,12 @@ abstract class BaseReadAloudService : BaseService(),
                 }
             }
             .minByOrNull { candidate -> abs(candidate - baseY) }
-            ?: error("No usable position remains for the read-aloud floating window")
+            // SK 定制（审查修复）：避让区覆盖全部可用区间时原 error() 会崩溃朗读服务；
+            // 改为记录并回退到基准位置。
+            ?: run {
+                AppLog.put("朗读悬浮窗无可用避让位置，回退到基准位置")
+                baseY.coerceIn(minY, maxY)
+            }
     }
 
     override fun onDestroy() {
@@ -1412,9 +1421,13 @@ abstract class BaseReadAloudService : BaseService(),
             textChapter?.let {
                 if (pageSplit) {
                     val paragraphs = it.getParagraphs(true)
-                    if (!paragraphs[nowSpeak].isParagraphEnd) readAloudNumber++
+                    // SK 定制（审查修复 M4）：contentList 与 getParagraphs 索引可能错位，
+                    // paragraphs[nowSpeak] 越界会抛 IndexOutOfBoundsException，用 getOrNull 防御；
+                    // 段落不存在时 getOrNull==null，null==false 不成立，安全跳过。
+                    if (paragraphs.getOrNull(nowSpeak)?.isParagraphEnd == false) readAloudNumber++
                 }
-                if (readAloudNumber < it.getReadLength(pageIndex)) {
+                // SK 定制（审查修复 M3）：补 pageIndex > 0 下界，避免 pageIndex 变 -1 导致停读。
+                if (pageIndex > 0 && readAloudNumber < it.getReadLength(pageIndex)) {
                     pageIndex--
                 }
             }
@@ -1434,7 +1447,9 @@ abstract class BaseReadAloudService : BaseService(),
             textChapter?.let {
                 if (pageSplit) {
                     val paragraphs = it.getParagraphs(true)
-                    if (!paragraphs[nowSpeak].isParagraphEnd) readAloudNumber--
+                    // SK 定制（审查修复 M4）：同 prevP，getOrNull 防御越界；
+                    // 段落不存在时 null==false 不成立，安全跳过。
+                    if (paragraphs.getOrNull(nowSpeak)?.isParagraphEnd == false) readAloudNumber--
                 }
                 if (pageIndex + 1 < it.pageSize
                     && readAloudNumber >= it.getReadLength(pageIndex + 1)

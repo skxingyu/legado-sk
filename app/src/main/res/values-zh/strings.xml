@@ -15,7 +15,7 @@
     <string name="ai_chapter_purify_stream_phase_activity">处理中</string>
     <string name="ai_chapter_purify_stream_progress">第 %1$d 章 批次 %2$d/%3$d：%4$s，%5$s tokens，%6$.1f tok/s，已用 %7$d 秒</string>
     <!--App-->
-    <string name="app_name">阅读 C</string>
+    <string name="app_name">阅读SK</string>
     <string name="app_name_a">阅读R·A</string>
     <string name="app_name_s">阅读R·Plus</string>
     <string name="receiving_shared_label">阅读R·搜索</string>
@@ -165,7 +165,7 @@
         \u3000\u3000这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。
     </string>
     <string name="app_share_description">
-        阅读 C\nhttps://github.com/CCSSNE/legadoC
+        阅读SK\nhttps://github.com/skxingyu/legado-sk
     </string>
     <string name="version_name">版本 %s</string>
     <string name="pt_background_verification">后台校验书源</string>
@@ -240,7 +240,8 @@
     <string name="read_aloud_hide_playback_panel_summary">不显示临时的暂停/继续播放小悬浮窗，直接在页脚中央显示操作。</string>
     <string name="read_aloud_playback_panel_duration">小悬浮窗停留时长</string>
     <string name="read_aloud_playback_panel_duration_summary">连续 %s 秒无操作后，将暂停/继续或原进度/从本页听收进页脚中央。</string>
-    <string name="read_aloud_playback_panel_duration_dialog_title">小悬浮窗停留时长（秒）</string>
+    <string name="read_aloud_playback_panel_duration_forever_summary">一直停留，无操作也不会自动收进页脚。</string>
+    <string name="read_aloud_playback_panel_duration_dialog_title">小悬浮窗停留时长（秒，0 为一直停留）</string>
     <string name="read_aloud_hide_page_panel">隐藏跨页小悬浮窗</string>
     <string name="read_aloud_hide_page_panel_summary">不显示临时的原进度/从本页听小悬浮窗，直接在页脚中央显示展开入口。</string>
     <string name="read_aloud_panel_on_page_footer">小悬浮窗放在页脚内</string>
@@ -791,7 +792,6 @@
     <string name="theme">主题</string>
     <string name="theme_mode">主题模式</string>
     <string name="theme_mode_desc">选择主题模式</string>
-    <string name="join_qq_group">加入 QQ 群</string>
     <string name="bg_image_per">获取背景图片需存储权限</string>
     <string name="input_book_source_url">输入书源网址</string>
     <string name="del_file">删除文件</string>
@@ -1436,10 +1436,7 @@
     <string name="use_replace">使用替换</string>
     <string name="scope_title">作用于标题</string>
     <string name="scope_content">作用于正文</string>
-    <string name="join_qq_channel">加入 QQ 频道</string>
     <string name="qq_channel_summary">点击加入阅读 QQ 频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1101873338</string>
-    <string name="telegram_channel_summary">长按复制 QQ 群号</string>
     <string name="menu_refresh_dur">刷新当前章节</string>
     <string name="menu_refresh_after">刷新之后章节</string>
     <string name="menu_refresh_all">刷新全部章节</string>
@@ -2458,4 +2455,8 @@
     <string name="tts_engine_v2_fetch_done">发音人目录已更新</string>
     <string name="tts_engine_v2_fetch_empty">发音人目录为空，请先获取发音人目录</string>
     <string name="tts_engine_v2_no_pickable_engine">没有可绑定的朗读引擎，请先导入或新建脚本引擎</string>
+    <string name="md3_theme_imported">MD3 主题包已导入（含日/夜两套）</string>
+    <string name="md3_theme_invalid">无效的 MD3 主题包</string>
+    <string name="toc_load_failed_using_cache">目录加载失败，已使用本地缓存目录</string>
+    <string name="migrate_book_origin_done">书源地址变更，已自动迁移书架上该书源的关联书籍</string>
 </resources>

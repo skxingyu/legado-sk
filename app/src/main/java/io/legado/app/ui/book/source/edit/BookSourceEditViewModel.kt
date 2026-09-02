@@ -66,7 +66,13 @@ class BookSourceEditViewModel(application: Application) : BaseViewModel(applicat
             }
             bookSource?.let {
                 if (it.bookSourceUrl != source.bookSourceUrl) {
-                    SourceHelp.deleteBookSource(it.bookSourceUrl)
+                    val oldUrl = it.bookSourceUrl
+                    SourceHelp.deleteBookSource(oldUrl)
+                    // 书源地址变更时, 自动迁移书架上该源的关联书籍, 避免书籍变成无源状态
+                    if (appDb.bookDao.hasBookByOrigin(oldUrl)) {
+                        appDb.bookDao.updateOrigin(source.bookSourceUrl, oldUrl)
+                        context.toastOnUi(R.string.migrate_book_origin_done)
+                    }
                 } else {
                     appDb.bookSourceDao.delete(it)
                     SourceConfig.removeSource(it.bookSourceUrl)

@@ -1,34 +1,36 @@
 [
   {
-    "themeName": "默认",
+    "accentColor": "#ff767573",
+    "backgroundColor": "#ffecebe9",
+    "backgroundImgBlur": 0,
+    "bookInfoBackgroundImgBlur": 12,
+    "bottomBackground": "#ffecebe9",
+    "fontScale": 11,
     "isNightTheme": false,
-    "primaryColor": "#F1F2F6",
-    "accentColor": "#E53935",
-    "backgroundColor": "#F5F5F5",
-    "bottomBackground": "#EEEEEE"
+    "primaryColor": "#ffecebe9",
+    "themeName": "黑猫慢生活",
+    "titleFontPath": "",
+    "transparentNavBar": true,
+    "uiCornerReplyFollow": false,
+    "uiCornerScale": 1.0,
+    "uiCornerSearchFollow": false,
+    "uiFontPath": ""
   },
   {
-    "themeName": "典雅蓝",
-    "isNightTheme": false,
-    "primaryColor": "#03A9F4",
-    "accentColor": "#AD1457",
-    "backgroundColor": "#F5F5F5",
-    "bottomBackground": "#EEEEEE"
-  },
-  {
-    "themeName": "黑白",
+    "accentColor": "#ff9e9e9e",
+    "backgroundColor": "#ff393a3e",
+    "backgroundImgBlur": 0,
+    "bookInfoBackgroundImgBlur": 12,
+    "bottomBackground": "#ff393a3e",
+    "fontScale": 11,
     "isNightTheme": true,
-    "primaryColor": "#303030",
-    "accentColor": "#E0E0E0",
-    "backgroundColor": "#424242",
-    "bottomBackground": "#424242"
-  },
-  {
-    "themeName": "A屏黑",
-    "isNightTheme": true,
-    "primaryColor": "#000000",
-    "accentColor": "#FFFFFF",
-    "backgroundColor": "#000000",
-    "bottomBackground": "#000000"
+    "primaryColor": "#ff333333",
+    "themeName": "黯夜",
+    "titleFontPath": "",
+    "transparentNavBar": true,
+    "uiCornerReplyFollow": false,
+    "uiCornerScale": 1.0,
+    "uiCornerSearchFollow": false,
+    "uiFontPath": ""
   }
 ]

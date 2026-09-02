@@ -481,7 +481,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         ReadBook.cancelPreDownloadTask()
         unregisterReceiver(timeBatteryReceiver)
         upSystemUiVisibility()
-        if (!BuildConfig.DEBUG && ReadBook.inBookshelf) {
+        if (ReadBook.inBookshelf) {
+            // SK 定制：退出时自动同步进度（不限制 DEBUG 构建）
             if (AppConfig.syncBookProgressPlus) {
                 ReadBook.syncProgress()
             } else {
@@ -1644,7 +1645,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         when {
             isAutoPage -> showDialogFragment<AutoReadDialog>()
             isShowingSearchResult -> binding.searchMenu.runMenuIn()
-            BaseReadAloudService.isRun -> showReadAloudDialog()
+            // 听书时也呼出普通主菜单: 长按「朗读」按钮才进入听书专属面板 (ReadMenu.onLongClick)
+            BaseReadAloudService.isRun -> binding.readMenu.runMenuIn()
             else -> binding.readMenu.runMenuIn()
         }
     }
@@ -1796,25 +1798,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         ) {
             return
         }
-        binding.readAloudPlaybackPanel.visible()
-        binding.readAloudPlaybackPanel.doOnLayout {
-            if (
-                readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL ||
-                readAloudPanelMode != ReadAloudUiState.ReaderPanelMode.PLAYBACK ||
-                ReadAloudUiState.readerPanelMode(
-                    BaseReadAloudService.isRun,
-                    isViewBehindAloud(),
-                ) != ReadAloudUiState.ReaderPanelMode.PLAYBACK
-            ) {
-                return@doOnLayout
-            }
-            val params = binding.readAloudPlaybackPanel.layoutParams as? FrameLayout.LayoutParams
-                ?: return@doOnLayout
-            val bottomMargin = readAloudPanelBottomMargin(binding.readAloudPlaybackPanel.height)
-            if (params.bottomMargin != bottomMargin) {
-                params.bottomMargin = bottomMargin
-                binding.readAloudPlaybackPanel.layoutParams = params
-            }
+        positionAndRevealReadAloudPanel(
+            binding.readAloudPlaybackPanel,
+            ReadAloudUiState.ReaderPanelMode.PLAYBACK,
+        ) {
             binding.btnReadAloudPlayback.setText(
                 if (BaseReadAloudService.pause) {
                     R.string.read_aloud_resume_playback
@@ -1903,9 +1890,11 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun restartReadAloudPanelTimeout() {
         if (readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL) return
         handler.removeCallbacks(collapseReadAloudPanel)
+        val stayDurationSeconds = AppConfig.readAloudPlaybackPanelDuration
+        if (stayDurationSeconds <= 0) return // 0 = 一直停留，不自动折叠
         handler.postDelayed(
             collapseReadAloudPanel,
-            AppConfig.readAloudPlaybackPanelDuration * 1_000L
+            stayDurationSeconds * 1_000L
         )
     }
 
@@ -1929,25 +1918,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         ) {
             return
         }
-        binding.readAloudPagePanel.visible()
-        binding.readAloudPagePanel.doOnLayout {
-            if (
-                readAloudPanelPresentation != ReadAloudPanelPresentation.PANEL ||
-                readAloudPanelMode != ReadAloudUiState.ReaderPanelMode.PAGE_ACTION ||
-                ReadAloudUiState.readerPanelMode(
-                    BaseReadAloudService.isRun,
-                    isViewBehindAloud(),
-                ) != ReadAloudUiState.ReaderPanelMode.PAGE_ACTION
-            ) {
-                return@doOnLayout
-            }
-            val params = binding.readAloudPagePanel.layoutParams as? FrameLayout.LayoutParams
-                ?: return@doOnLayout
-            val bottomMargin = readAloudPanelBottomMargin(binding.readAloudPagePanel.height)
-            if (params.bottomMargin != bottomMargin) {
-                params.bottomMargin = bottomMargin
-                binding.readAloudPagePanel.layoutParams = params
-            }
+        positionAndRevealReadAloudPanel(
+            binding.readAloudPagePanel,
+            ReadAloudUiState.ReaderPanelMode.PAGE_ACTION,
+        ) {
             fadeReadAloudPanel(binding.readAloudPagePanel, true)
             postReadAloudFloatingAvoidanceForView(
                 EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_PAGE_PANEL,
@@ -1970,6 +1944,77 @@ class ReadBookActivity : BaseReadBookActivity(),
             footerBounds.first
         }
         return binding.readView.height - panelBottom
+    }
+
+    /**
+     * 计算朗读悬浮窗相对页面底部的 margin，使其对齐页脚（页脚内或页脚上方）。
+     * @return 可用的 margin 值；当页面/页脚布局尚未就绪（无法测得页脚或自身高度）时返回 null，
+     *         调用方应保持悬浮窗隐藏并延迟到就绪后再定位显示，避免以错误的贴底位置闪现。
+     */
+    private fun tryReadAloudPanelBottomMargin(panelHeight: Int): Int? {
+        if (panelHeight <= 0) return null
+        val readView = binding.readView
+        if (!readView.isLaidOut || readView.height <= 0) return null
+        if (!readView.footerMeasurable) return null
+        val footerBounds = readView.footerBounds
+        val panelBottom = if (AppConfig.readAloudPanelOnPageFooter) {
+            footerBounds.first + panelHeight
+        } else {
+            footerBounds.first
+        }
+        return readView.height - panelBottom
+    }
+
+    /**
+     * 定位朗读悬浮窗到正确位置后再显示（避免先以 bottomMargin=0 贴屏底闪现）。
+     * 当前流程：
+     *  1. 先尝试定位；readView/页脚尚未就绪时保持隐藏并注册 doOnLayout，就绪后再定位。
+     *  2. 定位完成、且 mode 校验仍成立时，才真正显示（设置按钮文案、淡入、上报避让）。
+     * 若 mode 校验不成立（面板已不应显示），则保持隐藏，绝不显示在错误位置。
+     */
+    private fun positionAndRevealReadAloudPanel(
+        panel: View,
+        panelMode: ReadAloudUiState.ReaderPanelMode,
+        onReveal: (() -> Unit)? = null,
+    ) {
+        // 面板高度由固定 dimens 决定（即使 GONE 未参与布局，layoutParams 也保留该值），
+        // 用 layoutParams.height 而非 panel.height（GONE 时实测为 0），保证能算出正确位置。
+        val panelHeight = (panel.layoutParams as? FrameLayout.LayoutParams)?.height
+            ?.takeIf { it > 0 }
+            ?: return
+        val margin = tryReadAloudPanelBottomMargin(panelHeight)
+        if (margin == null) {
+            // 页面/页脚布局尚未就绪：保持悬浮窗隐藏，待页面布局变化后再定位，
+            // 避免以错误的贴底位置闪现。页面内容异步加载完成后页脚即可测量。
+            // 修复（崩溃）：原手写 viewTreeObserver.addOnGlobalLayoutListener 捕获了
+            // 旧 ViewTreeObserver 引用，切书/Activity 重建 View 树后该 observer "not alive"，
+            // 回调里 removeOnGlobalLayoutListener 抛 IllegalStateException 导致闪退。
+            // 改用 KTX doOnLayout（内部动态取当前 observer 且带 isAlive 守卫），
+            // 并加 isAttachedToWindow 守卫，Activity 销毁后不再继续定位悬浮窗。
+            binding.readView.doOnLayout {
+                if (binding.readView.isAttachedToWindow) {
+                    positionAndRevealReadAloudPanel(panel, panelMode, onReveal)
+                }
+            }
+            return
+        }
+        val params = panel.layoutParams as? FrameLayout.LayoutParams
+            ?: return
+        if (params.bottomMargin != margin) {
+            params.bottomMargin = margin
+            panel.layoutParams = params
+        }
+        val shouldShow = readAloudPanelPresentation == ReadAloudPanelPresentation.PANEL &&
+            readAloudPanelMode == panelMode &&
+            ReadAloudUiState.readerPanelMode(
+                BaseReadAloudService.isRun,
+                isViewBehindAloud(),
+            ) == panelMode
+        if (!shouldShow) {
+            panel.gone()
+            return
+        }
+        onReveal?.invoke()
     }
 
     private fun fadeReadAloudPanel(view: View, show: Boolean, immediate: Boolean = false) {
@@ -2024,7 +2069,13 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun shouldFollowAloudAdvance(
         prev: ReadAloudPosition?,
         current: ReadAloudPosition,
+        switchConfirmed: Boolean = false,
     ): Boolean {
+        // SK 定制：用户双击换段/从本页读定位后，引擎发布的首个位置是「起点确认」，
+        // 不是自然朗读推进，此时不得拽动显示（setAloudStart 只写朗读起点）。
+        // switchConfirmed 此前由 ReadAloud.publishAloudPosition 生成却无任何消费点，
+        // 导致向前双击会把显示拽走（向后双击被下方单调性拦住，行为不对称）。
+        if (switchConfirmed) return false
         if (prev == null) return false
         if (current.chapterIndex != ReadBook.durChapterIndex) return false
         val chapter = ReadBook.curTextChapter ?: return false
@@ -3357,14 +3408,36 @@ class ReadBookActivity : BaseReadBookActivity(),
                     )
                     return@launch
                 }
-                if (shouldFollowAloudAdvance(update.previousPosition, position)) {
+                                // SK 定制：翻页动画期间不得跟随写。
+                // PageDelegate.onAnimStop() 才真正推进页面，动画期间 curPage 仍是旧页，
+                // 跟随判定会误判为「显示页 == 朗读出发页」从而中途改 durChapterPos
+                // 并重渲染，动画结束后 fillPage() 再推进一次 → 页面回跳/多跳。
+                // 红字投影已由上面的 invalidateReadAloudHighlight 失效缓存，不受影响。
+                if (binding.readView.pageDelegate?.isRunning == true) {
+                    AppLog.putDebug(
+                        "[朗读] 位置事件忽略(翻页动画中) pos:${position.chapterPosition}",
+                        module = LogModule.READ_ALOUD
+                    )
+                    return@launch
+                }
+if (shouldFollowAloudAdvance(
+                        update.previousPosition,
+                        position,
+                        update.switchConfirmed
+                    )
+                ) {
                     AppLog.putDebug(
                         "[朗读] 跟随写显示 pos:${position.chapterPosition}",
                         module = LogModule.READ_ALOUD
                     )
                     ReadBook.durChapterPos = position.chapterPosition
-                    upContent()
-                } else {
+                    // SK 定制：跟随写后立即落库（异步），避免进程被杀丢失听书进度。
+                    // 不传 pageChanged=true：那会跳过书源 SAVE_READ 回调，
+                    // 而跟随写是持续行为，不能长期跳过。
+                    ReadBook.saveRead()
+                    // SK 定制：滚动模式下 resetPageOffset=true 会清零滚动偏移，
+                    // 导致每次朗读位置事件都把用户拽回页首
+                    upContent(resetPageOffset = false)} else {
                     AppLog.putDebug(
                         "[朗读] 不跟随 显示页与朗读出发页不同 显示pos:${ReadBook.durChapterPos} " +
                             "朗读pos:${position.chapterPosition}",

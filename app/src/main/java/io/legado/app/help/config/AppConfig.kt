@@ -1319,12 +1319,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiLayoutAlpha: Int
-        get() = appCtx.getPrefInt(
-            PreferKey.uiLayoutAlpha,
-            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 50)
-        ).coerceIn(0, 100)
+        // SK 定制：全局界面透明度强制为 0（完全不透明），不可调整
+        get() = 0
         set(value) {
-            appCtx.putPrefInt(PreferKey.uiLayoutAlpha, value.coerceIn(0, 100))
+            // no-op：忽略任何写入，保证恒为 0
         }
 
     var bookshelfCoverAlpha: Int
@@ -1334,13 +1332,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var dialogAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 50).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 20).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
         }
 
     var dialogBlur: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 100).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 50).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogBlur, value.coerceIn(0, 100))
         }
@@ -1691,7 +1689,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val syncBookProgress get() = appCtx.getPrefBoolean(PreferKey.syncBookProgress, true)
 
-    val syncBookProgressPlus get() = appCtx.getPrefBoolean(PreferKey.syncBookProgressPlus, false)
+    val syncBookProgressPlus get() = appCtx.getPrefBoolean(PreferKey.syncBookProgressPlus, true)
 
     val mediaButtonOnExit get() = appCtx.getPrefBoolean("mediaButtonOnExit", true)
 
@@ -1780,8 +1778,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudHidePlaybackPanel
         get() = appCtx.getPrefBoolean(PreferKey.readAloudHidePlaybackPanel, false)
 
-    const val DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION = 10
-    const val MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION = 1
+    const val DEFAULT_READ_ALOUD_PLAYBACK_PANEL_DURATION = 0
+    const val MIN_READ_ALOUD_PLAYBACK_PANEL_DURATION = 0
     const val MAX_READ_ALOUD_PLAYBACK_PANEL_DURATION = 300
 
     var readAloudPlaybackPanelDuration: Int

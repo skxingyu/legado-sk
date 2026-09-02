@@ -182,11 +182,16 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
         }
 
         private fun upPlaybackPanelDurationSummary() {
-            findPreference<Preference>(PreferKey.readAloudPlaybackPanelDuration)?.summary =
+            val seconds = AppConfig.readAloudPlaybackPanelDuration
+            val summary = if (seconds <= 0) {
+                getString(R.string.read_aloud_playback_panel_duration_forever_summary)
+            } else {
                 getString(
                     R.string.read_aloud_playback_panel_duration_summary,
-                    AppConfig.readAloudPlaybackPanelDuration
+                    seconds
                 )
+            }
+            findPreference<Preference>(PreferKey.readAloudPlaybackPanelDuration)?.summary = summary
         }
 
         private fun showCoverRotationDurationDialog() {

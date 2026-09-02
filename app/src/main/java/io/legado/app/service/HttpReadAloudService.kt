@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -172,6 +173,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun play() {
         pageChanged = false
         exoPlayer.stop()
+        applyPlaybackSpeedForEngine()
         if (!requestFocus()) return
         httpTtsSnapshot = ReadAloud.httpTTS
         if (ReadAloud.currentScriptTtsEngine() != null) {
@@ -309,7 +311,8 @@ class HttpReadAloudService : BaseReadAloudService(),
      * AI 多角色开启且分镜就绪时，朗读单元按分镜子段拆分：每段经选角路由
      * （[ReadAloudTtsRouter]）解析（引擎, 音色）后独立合成；绑定到内置语音包
      * 引擎外观（无脚本可合成）的子段明示日志后按当前引擎兜底，不静默、不丢段。
-     * 音色/语速/音量/音调取路由引擎当前运行时状态；参数变更经 refreshTtsRoute 热刷新。
+     * 音色/音量/音调取路由引擎当前运行时状态；语速由本地播放倍速实现
+     * （[applyPlaybackSpeedForEngine]，合成固定用引擎默认速度）；参数变更经 refreshTtsRoute 热刷新。
      */
     private fun downloadAndPlayScriptAudios() {
         exoPlayer.clearMediaItems()
@@ -576,6 +579,21 @@ class HttpReadAloudService : BaseReadAloudService(),
         val cacheKey = TtsScriptEngineClient.audioCacheKey(engine, content)
         return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
                 MD5Utils.md5Encode16(cacheKey)
+    }
+
+    /**
+     * 脚本引擎语速的本地播放实现（TtsSpeedPolicy 解耦策略，对齐 legado_NG）：
+     * 脚本引擎（含 AI 多角色分镜路由）合成固定使用引擎默认语速，
+     * 语速滑条经 ExoPlayer 播放倍速即时生效，不触发重新合成、不膨胀缓存；
+     * 经典 HTTP TTS 在合成 URL 中已携带语速，此处复位 1x 防止切换引擎后叠加倍速。
+     */
+    private fun applyPlaybackSpeedForEngine() {
+        val rate = if (ReadAloud.currentScriptTtsEngine() != null) {
+            TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+        } else {
+            1f
+        }
+        exoPlayer.playbackParameters = PlaybackParameters(rate)
     }
 
     override fun refreshTtsRoute() {
@@ -1102,6 +1120,11 @@ class HttpReadAloudService : BaseReadAloudService(),
      * 更新朗读速度
      */
     override fun upSpeechRate(reset: Boolean) {
+        if (ReadAloud.currentScriptTtsEngine() != null) {
+            // 脚本引擎：语速由本地播放倍速实现，即时生效，无需中断与重新合成
+            applyPlaybackSpeedForEngine()
+            return
+        }
         if (!isRun || contentList.isEmpty() || httpTtsSnapshot == null) {
             return
         }

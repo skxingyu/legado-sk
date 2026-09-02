@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
+import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -100,7 +101,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var pendingBookInfoBackgroundPath: String? = null
     private var pendingBookInfoBackgroundBlur = ThemeConfig.DEFAULT_BOOK_INFO_BACKGROUND_BLUR
     private var pendingUiCornerScale = 1f
-    private var pendingUiLayoutAlpha = 100
+    private var pendingUiLayoutAlpha = 0 // SK 定制：全局界面透明度强制为 0
     private var pendingFontScale = 0
     private var pendingUiCornerSearchFollow = false
     private var pendingUiCornerReplyFollow = false
@@ -358,7 +359,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         pendingBlur = current.backgroundImgBlur
         pendingBookInfoBackgroundBlur = current.bookInfoBackgroundBlur()
         pendingUiCornerScale = current.uiCornerScale ?: AppConfig.uiCornerScale
-        pendingUiLayoutAlpha = current.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha
+        pendingUiLayoutAlpha = AppConfig.uiLayoutAlpha // SK 定制：全局界面透明度强制为 0
         pendingFontScale = current.fontScale ?: getPrefInt(PreferKey.fontScale, 0)
         pendingUiFontPath = current.uiFontPath ?: AppConfig.uiFontPath
         pendingTitleFontPath = current.titleFontPath ?: AppConfig.titleFontPath
@@ -437,7 +438,8 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupInterfaceRows(binding: DialogThemePackageEditBinding) = binding.run {
         setupCornerScaleRow(rowCornerScale)
-        setupLayoutAlphaRow(rowLayoutAlpha)
+        // SK 定制：全局界面透明度强制为 0，主题包编辑页不显示透明度调节行
+        rowLayoutAlpha.root.isVisible = false
         setupFontScaleRow(rowFontScale)
         setupUiFontRow(rowUiFont)
         setupTitleFontRow(rowTitleFont)
@@ -1048,10 +1050,15 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     FileOutputStream(file).use { output -> input.copyTo(output) }
                 } ?: throw IllegalArgumentException(getString(R.string.theme_zip_read_failed))
                 ThemePackageManager.importZip(file)
-            }.onSuccess {
-                toastOnUi(getString(R.string.theme_imported))
+            }.onSuccess { entries ->
+                // 原生包恒返回单个 Entry；MD3 包固定拆分为日/夜两份
+                if (entries.size > 1) {
+                    toastOnUi(getString(R.string.md3_theme_imported))
+                } else {
+                    toastOnUi(getString(R.string.theme_imported))
+                }
                 loadThemes()
-                enqueueUploadIfNeeded(it)
+                entries.forEach { enqueueUploadIfNeeded(it) }
             }.onFailure {
                 if (it.isJobCancellation()) return@onFailure
                 toastOnUi(getString(R.string.theme_import_failed, it.localizedMessage))
