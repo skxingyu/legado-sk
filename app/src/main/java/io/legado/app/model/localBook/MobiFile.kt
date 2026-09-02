@@ -33,6 +33,8 @@ class MobiFile(var book: Book) {
         @Synchronized
         private fun getMFile(book: Book): MobiFile {
             if (mFile == null || mFile?.book?.bookUrl != book.bookUrl) {
+                // SK 定制：换书前显式关闭旧文件的描述符，避免静态单例长期持有 fd
+                mFile?.fileDescriptor?.let { runCatching { it.close() } }
                 mFile = MobiFile(book)
                 return mFile!!
             }
@@ -61,6 +63,8 @@ class MobiFile(var book: Book) {
         }
 
         fun clear() {
+            // SK 定制：置空前显式关闭文件描述符，避免 fd 滞留
+            mFile?.fileDescriptor?.let { runCatching { it.close() } }
             mFile = null
         }
     }
