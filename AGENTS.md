@@ -38,7 +38,7 @@
 
 ### 验证闭环
 
-- 每次代码改动都按以下闭环执行：正式编译 `appC` APK -> 安装到已确认的雷电模拟器 -> 复现并回归验证；真机最终验证由用户手动完成。
+- 每次代码改动都按以下闭环执行：正式编译（`assembleAppRelease`）APK -> 安装到已确认的雷电模拟器 -> 复现并回归验证；真机最终验证由用户手动完成。
 - AI 侧回归只在雷电模拟器执行；真机安装仅在用户明确指示下进行。
 
 - 崩溃或行为异常时，先收集日志和复现证据，定位根因后修复，再重新正式编译和回归；不能报告未经验证的修复。
@@ -48,10 +48,10 @@
 
 ### 不可变交付约束
 
-- 代码改动只能用正式 `appC` 变体验证与交付：`app\build\outputs\apk\app\c`。禁止以中间 Gradle 任务、debug APK 或改名旧包充当验证/交付物。
+- 代码改动只能用正式版（`app` flavor + `release` buildType，包名 `io.legado.app.c`）验证与交付，产物在 `app\build\outputs\apk\app\release`。禁止以中间 Gradle 任务、debug APK 或改名旧包充当验证/交付物。
 - 覆盖安装前必须显式传入 `VERSION_CODE` 和 `VERSION_NAME`。新 `VERSION_CODE` 必须比最近一次交付大；`VERSION_NAME` 必须按 GMT+8 编译时刻单调递增，格式为 `3.26.MMddHH`。
 - 正式版 = `app` flavor + `release` buildType（`assembleAppRelease`，包名 `io.legado.app.c`）。`versionName` 需直接传完整值（含 `c` 后缀，如 `3.26.0901c`），无自动加后缀机制；`versionCode` 遵循 SK 独立递增约定（当前基线 10026）。
-- 编译前先从模拟器已安装包确认版本；模拟器不可用时使用第 6 节的最近交付基线。确认新版本后，只删除 `app\build\outputs\apk\app\c` 中对应的旧 APK，绝不删除宽泛目录或源码。
+- 编译前先从模拟器已安装包确认版本；模拟器不可用时使用第 6 节的最近交付基线。确认新版本后，只删除 `app\build\outputs\apk\app\release` 中对应的旧 APK，绝不删除宽泛目录或源码。
 - 编译前必读工作目录《编译注意事项与排错手册.md》：环境清单、shell 选择策略（bash/PowerShell/Python）、标准编译流程、常见错误对照表、红线清单。
 
 ### 本机环境与正式命令
@@ -60,7 +60,7 @@
 - Android SDK: `D:\code\tool\sdk`（build-tools 实际版本 `35.0.0`）
 - Gradle: `D:\code\tool\gradle-dist\gradle-8.14.4`（源码目录无 gradlew 时直接用该发行版 `bin\gradle.bat`）
 - Gradle user home: `D:\code\tool\gradle-home`
-- 编译目录：`D:\code\legado-sk-build`（Gradle 拒绝非 ASCII 路径，禁止在中文路径源码目录直接编译；用 robocopy `/MIR` 同步并排除 `.git`、`build`、`.gradle`、`*.apk`）
+- 编译目录：`D:\code\legado-sk-migrate`（发布源源码仓库，纯 ASCII `D:\code` 路径，可直接编译；中文路径源码目录仅作展示/参考不可编译）
 - Gradle wrapper: `8.14.4`; compileSdk: `36`
 
 ```powershell
@@ -89,7 +89,7 @@ D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppRelease' 
 - 任何可能超过 30 秒的命令必须实时监控。每 30 秒以内检查进程是否存活、CPU 是否增长、日志/产物是否更新；停滞时终止并报告，不能无限等待。
 - 后台编译须保存 stdout、stderr 和退出码。`cmd /c` 的内联重定向不可靠时，改用 `.bat` 文件启动，不得把空日志误判为正常编译。
 - 先阅读实际错误中的文件、行号和异常，再选择修复。不得把源码错误猜成内存问题后盲目重跑。
-- 仅在证据指向缓存锁定、守护进程或原生内存问题时，先停止 Gradle，清理残留 Gradle/Kotlin/Java 进程，再用正式 `assembleAppC` 进行最小必要的冷编译诊断，例如 `--no-daemon --max-workers=1 -Dkotlin.incremental=false -Dksp.incremental=false -Dkotlin.compiler.execution.strategy=in-process`。目录清理仅限受影响模块的 `build` 目录。
+- 仅在证据指向缓存锁定、守护进程或原生内存问题时，先停止 Gradle，清理残留 Gradle/Kotlin/Java 进程，再用正式 `assembleAppRelease` 进行最小必要的冷编译诊断，例如 `--no-daemon --max-workers=1 -Dkotlin.incremental=false -Dksp.incremental=false -Dkotlin.compiler.execution.strategy=in-process`。目录清理仅限受影响模块的 `build` 目录。
 - 构建无论成功或失败，执行 `.\gradlew.bat --stop` 并按 PID 清理残留构建进程，避免占用内存。
 - 2026-08-15：`HeaderlessDialogChrome` 首次正式编译在 `AccentTextView(context)` 失败，因为该控件构造器强制要求 `AttributeSet?`；读取 Kotlin 报错后改为 `AccentTextView(context, null)`，同版本重编译成功。失败包未产出、未交付。动态创建项目自定义 View 时必须先核对构造器签名，不能假定存在单参构造器。
 - 2026-08-15：首次启动 10608 构建时，把批处理和退出码写入拼在 `cmd /c` 参数中，Windows 报“文件名、目录名或卷标语法不正确”，没有 Gradle 进程、构建日志或 APK。改为由 `.bat` 自己记录退出码，再以 `Start-Process` 直接启动，构建正常。后台构建的重定向/引号错误必须以“未启动”处理，不能等待或误判为 Gradle 卡死。
@@ -97,7 +97,7 @@ D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppRelease' 
 ### 产物验证
 
 ```powershell
-$apk = 'D:\code\legado-sk-build\app\build\outputs\apk\app\release\legado_sk_<version>_<code>.apk'
+$apk = 'D:\code\legado-sk-migrate\app\build\outputs\apk\app\release\legado_sk_<version>_<code>.apk'
 & "$env:ANDROID_HOME\build-tools\36.1.0\aapt.exe" dump badging $apk
 & "$env:ANDROID_HOME\build-tools\36.1.0\apksigner.bat" verify --print-certs $apk
 ```
@@ -233,7 +233,7 @@ uiautomator2 / ADB
 ## 5. 发布与版本控制
 
 - 发布前重新执行第 3 节的 APK 验证（aapt badging + apksigner verify）。
-- 推送代码：`git push origin main`（代理 31180/31181 已写入 git 全局配置，直接 push 即可）。
+- 推送代码到 `skxingyu/legado-sk` 的 main：⚠️ 2026-08-29 起代理端口 31180/31181 已失效；gh CLI 可直连（`gh api` 正常），但 git 直连 GitHub 不通，须**绕过失效代理并携带 gh token 直连推送**（schannel 会报 `SEC_E_NO_CREDENTIALS`，须 `-c http.sslBackend=openssl`，并清空 github.com 特定代理 `http://127.0.0.1:10808`）。migrate 仓库 `origin` 是只读上游 CCSSNE，实际推送用显式 URL（命令见项目文档.md 第九节，`$token = gh auth token`；若目标仓库 shallow，先 `git fetch --unshallow` 补齐历史再推）。
 - 用 gh CLI 分步发布，避免大文件上传中断：先 `gh release create "<tag>" --title "..." --notes-file "<CHANGELOG路径>"`（pre/Beta 版加 `--prerelease`），再 `gh release upload "<tag>" "<APK路径>"`；上传前 `unset HTTPS_PROXY HTTP_PROXY; export GODEBUG=http2client=0`（禁 http2 直连）。
 - tag 格式 `v3.26.<MMddHH>-<versionCode>`（如 `v3.26.082220-10018`）；发布后用 GitHub MCP `get_release_by_tag` 或网页复核 tag、目标提交、资产大小、中文排版与 Latest/prerelease 状态。
 
@@ -247,7 +247,7 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10026（`3.26.090212c`）已发布 Pre（2026-09-02，tag `v3.26.090212-10026`，main = `3976f3b`）——当前交付**：**legadoC(a3a447e) 基底全面迁移**（8 模块 SK 定制 + 脚本 TTS 语速修复方案B，迁移版 `3.26.0901c`）+ **第三轮代码审查修复**（报告：工作目录《代码审查报告-第三轮.md》）：① **H1 数据安全**：`WebDav` 新增不吞异常的 `existsChecked()`，`AppWebDav.getBookProgress` 拉取失败后连「文件是否存在」都无法判定（弱网/断网）时抛异常中止同步，彻底封死「本地旧进度反向覆盖云端」残余路径；② **M1 崩溃防线**：`ReadBookActivity` 朗读点击回调链 6 处 `error()`/`checkNotNull`/`check` 断言全部改「日志+toast+取消/放弃」；③ **L1 回归回植**：`migration_103_104` 的 `DROP INDEX` 补 `IF EXISTS`；④ **L2**：`BackupConfig` 将 `uiLayoutAlpha` 加入 `ignorePrefKeys` 永久排除备份；⑤ **L3**：删死代码 `readAloudPanelBottomMargin`。产物 `release/legado_sk_3.26.090212c_10026_arm64-v8a.apk`（27,393,550 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：`58ec6ec`（迁移版基线）。**10021 仍为 Latest**，10026 为 Pre。**待真机验证转正**。
+- ✅ **10026（`3.26.090212c`）已发布 Pre（2026-09-02，tag `v3.26.090212-10026`，main = migrate `3976f3b`）——当前交付**：**legadoC(a3a447e) 基底全面迁移**（8 模块 SK 定制 + 脚本 TTS 语速修复方案B，迁移版 `3.26.0901c`）+ **第三轮代码审查修复**（报告：工作目录《代码审查报告-第三轮.md》）：① **H1 数据安全**：`WebDav` 新增不吞异常的 `existsChecked()`，`AppWebDav.getBookProgress` 拉取失败后连「文件是否存在」都无法判定（弱网/断网）时抛异常中止同步，彻底封死「本地旧进度反向覆盖云端」残余路径；② **M1 崩溃防线**：`ReadBookActivity` 朗读点击回调链 6 处 `error()`/`checkNotNull`/`check` 断言全部改「日志+toast+取消/放弃」；③ **L1 回归回植**：`migration_103_104` 的 `DROP INDEX` 补 `IF EXISTS`；④ **L2**：`BackupConfig` 将 `uiLayoutAlpha` 加入 `ignorePrefKeys` 永久排除备份；⑤ **L3**：删死代码 `readAloudPanelBottomMargin`。产物 `release/legado_sk_3.26.090212c_10026_arm64-v8a.apk`（27,393,550 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：migrate `58ec6ec`（迁移版基线）。**10021 仍为 Latest**，10026 为 Pre。**待真机验证转正**。
 - 下一次交付 versionCode 从 `10027` 递增（10026 Pre 完整验证后按 10021 方式转正，转正后基准更新）。
 
 每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或工作目录《项目文档.md》第四节时间线查询，不在本文件累积。
