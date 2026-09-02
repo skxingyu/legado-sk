@@ -259,7 +259,10 @@ object DatabaseMigrations {
                 END
                 """.trimIndent()
             )
-            db.execSQL("DROP INDEX `index_books_name_author`")
+            // SK 定制（审查修复 L2→第三轮 L1 回植）：补 IF EXISTS，防半迁移残留库
+            // （10022 事故已证明存在）索引缺失时 DROP INDEX 抛 SQLiteException
+            // 导致 Room 迁移失败、App 无法启动。10026 基底迁移时曾漏回植。
+            db.execSQL("DROP INDEX IF EXISTS `index_books_name_author`")
             db.execSQL(
                 "CREATE UNIQUE INDEX `index_books_name_author_mediaType` " +
                     "ON `books` (`name`, `author`, `mediaType`)"

@@ -60,7 +60,11 @@ object BackupConfig {
         PreferKey.bitmapCacheSize,
         PreferKey.webServiceWakeLock,
         PreferKey.readAloudWakeLock,
-        PreferKey.audioPlayWakeLock
+        PreferKey.audioPlayWakeLock,
+        // SK 定制（审查修复 L2）：全局界面透明度已强制为 0 且不可调（AppConfig setter
+        // 为 no-op），该 key 无运行时意义，从备份导出/恢复中永久排除，防止恢复旧备份
+        // 把历史脏值写回 SharedPreferences 形成「备份→恢复→再备份」循环。
+        PreferKey.uiLayoutAlpha
     )
 
     //阅读配置
@@ -95,7 +99,7 @@ object BackupConfig {
         PreferKey.bookInfoBgImage,
         PreferKey.bookInfoBgImageBlurring,
         PreferKey.uiCornerScale,
-        // SK 定制：全局界面透明度强制为 0，从备份列表中排除
+        // SK 定制：书架封面透明度默认 20，随主题配置备份/恢复
         PreferKey.bookshelfCoverAlpha,
         PreferKey.uiCornerSearchFollow,
         PreferKey.uiCornerReplyFollow,

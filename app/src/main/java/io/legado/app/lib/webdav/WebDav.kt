@@ -263,6 +263,24 @@ open class WebDav(
     }
 
     /**
+     * 文件是否存在（严格判定版）。
+     * 与 [exists] 的区别：网络/超时等异常不吞掉、原样上抛，调用方据此区分三种结果——
+     * true=服务器答复存在；false=服务器明确答复不存在；异常=无法判定（网络故障等）。
+     * 供进度同步使用：拉取进度失败后需要判定文件是否存在，若用吞异常的 [exists]，
+     * 弱网下 PROPFIND 同样失败会返回 false 被误判为「云端无文件」，导致本地旧进度
+     * 反向覆盖云端新进度（不可逆数据丢失）。
+     */
+    suspend fun existsChecked(): Boolean {
+        val url = httpUrl ?: throw WebDavException("url为空")
+        return webDavClient.newCallResponse {
+            url(url)
+            addHeader("Depth", "0")
+            val requestBody = EXISTS.toRequestBody("application/xml".toMediaType())
+            method("PROPFIND", requestBody)
+        }.use { it.isSuccessful }
+    }
+
+    /**
      * 检查用户名密码是否有效
      */
     suspend fun check(): Boolean {

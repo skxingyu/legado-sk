@@ -1935,16 +1935,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         clearReadAloudFloatingAvoidance(EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_PAGE_PANEL)
     }
 
-    private fun readAloudPanelBottomMargin(panelHeight: Int): Int {
-        check(panelHeight > 0) { "Read-aloud panel has no measurable height" }
-        val footerBounds = binding.readView.footerBounds
-        val panelBottom = if (AppConfig.readAloudPanelOnPageFooter) {
-            footerBounds.first + panelHeight
-        } else {
-            footerBounds.first
-        }
-        return binding.readView.height - panelBottom
-    }
+    // SK 定制（审查修复 L3）：旧版 readAloudPanelBottomMargin（含 check 崩溃断言）已由
+    // 10024 悬浮窗修复的 tryReadAloudPanelBottomMargin 全面替代且无调用者，已删除。
 
     /**
      * 计算朗读悬浮窗相对页面底部的 margin，使其对齐页脚（页脚内或页脚上方）。
@@ -2115,11 +2107,17 @@ class ReadBookActivity : BaseReadBookActivity(),
                 applyAloudPositionToReader(position)
             }
             if (!opened) {
+                // SK 定制（审查修复 M1）：openChapter 对越界章号返回 false（换源/目录更新后
+                // 章节数减少、目录未加载完），此处由点击事件触发，error() 会直接崩溃进程，
+                // 与 10025 服务侧同类修复对齐：日志 + 提示 + 放弃切换。
                 ReadBook.skipReadAloudSyncOnce = false
-                error(
-                    "Cannot return to read aloud position: chapter=${position.chapterIndex}, " +
-                        "position=${position.chapterPosition}"
+                AppLog.put(
+                    "无法回到朗读位置：章节越界 ch:${position.chapterIndex}, " +
+                        "pos:${position.chapterPosition}",
+                    module = LogModule.READ_ALOUD
                 )
+                toastOnUi("无法回到朗读进度位置，请重新开始朗读")
+                return
             }
         } else {
             applyAloudPositionToReader(position)
@@ -2143,9 +2141,15 @@ class ReadBookActivity : BaseReadBookActivity(),
         val paragraphStart = if (ReadBook.pageSplitEnabled()) {
             line.chapterPosition
         } else {
-            checkNotNull(resolveTrueParagraphStart(line)) {
-                "Cannot resolve paragraph start for read aloud: ch:$chapterIndex " +
-                    "pos:${line.chapterPosition}"
+            // SK 定制（审查修复 M1）：真段首解析失败（章节未就绪/段表缺失）时由双击事件
+            // 触发，checkNotNull 会崩溃进程；改为提示并放弃本次起读，不做段中起读兜底。
+            resolveTrueParagraphStart(line) ?: run {
+                AppLog.put(
+                    "双击朗读：无法解析真段首 ch:$chapterIndex pos:${line.chapterPosition}",
+                    module = LogModule.READ_ALOUD
+                )
+                toastOnUi("无法定位段落起点，请稍后重试")
+                return
             }
         }
         AppLog.putDebug(
@@ -2157,8 +2161,12 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun restartFromPage() {
-        val position = checkNotNull(resolvePageStart()) {
-            "Cannot restart read aloud: visible page has no readable line"
+        // SK 定制（审查修复 M1）：可见页无可读行时由「从本页读」点击触发，
+        // checkNotNull 会崩溃进程，改为日志 + 提示并放弃。
+        val position = resolvePageStart() ?: run {
+            AppLog.put("从本页读失败：可见页无可读行", module = LogModule.READ_ALOUD)
+            toastOnUi("当前页面没有可朗读的内容")
+            return
         }
         AppLog.putDebug(
             "[朗读] 从本页读 ch:${position.chapterIndex} pos:${position.chapterPosition} " +
@@ -2216,12 +2224,17 @@ class ReadBookActivity : BaseReadBookActivity(),
     /**
      * 整段朗读与滚动模式的“本页第一段第一字”：本页第一个正文段落在全章中的真正段首。
      * 段落跨页时段首在上一页，页内查找无法越过页边界，必须按全局段号回退；
-     * 页面没有正文行时返回 null，解析失败直接暴露，不允许静默段中起读。
+     * 页面没有正文行或段首解析失败时返回 null，由调用方决定兜底（审查修复 M1：
+     * 原此处 checkNotNull 崩溃，现统一交由调用方日志+提示处理）。
      */
     private fun firstParagraphVisibleStart(page: TextPage): Int? {
         val firstLine = page.lines.firstOrNull { it.paragraphNum > 0 } ?: return null
-        return checkNotNull(resolveTrueParagraphStart(firstLine)) {
-            "Cannot resolve true paragraph start: pos:${firstLine.chapterPosition}"
+        return resolveTrueParagraphStart(firstLine) ?: run {
+            AppLog.put(
+                "无法解析可见页首段真段首 pos:${firstLine.chapterPosition}",
+                module = LogModule.READ_ALOUD
+            )
+            null
         }
     }
 
@@ -2239,17 +2252,35 @@ class ReadBookActivity : BaseReadBookActivity(),
         )
         ReadAloud.beginPositionSwitch(position)
         val chapter = ReadBook.curTextChapter
-        val start = {
+        val start = lambda@ {
+            // SK 定制（审查修复 M1）：以下三条由点击/异步回调触发，断言抛错会直接崩溃
+            // 进程（与 10025 服务侧同类修复对齐）；改为取消切换 + 日志 + 提示。
             val current = ReadBook.curTextChapter
-                ?: error("Cannot switch read aloud without a loaded chapter")
-            check(current.chapter.index == position.chapterIndex) {
-                "Read aloud chapter changed while switching: expected=${position.chapterIndex}, " +
-                    "actual=${current.chapter.index}"
+            if (current == null) {
+                ReadAloud.cancelPositionSwitch()
+                AppLog.put("双击换段失败：章节未加载", module = LogModule.READ_ALOUD)
+                toastOnUi("章节尚未加载完成，请稍后重试")
+                return@lambda
+            }
+            if (current.chapter.index != position.chapterIndex) {
+                ReadAloud.cancelPositionSwitch()
+                AppLog.put(
+                    "双击换段失败：章节已切换 expected=${position.chapterIndex}, " +
+                        "actual=${current.chapter.index}",
+                    module = LogModule.READ_ALOUD
+                )
+                return@lambda
             }
             val pageIndex = current.getPageIndexByCharIndex(position.chapterPosition)
-            check(pageIndex in 0 until current.pageSize) {
-                "Read aloud position has no page: chapter=${position.chapterIndex}, " +
-                    "position=${position.chapterPosition}"
+            if (pageIndex !in 0 until current.pageSize) {
+                ReadAloud.cancelPositionSwitch()
+                AppLog.put(
+                    "双击换段失败：位置无对应页 ch:${position.chapterIndex}, " +
+                        "pos:${position.chapterPosition}",
+                    module = LogModule.READ_ALOUD
+                )
+                toastOnUi("无法定位朗读位置，请重新选择")
+                return@lambda
             }
             val pageStart = current.getReadLength(pageIndex)
             // 只切朗读位置，绝不直写显示进度（durChapterPos）。
@@ -2273,12 +2304,16 @@ class ReadBookActivity : BaseReadBookActivity(),
             start()
         }
         if (!opened) {
+            // SK 定制（审查修复 M1）：openChapter 对越界章号返回 false，此处由点击事件
+            // 触发，error() 会直接崩溃进程；与 backToAloudProgress 同样改为提示+放弃。
             ReadBook.skipReadAloudSyncOnce = false
             ReadAloud.cancelPositionSwitch()
-            error(
-                "Cannot switch read aloud position: chapter=${position.chapterIndex}, " +
-                    "position=${position.chapterPosition}"
+            AppLog.put(
+                "双击换段失败：章节越界 ch:${position.chapterIndex}, " +
+                    "pos:${position.chapterPosition}",
+                module = LogModule.READ_ALOUD
             )
+            toastOnUi("无法定位朗读位置，请重新选择")
         }
     }
 

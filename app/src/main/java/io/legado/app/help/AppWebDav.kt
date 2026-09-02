@@ -409,10 +409,13 @@ object AppWebDav {
      * 合并进同一分支并上传本地进度；若网络抖动导致的拉取失败也返回 null，就会用
      * 本地旧进度覆盖云端新进度（不可逆数据丢失）。
      * 因此：文件存在却拉取失败 → 抛出异常，由调用方 onError 中止，绝不上传；
-     *       云端确无该文件（首同步）→ 返回 null，允许调用方上传。
+     *       云端确无该文件（首同步）→ 返回 null，允许调用方上传；
+     *       拉取失败后连「文件是否存在」都无法判定（网络故障）→ 同样抛出异常中止。
      * 注：不能用异常类型判定 404——WebDav.checkResult 在 response.message 非空白或
      *     body 为空时抛普通 WebDavException，仅当服务器返回 XML 且
      *     s:exception == "ObjectNotFound" 时才抛 ObjectNotFoundException。
+     * 注：判定存在性用 existsChecked() 而非 exists()——后者吞掉网络异常返回 false，
+     *     弱网下会把「无法判定」误判为「云端无文件」导致反向覆盖（审查修复 H1）。
      */
     suspend fun getBookProgress(book: Book): BookProgress? {
         val url = getProgressUrl(
@@ -429,8 +432,8 @@ object AppWebDav {
                 }
                 // SK 定制（审查修复 N1）：HTTP 下载成功但内容非合法 JSON（文件被写坏、
                 // 半途上传残留、BOM/多余字符），绝不能当成"云端无进度"而上传本地进度覆盖。
-                // 走下方 exists() 判定：文件确实存在则抛异常中止上传；仅空文件（byteArray 为空）
-                // 保持原路径视为无有效内容。
+                // 走下方 existsChecked() 判定：文件确实存在则抛异常中止上传；仅空文件
+                //（byteArray 为空）保持原路径视为无有效内容。
                 if (byteArray.isNotEmpty()) {
                     error("进度文件内容不是合法 JSON: ${json.take(80)}")
                 }
@@ -443,9 +446,21 @@ object AppWebDav {
         val error = fetchError
         if (error != null) {
             val authorization = authorization ?: return null
-            // 文件存在却拉取失败：网络/鉴权/解析问题，
-            // 绝不能让调用方当成"云端无进度"而上传本地进度
-            if (WebDav(url, authorization).exists()) {
+            // SK 定制（审查修复 H1 残余）：必须用不吞异常的 existsChecked 严格判定。
+            // 原用吞异常的 exists()，弱网/断网时 PROPFIND 同样失败返回 false，
+            // 会被误判为「云端无文件（首同步）」→ 调用方上传本地旧进度反向覆盖云端。
+            // 现语义：确定存在 → throw 中止；确定不存在 → 返回 null 允许首同步上传；
+            // 无法判定（网络故障）→ throw 中止，宁可不更新，绝不上传覆盖。
+            val exists = try {
+                WebDav(url, authorization).existsChecked()
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
+                AppLog.put("确认进度文件是否存在失败，中止本次同步\n${e.localizedMessage}", e)
+                throw error
+            }
+            if (exists) {
+                // 文件存在却拉取失败：网络/鉴权/解析问题，
+                // 绝不能让调用方当成"云端无进度"而上传本地进度
                 throw error
             }
         }
