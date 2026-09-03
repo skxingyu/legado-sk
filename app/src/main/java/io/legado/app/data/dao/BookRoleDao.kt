@@ -31,6 +31,10 @@ interface BookRoleDao {
     @Delete
     fun deleteRole(role: BookRole)
 
+    // SK 保留说明：按 workKey 整作品批量删除，当前无调用者。
+    // 严禁在「删书/换源」路径接线——workKey = MD5(书名+作者) 是作品级稳定键，跨书源/重加保持，
+    // 接线会清掉同一作品的 AI 朗读角色与用户 AiMultiVoiceDialog 手工配音配置（换源重加后丢失）。
+    // 单条 deleteRole/deleteCastRole/deleteBinding 有活跃调用者，属正常功能路径。
     @Query("delete from book_roles where workKey = :workKey")
     fun deleteRoles(workKey: String)
 
@@ -49,6 +53,10 @@ interface BookRoleDao {
     @Delete
     fun deleteCastRole(role: BookTtsCastRole)
 
+    // SK 保留说明：按 workKey 整作品批量删除，当前无调用者。
+    // 严禁在「删书/换源」路径接线——workKey = MD5(书名+作者) 是作品级稳定键，跨书源/重加保持，
+    // 接线会清掉同一作品的 AI 朗读角色与用户 AiMultiVoiceDialog 手工配音配置（换源重加后丢失）。
+    // 单条 deleteRole/deleteCastRole/deleteBinding 有活跃调用者，属正常功能路径。
     @Query("delete from book_tts_cast_roles where workKey = :workKey")
     fun deleteCastRoles(workKey: String)
 
@@ -70,6 +78,10 @@ interface BookRoleDao {
     )
     fun deleteBinding(workKey: String, targetType: String, targetId: Long)
 
+    // SK 保留说明：按 workKey 整作品批量删除，当前无调用者。
+    // 严禁在「删书/换源」路径接线——workKey = MD5(书名+作者) 是作品级稳定键，跨书源/重加保持，
+    // 接线会清掉同一作品的 AI 朗读角色与用户 AiMultiVoiceDialog 手工配音配置（换源重加后丢失）。
+    // 单条 deleteRole/deleteCastRole/deleteBinding 有活跃调用者，属正常功能路径。
     @Query("delete from book_tts_voice_bindings where workKey = :workKey")
     fun deleteBindings(workKey: String)
 }

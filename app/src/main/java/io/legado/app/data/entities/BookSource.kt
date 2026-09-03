@@ -304,6 +304,10 @@ data class BookSource(
         fun stringToContentRule(json: String?) =
             GSON.fromJsonObject<ContentRule>(json).getOrNull()
 
+        // SK 保留说明（上游 legado 遗留技术债，维持现状勿改）：
+        // reviewRule 字段全仓零消费（无 readReviewRule 业务、编辑器注释态、BookSourcePart 不含）；
+        // 该桩与《GSON.toJson(null)=="null"、fromJsonObject 读 null 得 null》逐字节等价，恢复真序列化收益为零；
+        // 删除列需 DatabaseMigrations version 113 重建 book_sources（最大用户数据表、无 destructive 兜底），写错即启动崩溃，风险倒挂。
         @TypeConverter
         fun stringToReviewRule(json: String?): ReviewRule? = null
 
