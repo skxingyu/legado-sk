@@ -215,15 +215,17 @@ object Backup {
         writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)
         writeListToJson(appDb.dictRuleDao.all, "dictRule.json", backupPath)
         GSON.toJson(appDb.serverDao.all).let { json ->
-            aes.runCatching {
+            // SK 定制：加密失败必须中止备份，绝不允许静默退明文（拒绝静默兜底红线）
+            val encrypted = aes.runCatching {
                 encryptBase64(json)
-            }.getOrDefault(json).let {
-                FileUtils.createFileIfNotExist(backupPath + File.separator + "servers.json")
-                    .writeText(it)
+            }.getOrElse {
+                throw IllegalStateException("Web服务配置加密失败", it)
             }
+            FileUtils.createFileIfNotExist(backupPath + File.separator + "servers.json")
+                .writeText(encrypted)
         }
         currentCoroutineContext().ensureActive()
-        GSON.toJson(ReadBookConfig.configList).let {
+        GSON.toJson(ReadBookConfig.configList.toList()).let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ReadBookConfig.configFileName)
                 .writeText(it)
         }
@@ -231,7 +233,7 @@ object Backup {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ReadBookConfig.shareConfigFileName)
                 .writeText(it)
         }
-        GSON.toJson(ThemeConfig.configList).let {
+        GSON.toJson(ThemeConfig.configList.toList()).let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ThemeConfig.configFileName)
                 .writeText(it)
         }
@@ -250,9 +252,13 @@ object Backup {
                 if (BackupConfig.keyIsNotIgnore(key)) {
                     when (key) {
                         PreferKey.webDavPassword -> {
-                            edit.putString(key, aes.runCatching {
+                            // SK 定制：加密失败必须中止备份，绝不允许静默退明文（拒绝静默兜底红线）
+                            val encrypted = aes.runCatching {
                                 encryptBase64(value.toString())
-                            }.getOrDefault(value.toString()))
+                            }.getOrElse {
+                                throw IllegalStateException("WebDAV密码加密失败", it)
+                            }
+                            edit.putString(key, encrypted)
                         }
 
                         else -> when (value) {
