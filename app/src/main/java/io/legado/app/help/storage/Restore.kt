@@ -129,101 +129,7 @@ object Restore {
 
     private suspend fun restore(path: String) {
         val aes = BackupAES()
-        fileToBookList(path)?.let {
-            it.forEach { book ->
-                book.upType()
-            }
-            it.filter { book -> book.isLocal }
-                .forEach { book ->
-                    book.coverUrl = LocalBook.getCoverPath(book)
-                }
-            val newBooks = arrayListOf<Book>()
-            val ignoreLocalBook = BackupConfig.ignoreLocalBook
-            it.forEach { book ->
-                if (ignoreLocalBook && book.isLocal) {
-                    return@forEach
-                }
-                if (appDb.bookDao.has(book.bookUrl)) {
-                    try {
-                        appDb.bookDao.update(book)
-                    } catch (_: SQLiteConstraintException) {
-                        appDb.bookDao.insert(book)
-                    }
-                } else {
-                    newBooks.add(book)
-                }
-            }
-            appDb.bookDao.insert(*newBooks.toTypedArray())
-        }
-        fileToListT<Bookmark>(path, "bookmark.json")?.let {
-            appDb.bookmarkDao.insert(*it.toTypedArray())
-        }
-        fileToListT<BookIllustration>(path, "bookIllustration.json")?.let {
-            appDb.bookIllustrationDao.insert(*it.toTypedArray())
-        }
-        fileToListT<BookGroup>(path, "bookGroup.json")?.let {
-            appDb.bookGroupDao.insert(*it.toTypedArray())
-        }
-        fileToListT<BookSource>(path, "bookSource.json")?.let {
-            appDb.bookSourceDao.insert(*it.toTypedArray())
-        } ?: run {
-            val bookSourceFile = File(path, "bookSource.json")
-            if (bookSourceFile.exists()) {
-                val json = bookSourceFile.readText()
-                ImportOldData.importOldSource(json)
-            }
-        }
-        fileToListT<RssSource>(path, "rssSources.json")?.let {
-            appDb.rssSourceDao.insert(*it.toTypedArray())
-        }
-        fileToListT<RssStar>(path, "rssStar.json")?.let {
-            appDb.rssStarDao.insert(*it.toTypedArray())
-        }
-        fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
-            appDb.replaceRuleDao.insert(*it.toTypedArray())
-        }
-        fileToListT<SearchKeyword>(path, "searchHistory.json")?.let {
-            appDb.searchKeywordDao.insert(*it.toTypedArray())
-        }
-        fileToListT<RuleSub>(path, "sourceSub.json")?.let {
-            appDb.ruleSubDao.insert(*it.toTypedArray())
-        }
-        fileToListT<TxtTocRule>(path, "txtTocRule.json")?.let {
-            appDb.txtTocRuleDao.insert(*it.toTypedArray())
-        }
-        fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
-            appDb.httpTTSDao.insert(*it.toTypedArray())
-        }
-        fileToListT<DictRule>(path, "dictRule.json")?.let {
-            appDb.dictRuleDao.insert(*it.toTypedArray())
-        }
-        fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
-            appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
-            appDb.keyboardAssistsDao.insert(*it.toTypedArray())
-        }
-        fileToListT<ReadRecord>(path, "readRecord.json")?.let {
-            it.forEach { readRecord ->
-                mergeReadRecord(readRecord)
-            }
-        }
-        fileToListT<ReadRecordDaily>(path, "readRecordDaily.json")?.let {
-            it.forEach { record ->
-                mergeReadRecordDaily(record)
-            }
-        }
-        File(path, "servers.json").takeIf {
-            it.exists()
-        }?.runCatching {
-            var json = readText()
-            if (!json.isJsonArray()) {
-                json = aes.decryptStr(json)
-            }
-            GSON.fromJsonArray<Server>(json).getOrNull()?.let {
-                appDb.serverDao.insert(*it.toTypedArray())
-            }
-        }?.onFailure {
-            AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
-        }
+        restoreDbData(path, aes)   // M1: DB 段（bookshelf→servers.json）原子恢复
         File(path, DirectLinkUpload.ruleFileName).takeIf {
             it.exists()
         }?.runCatching {
@@ -355,6 +261,111 @@ object Restore {
                 LauncherIconHelp.changeIcon(appCtx.getPrefString(PreferKey.launcherIcon))
             }
             ThemeConfig.applyDayNight(appCtx)
+        }
+    }
+    private fun restoreDbData(path: String, aes: BackupAES) {
+        // M1: DB 段（bookshelf→servers.json）整体事务化——任一步失败则整库回滚，杜绝半恢复态
+        val db = appDb.openHelper.writableDatabase
+        db.beginTransaction()
+        try {
+            fileToBookList(path)?.let {
+                it.forEach { book ->
+                    book.upType()
+                }
+                it.filter { book -> book.isLocal }
+                    .forEach { book ->
+                        book.coverUrl = LocalBook.getCoverPath(book)
+                    }
+                val newBooks = arrayListOf<Book>()
+                val ignoreLocalBook = BackupConfig.ignoreLocalBook
+                it.forEach { book ->
+                    if (ignoreLocalBook && book.isLocal) {
+                        return@forEach
+                    }
+                    if (appDb.bookDao.has(book.bookUrl)) {
+                        try {
+                            appDb.bookDao.update(book)
+                        } catch (_: SQLiteConstraintException) {
+                            appDb.bookDao.insert(book)
+                        }
+                    } else {
+                        newBooks.add(book)
+                    }
+                }
+                appDb.bookDao.insert(*newBooks.toTypedArray())
+            }
+            fileToListT<Bookmark>(path, "bookmark.json")?.let {
+                appDb.bookmarkDao.insert(*it.toTypedArray())
+            }
+            fileToListT<BookIllustration>(path, "bookIllustration.json")?.let {
+                appDb.bookIllustrationDao.insert(*it.toTypedArray())
+            }
+            fileToListT<BookGroup>(path, "bookGroup.json")?.let {
+                appDb.bookGroupDao.insert(*it.toTypedArray())
+            }
+            fileToListT<BookSource>(path, "bookSource.json")?.let {
+                appDb.bookSourceDao.insert(*it.toTypedArray())
+            } ?: run {
+                val bookSourceFile = File(path, "bookSource.json")
+                if (bookSourceFile.exists()) {
+                    val json = bookSourceFile.readText()
+                    ImportOldData.importOldSource(json)
+                }
+            }
+            fileToListT<RssSource>(path, "rssSources.json")?.let {
+                appDb.rssSourceDao.insert(*it.toTypedArray())
+            }
+            fileToListT<RssStar>(path, "rssStar.json")?.let {
+                appDb.rssStarDao.insert(*it.toTypedArray())
+            }
+            fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
+                appDb.replaceRuleDao.insert(*it.toTypedArray())
+            }
+            fileToListT<SearchKeyword>(path, "searchHistory.json")?.let {
+                appDb.searchKeywordDao.insert(*it.toTypedArray())
+            }
+            fileToListT<RuleSub>(path, "sourceSub.json")?.let {
+                appDb.ruleSubDao.insert(*it.toTypedArray())
+            }
+            fileToListT<TxtTocRule>(path, "txtTocRule.json")?.let {
+                appDb.txtTocRuleDao.insert(*it.toTypedArray())
+            }
+            fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
+                appDb.httpTTSDao.insert(*it.toTypedArray())
+            }
+            fileToListT<DictRule>(path, "dictRule.json")?.let {
+                appDb.dictRuleDao.insert(*it.toTypedArray())
+            }
+            fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
+                appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
+                appDb.keyboardAssistsDao.insert(*it.toTypedArray())
+            }
+            fileToListT<ReadRecord>(path, "readRecord.json")?.let {
+                it.forEach { readRecord ->
+                    mergeReadRecord(readRecord)
+                }
+            }
+            fileToListT<ReadRecordDaily>(path, "readRecordDaily.json")?.let {
+                it.forEach { record ->
+                    mergeReadRecordDaily(record)
+                }
+            }
+            File(path, "servers.json").takeIf {
+                it.exists()
+            }?.runCatching {
+                var json = readText()
+                if (!json.isJsonArray()) {
+                    json = aes.decryptStr(json)
+                }
+                GSON.fromJsonArray<Server>(json).getOrNull()?.let {
+                    appDb.serverDao.insert(*it.toTypedArray())
+                }
+            }?.onFailure {
+                AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
