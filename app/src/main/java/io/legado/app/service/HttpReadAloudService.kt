@@ -582,16 +582,32 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     /**
+     * 判定 HTTP 引擎 URL 是否支持「服务端变速」：
+     * URL 模板含 speakSpeed / speak_speed / speechRate 占位符（或 JS 间接拼接）时，
+     * 服务端会按新语速合成，播放端应保持 1x；否则服务端永远按默认语速合成，
+     * 播放端需倍速兜底（在线语速修复，对齐 10027 方案）。
+     */
+    private fun httpTtsSupportsServerSpeed(httpTts: HttpTTS?): Boolean {
+        val url = httpTts?.url?.orEmpty() ?: return false
+        return url.contains("speakSpeed") || url.contains("speak_speed") ||
+            url.contains("speechRate")
+    }
+
+    /**
      * 脚本引擎语速的本地播放实现（TtsSpeedPolicy 解耦策略，对齐 legado_NG）：
      * 脚本引擎（含 AI 多角色分镜路由）合成固定使用引擎默认语速，
      * 语速滑条经 ExoPlayer 播放倍速即时生效，不触发重新合成、不膨胀缓存；
-     * 经典 HTTP TTS 在合成 URL 中已携带语速，此处复位 1x 防止切换引擎后叠加倍速。
+     * 经典 HTTP TTS 若合成 URL 已携带语速占位符则服务端变速、播放端复位 1x；
+     * URL 无语速占位符的引擎（服务端不响应语速）在播放端倍速兜底。
      */
     private fun applyPlaybackSpeedForEngine() {
-        val rate = if (ReadAloud.currentScriptTtsEngine() != null) {
-            TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
-        } else {
-            1f
+        val rate = when {
+            ReadAloud.currentScriptTtsEngine() != null ->
+                TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+            // httpTtsSnapshot 未就绪（play 初始）时保持 1x，避免误判双加速
+            httpTtsSnapshot != null && !httpTtsSupportsServerSpeed(httpTtsSnapshot) ->
+                TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+            else -> 1f
         }
         exoPlayer.playbackParameters = PlaybackParameters(rate)
     }
@@ -1126,6 +1142,11 @@ class HttpReadAloudService : BaseReadAloudService(),
             return
         }
         if (!isRun || contentList.isEmpty() || httpTtsSnapshot == null) {
+            return
+        }
+        if (!httpTtsSupportsServerSpeed(httpTtsSnapshot)) {
+            // 服务端不响应语速的引擎：播放端倍速兜底，即时生效，避免无谓的网络重启
+            applyPlaybackSpeedForEngine()
             return
         }
         cancelHttpWork()
