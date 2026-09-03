@@ -1,12 +1,12 @@
 package io.legado.app
 
 import androidx.room.Room
-import androidx.room.migration.Migration
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.AppDatabase
+import io.legado.app.data.DatabaseMigrations
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,9 +17,8 @@ class MigrationTest {
 
     private val TEST_DB = "migration-test"
 
-    private val ALL_MIGRATIONS = arrayOf<Migration>(
-
-    )
+    // 注入真实手写迁移（43→90 为 AutoMigration 由 Room 自动应用；90→112 需显式注入，否则此测试必然失败）
+    private val ALL_MIGRATIONS = DatabaseMigrations.migrations
 
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
