@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import androidx.room.withTransaction
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -263,11 +264,12 @@ object Restore {
             ThemeConfig.applyDayNight(appCtx)
         }
     }
-    private fun restoreDbData(path: String, aes: BackupAES) {
-        // M1: DB 段（bookshelf→servers.json）整体事务化——任一步失败则整库回滚，杜绝半恢复态
-        val db = appDb.openHelper.writableDatabase
-        db.beginTransaction()
-        try {
+
+    private suspend fun restoreDbData(path: String, aes: BackupAES) {
+        // M1: DB 段（bookshelf→servers.json）整体事务化——任一步失败则整库回滚，杜绝半恢复态。
+        // 用 Room withTransaction(suspend)：keyboardAssistsDao.deleteAll() 是 suspend DAO，
+        // 原生 beginTransaction 无法让它在同一事务线程执行；withTransaction 在事务上下文中协调 suspend 与同步 DAO。
+        appDb.withTransaction {
             fileToBookList(path)?.let {
                 it.forEach { book ->
                     book.upType()
@@ -363,9 +365,6 @@ object Restore {
             }?.onFailure {
                 AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 
