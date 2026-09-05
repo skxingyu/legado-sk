@@ -71,7 +71,7 @@
 
 ### 本机环境与正式命令（迁移后 2026-09-04 核对）
 
-- 代码/构建唯一目录（无 D 盘，不再分编译树）：`C:\code\ai-code\legado-sk`。⚠️ 该目录当前没有 `.git`（从仓库拉取）；提交需先 `git init` 并关联 `skxingyu/legado-sk`。
+- 代码/构建唯一目录（无 D 盘，不再分编译树）：`C:\code\ai-code\legado-sk`（git 仓库，remote = `skxingyu/legado-sk`，main 分支，gh auth 直连推送）。
 - JDK 17：`C:\Users\skxingyu\AndroidDev\jdk-17.0.2`
 - Android SDK：`C:\Users\skxingyu\AndroidDev\android-sdk`（platforms `android-34`/`android-36`；build-tools `34.0.0`/`36.0.0`）
 - Gradle：用项目 wrapper `gradlew.bat`（distributionUrl = gradle-8.14.4-bin，首次自动下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；本机另有 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` 备用，勿覆盖 wrapper 约定
@@ -268,8 +268,9 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10026（`3.26.090212c`）已发布 Pre（2026-09-02，tag `v3.26.090212-10026`，main = migrate `3976f3b`）——当前交付**：**legadoC(a3a447e) 基底全面迁移**（8 模块 SK 定制 + 脚本 TTS 语速修复方案B，迁移版 `3.26.0901c`）+ **第三轮代码审查修复**（报告：`companion\代码审查报告-第三轮.md`，迁移后缺失待补）：① **H1 数据安全**：`WebDav` 新增不吞异常的 `existsChecked()`，`AppWebDav.getBookProgress` 拉取失败后连「文件是否存在」都无法判定（弱网/断网）时抛异常中止同步，彻底封死「本地旧进度反向覆盖云端」残余路径；② **M1 崩溃防线**：`ReadBookActivity` 朗读点击回调链 6 处 `error()`/`checkNotNull`/`check` 断言全部改「日志+toast+取消/放弃」；③ **L1 回归回植**：`migration_103_104` 的 `DROP INDEX` 补 `IF EXISTS`；④ **L2**：`BackupConfig` 将 `uiLayoutAlpha` 加入 `ignorePrefKeys` 永久排除备份；⑤ **L3**：删死代码 `readAloudPanelBottomMargin`。产物 `release/legado_sk_3.26.090212c_10026_arm64-v8a.apk`（27,393,550 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：migrate `58ec6ec`（迁移版基线）。**10021 仍为 Latest**，10026 为 Pre。**待真机验证转正**。
-- 下一次交付 versionCode 从 `10027` 递增（10026 Pre 完整验证后按 10021 方式转正，转正后基准更新）。
+- ✅ **10029（`3.26.090502c`）已发布 Pre（2026-09-05，tag `v3.26.090502c-10029`，main = `1c0e2b0`）——当前交付**：① **仿真翻页动画中断卡帧修复**（10028，移植 legadoC `ad5d1610`/`bad674dc`：`HorizontalPageDelegate.abortAnim` 无条件重绘 + 动画中手势接管重绘；模拟器+用户手动验证通过）；② **换源弹出卡片**（`SurfaceStyles.opaqueDialog` 不透明表面变体 + 换源/章节换源对话框 `setLayout(0.92f, 0.85f)` 居中卡片，参考阅读 MAX 观感、不做透明）；③ AGENTS 运行手册迁移后重写 + 10029 沙箱权限排障复盘。产物 `release/legado_sk_3.26.090502c_10029_arm64-v8a.apk`（27,391,911 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：提交 `c7f8bf4`（环境适配）之前 = migrate `d08090c`。10026/10027 仍为 Pre，10021 仍为 Latest。**待真机验证转正**。计划文档：`companion\移植方案-换源弹出卡片.md`。
+- 10028（`3.26.090501c`）为未发布内部测试版（仅含仿真翻页修复），已被 10029 取代。
+- 下一次交付 versionCode 从 `10030` 递增。
 
 每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或 `companion\项目文档.md` 第四节时间线查询，不在本文件累积。
 
@@ -281,7 +282,7 @@ uiautomator2 / ADB
 
 | 项 | 值 |
 |---|---|
-| 代码/构建唯一目录 | `C:\code\ai-code\legado-sk`（当前检出，尚无 `.git`） |
+| 代码/构建唯一目录 | `C:\code\ai-code\legado-sk`（git 仓库，remote = `skxingyu/legado-sk`，main 分支） |
 | JDK 17 | `C:\Users\skxingyu\AndroidDev\jdk-17.0.2` |
 | Android SDK | `C:\Users\skxingyu\AndroidDev\android-sdk`（platforms 34/36；build-tools 34.0.0/36.0.0；cmdline-tools latest） |
 | Gradle | 项目 wrapper `gradlew.bat`（gradle-8.14.4，dist 下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；备用 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` |
@@ -311,6 +312,6 @@ shell 选择：默认 Git Bash（POSIX）；原生 Windows 工具 / `.ps1` / 需
 
 ### 7.3 仓库检出状态与首启清单
 
-- 当前目录 **无 `.git`**：需要做版本管理时先 `git init`，再关联 `git remote add origin <skxingyu/legado-sk>` 并拉取历史（勿把机器路径/`companion\`、`release\` 误提交）。
+- 当前目录已是完整 git 仓库（2026-09-05 `git init` 并对齐 `origin/main` 历史，gh auth 直连推送成功）；提交时勿把机器路径/`companion\`、`release\`、`build_logs\` 误提交。
 - 首次正式编译前：确认 SDK36/build-tools 36 已装（已装）、`android-36` platform 存在；首次 `gradlew.bat` 会自动下载 gradle-8.14.4（联网）。
 - android-dev 高级调试工具链依赖 `.android-dev-venv\`（uiautomator2/frida/adbutils）与 `tools\android-dev\bin\frida-server-17.17.0-...`，本机未就绪；仅当需要 Perfetto/Winscope/Frida 分层调试时再重建，不影响常规编译/模拟器回归。
