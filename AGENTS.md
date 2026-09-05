@@ -1,7 +1,19 @@
 # 阅读SK / legado-sk 项目总则
 
 > 本文件是项目的长期规则来源，只保留可复用的原则、流程、环境约束和当前交付状态；一次性排障过程、界面细节、截图和临时记录不写入这里。
-> 规则以 `AGENTS.md` 为准；配套外部文档（工作目录 `D:\OneDrive\桌面\Ai\legado-sk\`）：`项目文档.md`（方案进度与版本时间线，两文件冲突时以其为最高标准）、`编译注意事项与排错手册.md`（每次编译前必读）。`docs` 下仅保留 `api.md` 与截图。
+> 规则以 `AGENTS.md` 为准。2026-09-04 起在迁移后的电脑上工作：无 D 盘，不再使用 `D:\OneDrive\桌面\Ai\legado-sk\` 外部工作目录，配套文档策略见 §7「当前机器环境与配套文档」。`docs` 下仅保留 `api.md` 与截图。
+> ⚠️ 本文件是随仓库分发的运行手册；其中 §2/§3/§7 含本机路径与设备信息，只在当前机器的检出副本上维护，不要把这些机器专属路径推送到公开仓库。
+
+## 0. 新会话 AGENT 交接速读（凡在本仓库动手前必读）
+
+> 目的：让**下一个新对话的 AGENT**（看不到此前任何会话，只能读工作目录文件）在动手改代码前，无歧义地弄清「项目做了什么、每个版本改了哪些、改哪里不能改错」。本小节为强制入口，按序读完再动代码。
+
+1. **项目全貌与结构** → 读 `companion/项目文档.md`：项目定位/谱系、工程结构、核心改动方向、§2.1「版本时间线」（每个已发布版 versionCode ⇄ 该版实际修改，精确对应）。
+2. **改某个功能/开关/DB 前先反查它由哪个版本引入、有什么红线** → 读 `companion/发布版更新记录.md`：第 0 节「防改错速查」（全局透明度锁 0、进度同步三禁、朗读架构唯一形态=10023、DB 迁移线、R8 永不启用等）、逐版净增量、第 2 节「功能→引入版本」反查表。
+3. **需要作者原始文案佐证** → `companion/发布版更新原文-releasenotes.md`（GitHub Releases 逐版全文备份，可 grep）。
+4. **红线与排错** → 以本文件（AGENTS.md）为准：§4 UI/工程质量、§3 构建版本产物、§6 交付基线；具体历史红线见 §4「功能红线」。
+5. **机器环境/路径** → 本文件 §7「当前机器环境与配套文档」§7.1 环境快照、§7.2 配套文档与缺失项。
+6. ⚠️ 三份 companion 文档在 `.gitignore` 中忽略、不推送公开仓库；只读不随意改动，改动需与对应事实一致。若发现文档与源码事实不符，以源码和 GitHub Releases 为准并先核实再改文档。
 
 ## 1. 核心工作原则
 
@@ -27,14 +39,17 @@
 
 - 所有 `adb` 命令必须显式带 `-s <serial>`；执行前确认目标设备，禁止裸 `adb`。
 - 真机安装统一 `adb -s <serial> install -r legado-sk-arm64-v8a.apk`（同 debug 签名，覆盖升级保数据）；最终验证由用户真机手动完成。
-- 换签名迁移数据走 run-as tar 打包流程：导出必须用 Python subprocess 二进制流（git bash `>` 重定向会 CRLF 污染 tar）；`pm uninstall -k` 不可行（数据绑定签名）。备份在 `D:\OneDrive\桌面\Ai\legado-sk\backup\`。
+- 换签名迁移数据走 run-as tar 打包流程：导出必须用 Python subprocess 二进制流（git bash `>` 重定向会 CRLF 污染 tar）；`pm uninstall -k` 不可行（数据绑定签名）。备份与导出在仓库根的 `backup\`（被 .gitignore 忽略）。
 - 真机问题优先依据用户描述、代码和用户提供的日志排查。
+- ⚠️ 迁移后本机（2026-09-04）`adb devices` 为空：真机并未接入，回归以雷电模拟器为准；真机安装/验证仅当用户已接上设备并明确指示时进行。
 
 ### 雷电模拟器
 
-- APK 安装、运行和调试只使用雷电模拟器（LDPlayer），启动程序路径为 `F:\down\雷电模拟器14去广告绿色版集成面具和LSP框架\雷电模拟器14-v14.0.7.7-去广告绿色版\LDPlayer14\dnplayer.exe`。未启动时可尝试启动；失败则请用户手动打开。（2026-08-21 确认，旧路径 `F:\leidian\LDPlayer14` 已失效）模拟器当前已装 10018，后续覆盖安装版本须 ≥10018。
-- adb 序列号 `emulator-5554`，分辨率 1440x2560，模拟器内已配置 WebDAV。每条 `adb` 命令都必须显式带序列号，例如 `-s emulator-5554`。执行前确认目标确为模拟器；不确定时停止，禁止裸 `adb`。
-- 真实小说优先用于阅读功能验证。`C:\Users\user\Documents\leidian14\Pictures` 与模拟器 Pictures 目录互通，可作为导入素材。
+- APK 安装、运行和调试只使用雷电模拟器（LDPlayer）。**迁移后本机（2026-09-04）使用的 LDPlayer 在 C 盘**，启动程序路径为 `C:\download\down\cloud-down\雷电模拟器14纯净绿色版+狐狸+LSP+微霸\LDPlayer14\dnplayer.exe`（同目录含 `ldconsole.exe`、`adb.exe`；实例 `leidian0`，instanceIndex=0）。未启动时可尝试启动；失败则请用户手动打开。旧的 `F:\down\...\LDPlayer14` 与本机 `F:\leidian\LDPlayer14` 均不再使用。
+- android-dev 工具链统一目标在 `tools\android-dev\target.json`，已改指上述 C 盘 LDPlayer；其 ADB 走环路 `127.0.0.1:5555` + ldconsole 启动序列号校验（见 §4 分层调试），禁止以该环路之外的裸 serial 操作。常规手动 `adb` 序列号仍用 `emulator-5554`，每条命令都必须显式带 `-s`；执行前确认目标确为模拟器，不确定时停止。
+- 分辨率 1440x2560，模拟器内建议配置 WebDAV。每条 `adb` 命令都必须显式带序列号，例如 `-s emulator-5554`。执行前确认目标确为模拟器；不确定时停止，禁止裸 `adb`。
+- 真实小说优先用于阅读功能验证。`C:\Users\skxingyu\Documents\leidian14\Pictures` 与模拟器 Pictures 目录互通，可作为导入素材。
+- ⚠️ 迁移后模拟器为全新实例，未必已装 10018；覆盖安装前先 `adb -s <serial> shell dumpsys package io.legado.app.c` 读已装 versionCode，只允许 ≥ 已装版本的覆盖。
 
 ### 验证闭环
 
@@ -52,37 +67,41 @@
 - 覆盖安装前必须显式传入 `VERSION_CODE` 和 `VERSION_NAME`。新 `VERSION_CODE` 必须比最近一次交付大；`VERSION_NAME` 必须按 GMT+8 编译时刻单调递增，格式为 `3.26.MMddHH`。
 - 正式版 = `app` flavor + `release` buildType（`assembleAppRelease`，包名 `io.legado.app.c`）。`versionName` 需直接传完整值（含 `c` 后缀，如 `3.26.0901c`），无自动加后缀机制；`versionCode` 遵循 SK 独立递增约定（当前基线 10026）。
 - 编译前先从模拟器已安装包确认版本；模拟器不可用时使用第 6 节的最近交付基线。确认新版本后，只删除 `app\build\outputs\apk\app\release` 中对应的旧 APK，绝不删除宽泛目录或源码。
-- 编译前必读工作目录《编译注意事项与排错手册.md》：环境清单、shell 选择策略（bash/PowerShell/Python）、标准编译流程、常见错误对照表、红线清单。
+- 编译前必读 §7 的《编译注意事项与排错手册》（迁移后已并入仓库，见 §7）；若尚未创建，按 §7 指引补充后再编译。
 
-### 本机环境与正式命令
+### 本机环境与正式命令（迁移后 2026-09-04 核对）
 
-- JDK: `D:\code\tool\jdk-17.0.20+8`
-- Android SDK: `D:\code\tool\sdk`（build-tools 实际版本 `35.0.0`）
-- Gradle: `D:\code\tool\gradle-dist\gradle-8.14.4`（源码目录无 gradlew 时直接用该发行版 `bin\gradle.bat`）
-- Gradle user home: `D:\code\tool\gradle-home`
-- 编译目录：`D:\code\legado-sk-migrate`（发布源源码仓库，纯 ASCII `D:\code` 路径，可直接编译；中文路径源码目录仅作展示/参考不可编译）
-- Gradle wrapper: `8.14.4`; compileSdk: `36`
+- 代码/构建唯一目录（无 D 盘，不再分编译树）：`C:\code\ai-code\legado-sk`。⚠️ 该目录当前没有 `.git`（从仓库拉取）；提交需先 `git init` 并关联 `skxingyu/legado-sk`。
+- JDK 17：`C:\Users\skxingyu\AndroidDev\jdk-17.0.2`
+- Android SDK：`C:\Users\skxingyu\AndroidDev\android-sdk`（platforms `android-34`/`android-36`；build-tools `34.0.0`/`36.0.0`）
+- Gradle：用项目 wrapper `gradlew.bat`（distributionUrl = gradle-8.14.4-bin，首次自动下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；本机另有 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` 备用，勿覆盖 wrapper 约定
+- Gradle user home：不显式设置 → 默认 `C:\Users\skxingyu\.gradle`
+- 系统 adb：`C:\Users\skxingyu\AndroidDev\android-sdk\platform-tools\adb.exe`
+- Gradle wrapper: `8.14.4`; AGP `8.13.2`; compileSdk `36`; 依赖/平台已按此装齐
+- 交付 APK（`-Pabi=arm64-v8a`）产物在 `app\build\outputs\apk\app\release`
 
 ```powershell
 $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$env:JAVA_HOME = 'D:\code\tool\jdk-17.0.20+8'
-$env:ANDROID_HOME = 'D:\code\tool\sdk'
-$env:ANDROID_SDK_ROOT = 'D:\code\tool\sdk'
-$env:GRADLE_USER_HOME = 'D:\code\tool\gradle-home'
+$env:JAVA_HOME = 'C:\Users\skxingyu\AndroidDev\jdk-17.0.2'
+$env:ANDROID_HOME = 'C:\Users\skxingyu\AndroidDev\android-sdk'
+$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+# GRADLE_USER_HOME 不设置，走默认 C:\Users\skxingyu\.gradle
 $env:Path = @(
   "$env:JAVA_HOME\bin",
   "$env:ANDROID_HOME\cmdline-tools\latest\bin",
-  "$env:ANDROID_HOME\platform-tools"
+  "$env:ANDROID_HOME\platform-tools",
+  "$env:ANDROID_HOME\build-tools\36.0.0"
 ) + ($env:Path -split ';') -join ';'
 
+Set-Location 'C:\code\ai-code\legado-sk'   # 编译必须在仓库根执行
 $versionCode = <new-version-code>
-$versionName = '3.26.<MMddHH>c' # 完整版本名（含 c 后缀）
-D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppRelease' "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
+$versionName = '3.26.<MMddHH>c'            # 完整版本名（含 c 后缀）
+.\gradlew.bat ':app:assembleAppRelease' "-Pabi=arm64-v8a" "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
 ```
 
-编译成功后必须把新 APK 复制回工作目录：
-1. 覆盖 `D:\OneDrive\桌面\Ai\legado-sk\legado-sk-arm64-v8a.apk`（「当前交付 APK」）。
-2. 按版本命名存入 `D:\OneDrive\桌面\Ai\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a.apk`。
+编译成功后必须把新 APK 收进仓库根已忽略的交付目录：
+1. 覆盖 `C:\code\ai-code\legado-sk\release\legado-sk-arm64-v8a.apk`（「当前交付 APK」，固定名；`/release` 已被 .gitignore 忽略）。
+2. 按版本命名同存于 `C:\code\ai-code\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a.apk`。
 
 ### 长命令和构建失败
 
@@ -93,13 +112,14 @@ D:\code\tool\gradle-dist\gradle-8.14.4\bin\gradle.bat ':app:assembleAppRelease' 
 - 构建无论成功或失败，执行 `.\gradlew.bat --stop` 并按 PID 清理残留构建进程，避免占用内存。
 - 2026-08-15：`HeaderlessDialogChrome` 首次正式编译在 `AccentTextView(context)` 失败，因为该控件构造器强制要求 `AttributeSet?`；读取 Kotlin 报错后改为 `AccentTextView(context, null)`，同版本重编译成功。失败包未产出、未交付。动态创建项目自定义 View 时必须先核对构造器签名，不能假定存在单参构造器。
 - 2026-08-15：首次启动 10608 构建时，把批处理和退出码写入拼在 `cmd /c` 参数中，Windows 报“文件名、目录名或卷标语法不正确”，没有 Gradle 进程、构建日志或 APK。改为由 `.bat` 自己记录退出码，再以 `Start-Process` 直接启动，构建正常。后台构建的重定向/引号错误必须以“未启动”处理，不能等待或误判为 Gradle 卡死。
+- 2026-09-05（10029 编译两次失败复盘）：在 DSH 沙箱 `workspace-write` 会话里启动 `gradlew.bat`，wrapper 阶段即报 `gradle-8.14.4-bin.zip.lck (拒绝访问)` 退出。判别要点：① 报错在 `GradleWrapperMain`/`ExclusiveFileAccessManager` 而非 Gradle 任务 → 不是项目代码或内存问题，不要跑冷编译诊断；② 删锁文件、杀光残留 java 进程后**仍**报同一处拒绝访问，且系统无 java 进程持锁 → 说明不是锁被占用，而是进程根本没有写 `C:\Users\skxingyu\.gradle`（wrapper 锁/缓存/daemon，仓库外用户级目录）的沙箱授权。处理：用 `sandbox_permissions` 放开权限**原样重试同一条编译命令**（pwsh `danger-full-access`，justification 说明 Gradle 必须写 `.gradle`），一次成功。规则：**在本机跑 Gradle 构建（含 `gradlew --stop`）必须默认带放开权限执行**；`workspace-write` 下 Gradle 必失败，不要浪费轮次删锁/杀进程重试。另注意：残留 daemon 清理仍有价值（本次 10028 遗留 4.5GB+3.6GB 两个 java 进程），但它是例行卫生，不是该报错的根因。
 
 ### 产物验证
 
 ```powershell
-$apk = 'D:\code\legado-sk-migrate\app\build\outputs\apk\app\release\legado_sk_<version>_<code>.apk'
-& "$env:ANDROID_HOME\build-tools\36.1.0\aapt.exe" dump badging $apk
-& "$env:ANDROID_HOME\build-tools\36.1.0\apksigner.bat" verify --print-certs $apk
+$apk = 'C:\code\ai-code\legado-sk\app\build\outputs\apk\app\release\legado_sk_<version>_<code>.apk'
+& "$env:ANDROID_HOME\build-tools\36.0.0\aapt.exe" dump badging $apk
+& "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" verify --print-certs $apk
 ```
 
 交付前确认：包名 `io.legado.app.c`、版本号递增、中文名 `阅读SK`、`arm64-v8a`、产物来自 `assembleAppRelease`，且 `apksigner` 退出码为 0。部分 `META-INF` 条目未受签名保护的提示可接受。
@@ -233,8 +253,9 @@ uiautomator2 / ADB
 ## 5. 发布与版本控制
 
 - 发布前重新执行第 3 节的 APK 验证（aapt badging + apksigner verify）。
-- 推送代码到 `skxingyu/legado-sk` 的 main：⚠️ 2026-08-29 起代理端口 31180/31181 已失效；gh CLI 可直连（`gh api` 正常），但 git 直连 GitHub 不通，须**绕过失效代理并携带 gh token 直连推送**（schannel 会报 `SEC_E_NO_CREDENTIALS`，须 `-c http.sslBackend=openssl`，并清空 github.com 特定代理 `http://127.0.0.1:10808`）。migrate 仓库 `origin` 是只读上游 CCSSNE，实际推送用显式 URL（命令见项目文档.md 第九节，`$token = gh auth token`；若目标仓库 shallow，先 `git fetch --unshallow` 补齐历史再推）。
-- 用 gh CLI 分步发布，避免大文件上传中断：先 `gh release create "<tag>" --title "..." --notes-file "<CHANGELOG路径>"`（pre/Beta 版加 `--prerelease`），再 `gh release upload "<tag>" "<APK路径>"`；上传前 `unset HTTPS_PROXY HTTP_PROXY; export GODEBUG=http2client=0`（禁 http2 直连）。
+- ⚠️ 迁移后：下述第 3、4 条里的「migrate 仓库 / 只读上游 CCSSNE / 指定代理端口 31180/31181 与 github.com 代理 10808」是旧机的单向推送环境，本机不复存在。本机检出即 `skxingyu/legado-sk` 目标仓库本身（git init + remote 后直接推 main），推送前先用 `git remote -v` 与代理环境实测确认通道，不要照搬旧机代理参数。
+- 推送代码到 `skxingyu/legado-sk` 的 main：若走 gh CLI 直连可先 `gh api user` 确认可用；git 直连不通时用 gh token + 显式 URL（`$token = gh auth token`；目标仓库若 shallow，先 `git fetch --unshallow`）。具体直连命令写入 `companion\项目文档.md`（缺失时按实况重建）。
+- 用 gh CLI 分步发布，避免大文件上传中断：先 `gh release create "<tag>" --title "..." --notes-file "<CHANGELOG路径>"`（pre/Beta 版加 `--prerelease`），再 `gh release upload "<tag>" "<APK路径>"`；上传大文件前如走代理受阻，按实测 `unset HTTPS_PROXY HTTP_PROXY; export GODEBUG=http2client=0` 处理。
 - tag 格式 `v3.26.<MMddHH>-<versionCode>`（如 `v3.26.082220-10018`）；发布后用 GitHub MCP `get_release_by_tag` 或网页复核 tag、目标提交、资产大小、中文排版与 Latest/prerelease 状态。
 
 ### Git
@@ -247,7 +268,49 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10026（`3.26.090212c`）已发布 Pre（2026-09-02，tag `v3.26.090212-10026`，main = migrate `3976f3b`）——当前交付**：**legadoC(a3a447e) 基底全面迁移**（8 模块 SK 定制 + 脚本 TTS 语速修复方案B，迁移版 `3.26.0901c`）+ **第三轮代码审查修复**（报告：工作目录《代码审查报告-第三轮.md》）：① **H1 数据安全**：`WebDav` 新增不吞异常的 `existsChecked()`，`AppWebDav.getBookProgress` 拉取失败后连「文件是否存在」都无法判定（弱网/断网）时抛异常中止同步，彻底封死「本地旧进度反向覆盖云端」残余路径；② **M1 崩溃防线**：`ReadBookActivity` 朗读点击回调链 6 处 `error()`/`checkNotNull`/`check` 断言全部改「日志+toast+取消/放弃」；③ **L1 回归回植**：`migration_103_104` 的 `DROP INDEX` 补 `IF EXISTS`；④ **L2**：`BackupConfig` 将 `uiLayoutAlpha` 加入 `ignorePrefKeys` 永久排除备份；⑤ **L3**：删死代码 `readAloudPanelBottomMargin`。产物 `release/legado_sk_3.26.090212c_10026_arm64-v8a.apk`（27,393,550 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：migrate `58ec6ec`（迁移版基线）。**10021 仍为 Latest**，10026 为 Pre。**待真机验证转正**。
+- ✅ **10026（`3.26.090212c`）已发布 Pre（2026-09-02，tag `v3.26.090212-10026`，main = migrate `3976f3b`）——当前交付**：**legadoC(a3a447e) 基底全面迁移**（8 模块 SK 定制 + 脚本 TTS 语速修复方案B，迁移版 `3.26.0901c`）+ **第三轮代码审查修复**（报告：`companion\代码审查报告-第三轮.md`，迁移后缺失待补）：① **H1 数据安全**：`WebDav` 新增不吞异常的 `existsChecked()`，`AppWebDav.getBookProgress` 拉取失败后连「文件是否存在」都无法判定（弱网/断网）时抛异常中止同步，彻底封死「本地旧进度反向覆盖云端」残余路径；② **M1 崩溃防线**：`ReadBookActivity` 朗读点击回调链 6 处 `error()`/`checkNotNull`/`check` 断言全部改「日志+toast+取消/放弃」；③ **L1 回归回植**：`migration_103_104` 的 `DROP INDEX` 补 `IF EXISTS`；④ **L2**：`BackupConfig` 将 `uiLayoutAlpha` 加入 `ignorePrefKeys` 永久排除备份；⑤ **L3**：删死代码 `readAloudPanelBottomMargin`。产物 `release/legado_sk_3.26.090212c_10026_arm64-v8a.apk`（27,393,550 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：migrate `58ec6ec`（迁移版基线）。**10021 仍为 Latest**，10026 为 Pre。**待真机验证转正**。
 - 下一次交付 versionCode 从 `10027` 递增（10026 Pre 完整验证后按 10021 方式转正，转正后基准更新）。
 
-每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或工作目录《项目文档.md》第四节时间线查询，不在本文件累积。
+每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或 `companion\项目文档.md` 第四节时间线查询，不在本文件累积。
+
+## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
+
+> 迁移后的电脑为全新环境：无 D 盘，原先 `D:\code\...`、`D:\OneDrive\桌面\Ai\legado-sk\`、`F:\leidian\LDPlayer14`、`F:\down\雷电模拟器14...` 均已失效或弃用。本节统一登记本机事实；若某条与实际不符，先核实再改，勿让 AGENTS 出现悬空路径。
+
+### 7.1 环境快照（已逐项核对）
+
+| 项 | 值 |
+|---|---|
+| 代码/构建唯一目录 | `C:\code\ai-code\legado-sk`（当前检出，尚无 `.git`） |
+| JDK 17 | `C:\Users\skxingyu\AndroidDev\jdk-17.0.2` |
+| Android SDK | `C:\Users\skxingyu\AndroidDev\android-sdk`（platforms 34/36；build-tools 34.0.0/36.0.0；cmdline-tools latest） |
+| Gradle | 项目 wrapper `gradlew.bat`（gradle-8.14.4，dist 下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；备用 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` |
+| Gradle user home | 默认 `C:\Users\skxingyu\.gradle`（不显式设置） |
+| 系统 adb | `C:\Users\skxingyu\AndroidDev\android-sdk\platform-tools\adb.exe` |
+| 雷电模拟器（C 盘） | `C:\download\down\cloud-down\雷电模拟器14纯净绿色版+狐狸+LSP+微霸\LDPlayer14`（实例 `leidian0`=index 0） |
+| sdkmanager | `cmdline-tools\latest\bin\sdkmanager.bat`（已装 android-36 / build-tools 36.0.0） |
+
+shell 选择：默认 Git Bash（POSIX）；原生 Windows 工具 / `.ps1` / 需 PowerShell 场景改用 Pwsh。
+
+### 7.2 配套工作文档（从外部工作目录收敛进仓库）
+
+原散落在 `D:\OneDrive\桌面\Ai\legado-sk\` 的配套文档，迁移后统一收进 **`C:\code\ai-code\legado-sk\companion\`**（含 backup、release 也在 gitignored 位置）。该目录已在 `.gitignore` 忽略，含机器信息，绝不推送公开仓库。
+
+**现有 companion 工作文档**（新会话先读 §0；此处为目录概览，避免歧义）：
+- `companion\项目文档.md` —— 项目概览 + **§2.1 版本时间线**（版本 ⇄ 修改精确对应，已建）。
+- `companion\发布版更新记录.md` —— 逐版净增量 + 第 0 节防改错速查 / 第 2 节功能→版本反查（已建）。
+- `companion\发布版更新原文-releasenotes.md` —— GitHub Releases 逐版作者原文全文（已建，备份可 grep）。
+
+**当前仍缺失、待重建/迁移的配套文档**（AGENTS 多处引用但当前检出不存在，不要凭空假设其内容）：
+- `companion\编译注意事项与排错手册.md` —— 每次编译前必读；缺失时按 §3「本机环境与正式命令」已含内容执行，重建后补回。
+- `companion\代码审查报告-第三轮.md` —— §6 交付记录引用的审查报告，缺失。
+- `release\legado_sk_3.26.090212c_10026_arm64-v8a.apk` —— §6 记录的 10026 产物，当前检出没有；需从 GitHub Release 重新下载。
+- `backup\` —— 真机数据备份，本机尚无。
+
+**用途约定**：AGENTS.md 本身随公开仓库分发（其中 §2/§3/§7 为机器专属运行信息）；凡机器/本机信息应只写进 AGENTS 检出副本与 `companion\`，不要新增进公开可读的 README/docs。本机 `~/.dsh/AGENTS.md` 为本机级总则，与仓库 AGENTS.md 并行。
+
+### 7.3 仓库检出状态与首启清单
+
+- 当前目录 **无 `.git`**：需要做版本管理时先 `git init`，再关联 `git remote add origin <skxingyu/legado-sk>` 并拉取历史（勿把机器路径/`companion\`、`release\` 误提交）。
+- 首次正式编译前：确认 SDK36/build-tools 36 已装（已装）、`android-36` platform 存在；首次 `gradlew.bat` 会自动下载 gradle-8.14.4（联网）。
+- android-dev 高级调试工具链依赖 `.android-dev-venv\`（uiautomator2/frida/adbutils）与 `tools\android-dev\bin\frida-server-17.17.0-...`，本机未就绪；仅当需要 Perfetto/Winscope/Frida 分层调试时再重建，不影响常规编译/模拟器回归。
