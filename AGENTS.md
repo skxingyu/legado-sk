@@ -268,9 +268,9 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10029（`3.26.090502c`）已发布 Pre（2026-09-05，tag `v3.26.090502c-10029`，main = `1c0e2b0`）——当前交付**：① **仿真翻页动画中断卡帧修复**（10028，移植 legadoC `ad5d1610`/`bad674dc`：`HorizontalPageDelegate.abortAnim` 无条件重绘 + 动画中手势接管重绘；模拟器+用户手动验证通过）；② **换源弹出卡片**（`SurfaceStyles.opaqueDialog` 不透明表面变体 + 换源/章节换源对话框 `setLayout(0.92f, 0.85f)` 居中卡片，参考阅读 MAX 观感、不做透明）；③ AGENTS 运行手册迁移后重写 + 10029 沙箱权限排障复盘。产物 `release/legado_sk_3.26.090502c_10029_arm64-v8a.apk`（27,391,911 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常。**回退边界**：提交 `c7f8bf4`（环境适配）之前 = migrate `d08090c`。10026/10027 仍为 Pre，10021 仍为 Latest。**待真机验证转正**。计划文档：`companion\移植方案-换源弹出卡片.md`。
+- ✅ **10030（`3.26.090516c`）已发布 Pre（2026-09-05，tag `v3.26.090516c-10030`，main = `f29b28b`）——当前交付**：**第六轮代码审查零风险批次**：① **堵全屏位图泄漏**（`SurfaceBackdrop` 迟到 PixelCopy 回调在超时兜底后一律 `recycleSafely()`，修复 settle 后代际仍有效时位图既不回收也不使用的泄漏）；② **本地 TXT 解析单例竞态加固**（`TextFile.getChapterList` 补 `@Synchronized`，与 `getContent` 对齐）；③ **换源「指定书源搜索」防静默失败**（书源缺失改 toast 提示而非 `!!` NPE 被协程吞掉）。产物 `release/legado_sk_3.26.090516c_10030_arm64-v8a.apk`（27,392,271 字节），aapt + apksigner 通过；模拟器覆盖安装冷启动正常，用户手动回归通过。**回退边界**：`2d822af`（H3 位图修复，10030 首个提交）之前 = 10029 交付 `1c0e2b0`。10026/10027/10029 仍为 Pre，10021 仍为 Latest。**待真机验证转正**。
 - 10028（`3.26.090501c`）为未发布内部测试版（仅含仿真翻页修复），已被 10029 取代。
-- 下一次交付 versionCode 从 `10030` 递增。
+- 下一次交付 versionCode 从 `10031` 递增。
 
 每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或 `companion\项目文档.md` 第四节时间线查询，不在本文件累积。
 
