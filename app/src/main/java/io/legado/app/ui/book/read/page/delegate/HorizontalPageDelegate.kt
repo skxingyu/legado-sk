@@ -110,6 +110,7 @@ abstract class HorizontalPageDelegate(readView: ReadView) : PageDelegate(readVie
     }
 
     override fun abortAnim() {
+        val animating = isRunning || !scroller.isFinished
         isStarted = false
         isMoved = false
         isRunning = false
@@ -118,10 +119,17 @@ abstract class HorizontalPageDelegate(readView: ReadView) : PageDelegate(readVie
             scroller.abortAnimation()
             if (!isCancel) {
                 readView.fillPage(mDirection)
-                readView.invalidate()
             }
+            //无论中断的是完成动画还是回拉动画，都必须重绘：
+            //回拉动画中断时若不重绘，屏幕会停留在中断瞬间的半卷页帧上（翻页卡在中间）
+            readView.invalidate()
         } else {
             readView.isAbortAnim = false
+            //拖拽进行中被接管（如下拉书签手势抢占）时同样要重绘，
+            //否则卷页停留在中断瞬间的位置，页面表现成卡死
+            if (animating) {
+                readView.invalidate()
+            }
         }
     }
 
