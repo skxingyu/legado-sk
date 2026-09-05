@@ -40,6 +40,18 @@ object SurfaceStyles {
         )
     }
 
+    /**
+     * 不透明弹窗表面：纯色圆角、无模糊。用于内容密集、需要稳定对比度的功能弹窗（如换源卡片）。
+     */
+    fun opaqueDialog(context: Context, corners: SurfaceCorners = SurfaceCorners.ALL): SurfaceStyle {
+        return SurfaceStyle(
+            tintColor = ContextCompat.getColor(context, R.color.dialog_surface),
+            cornerRadiusPx = UiCorner.compactSurfaceRadius(context),
+            corners = corners,
+            blurRadiusPx = 0
+        )
+    }
+
     fun popup(context: Context): SurfaceStyle = dialog(context)
 
     fun reading(
