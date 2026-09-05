@@ -24,4 +24,4 @@ $qemuLabel = if ([string]::IsNullOrWhiteSpace($qemu)) { '<unset; LDPlayer proces
 Write-Output "Environment verification passed"
 Write-Output "  LDPlayer: $model / Android $release / $abi / ro.kernel.qemu=$qemuLabel"
 Write-Output "  Perfetto: $((& $adb -s $env:LEIDIAN_SERIAL shell command -v perfetto).Trim())"
-Write-Output "  APK output: $script:RepoRoot\app\build\outputs\apk\app\c"
+Write-Output "  APK output: $script:RepoRoot\app\build\outputs\apk\app\release"

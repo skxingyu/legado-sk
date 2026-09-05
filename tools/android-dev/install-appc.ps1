@@ -6,12 +6,12 @@ $adb = Join-Path $env:LEIDIAN_HOME 'adb.exe'
 $aapt = Join-Path $env:ANDROID_HOME 'build-tools\36.0.0\aapt.exe'
 $apksigner = Join-Path $env:ANDROID_HOME 'build-tools\36.0.0\apksigner.bat'
 if ([string]::IsNullOrWhiteSpace($Apk)) {
-    $Apk = Get-ChildItem (Join-Path $script:RepoRoot 'app\build\outputs\apk\app\c') -Filter '*.apk' -File |
+    $Apk = Get-ChildItem (Join-Path $script:RepoRoot 'app\build\outputs\apk\app\release') -Filter '*.apk' -File |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
-if (-not $Apk -or -not (Test-Path $Apk)) { throw 'No appC APK found' }
+if (-not $Apk -or -not (Test-Path $Apk)) { throw 'No appC release APK found' }
 $apkFullPath = (Resolve-Path $Apk).Path
-if ($apkFullPath -notmatch '\\app\\build\\outputs\\apk\\app\\c\\') { throw "Refusing APK outside appC output: $apkFullPath" }
+if ($apkFullPath -notmatch '\\app\\build\\outputs\\apk\\app\\release\\') { throw "Refusing APK outside appC release output: $apkFullPath" }
 
 $badging = & $aapt dump badging $apkFullPath
 $packageMatch = [regex]::Match(($badging -join "`n"), "package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'")
