@@ -1105,13 +1105,17 @@ class HttpReadAloudService : BaseReadAloudService(),
                 return@launch
             }
             val duration = exoPlayer.duration
-            val sleep = if (duration > 0) {
+            // 播放端变速（脚本引擎 / 无服务端语速的 HTTP 引擎）会让真实听感快于墙钟，
+            // 句内过界发布步长须按当前播放速度折算，否则跨页位置事件滞后于听感。
+            val playbackRate = exoPlayer.playbackParameters.speed.coerceAtLeast(0.1f)
+            val charDurationMs = if (duration > 0) {
                 (duration / speakTextLength).also {
                     lastCharDurationMs = it
                 }
             } else {
                 lastCharDurationMs
-            }.coerceAtLeast(1L)
+            }
+            val sleep = (charDurationMs / playbackRate).toLong().coerceAtLeast(1L)
             val start = if (duration > 0) {
                 (speakTextLength.toLong() * exoPlayer.currentPosition / duration).toInt()
             } else {
@@ -1139,6 +1143,8 @@ class HttpReadAloudService : BaseReadAloudService(),
         if (ReadAloud.currentScriptTtsEngine() != null) {
             // 脚本引擎：语速由本地播放倍速实现，即时生效，无需中断与重新合成
             applyPlaybackSpeedForEngine()
+            // 变速后重启句内轮询，让过界发布步长按新播放速度折算立即生效
+            if (!pause && isRun) upPlayPos()
             return
         }
         if (!isRun || contentList.isEmpty() || httpTtsSnapshot == null) {
@@ -1147,6 +1153,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         if (!httpTtsSupportsServerSpeed(httpTtsSnapshot)) {
             // 服务端不响应语速的引擎：播放端倍速兜底，即时生效，避免无谓的网络重启
             applyPlaybackSpeedForEngine()
+            if (!pause) upPlayPos()
             return
         }
         cancelHttpWork()
