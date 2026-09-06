@@ -89,6 +89,14 @@ object ReviewSnapshotCapture {
     private const val EXPAND_ROUND_INTERVAL_MS = 800L
     /** 连续几轮稳定才判定完成（含慢加载评论） */
     private const val STABLE_ROUNDS_TO_FINISH = 3
+    /**
+     * 兜底强展轮数上限：穷尽展开稳定收口后，对仍残留的“楼中楼/查看回复/展开N条回复”
+     * 折叠项额外反复扫描的轮数上限。仍整体受 PAGE_EXECUTION_TIMEOUT_MS 看门狗约束，
+     * 这里只是 Java 侧的独立上限，避免极端页面把整个执行预算耗在兜底上。
+     */
+    private const val MAX_FORCE_EXPAND_ROUNDS = 12
+    /** 兜底强展连续几轮无新点击即判定收口完成，进入资源冻结。 */
+    private const val FORCE_EXPAND_STABLE_ROUNDS = 2
     /** Resource budget for one complete offline snapshot. Budget excess is a visible failure. */
     private const val MAX_SNAPSHOT_RESOURCES = 200
     private const val MAX_TOTAL_RESOURCE_BYTES = 30L * 1024 * 1024
@@ -498,6 +506,10 @@ object ReviewSnapshotCapture {
         private var lastTextLen = -1
         private var lastHeight = -1
         private var lastNodes = -1
+        /** 兜底强展已执行的轮数（穷尽展开收口后的补充扫描，session 只跑一次）。 */
+        private var forceExpandRounds = 0
+        /** 兜底强展连续几轮无点击的计数，用于提前收口。 */
+        private var forceExpandStableRounds = 0
 
         private var jsInjectedForPage = false
         private val heavyStagePermitHeld = AtomicBoolean(false)
@@ -774,7 +786,7 @@ object ReviewSnapshotCapture {
                         // 页面还未就绪：下一轮再试
                         expandRounds++
                         if (expandRounds >= MAX_EXPAND_ROUNDS) {
-                            inlineResources()
+                            forceExpandRemaining()
                         } else {
                             mHandler.postDelayed({ expandRound() }, EXPAND_ROUND_INTERVAL_MS)
                         }
@@ -793,7 +805,7 @@ object ReviewSnapshotCapture {
                     stableRounds = if (stable) stableRounds + 1 else 0
                     expandRounds++
                     if (stableRounds >= STABLE_ROUNDS_TO_FINISH || expandRounds >= MAX_EXPAND_ROUNDS) {
-                        inlineResources()
+                        forceExpandRemaining()
                     } else {
                         mHandler.postDelayed({ expandRound() }, EXPAND_ROUND_INTERVAL_MS)
                     }
@@ -814,6 +826,65 @@ object ReviewSnapshotCapture {
                     nodes = (obj?.get("n") as? Double)?.toInt() ?: 0
                 )
             }.getOrNull()
+        }
+
+        /** 兜底强展单轮返回的点击数（用于判定是否收口）。 */
+        private data class ForceExpandStats(val clicked: Int)
+
+        private fun parseForceExpandStats(json: String?): ForceExpandStats? {
+            json ?: return null
+            return runCatching {
+                val s = StringEscapeUtils.unescapeJson(json).trim('"')
+                if (s == "null") return null
+                val obj = GSON.fromJson(s, Map::class.java)
+                ForceExpandStats((obj?.get("c") as? Double)?.toInt() ?: 0)
+            }.getOrNull()
+        }
+
+        /**
+         * 序列化前的“兜底强展”：在穷尽展开稳定收口之后、进入资源冻结之前，把仍残留的
+         * 楼中楼/折叠回复 toggle（“展开N条回复/查看更多回复/查看回复”等，区别于页面底部
+         * “加载更多”翻页）平铺到最内层。
+         *
+         * 时序点为何选在这里：
+         * - [expandRound] 的穷尽展开受“每轮最多 6 个 + MAX_EXPAND_ROUNDS”限制，某些平台的
+         *   深层楼中楼会漏网，以折叠 DOM 残留进快照，离线查看时“点不动”。
+         * - 快照内容由 [inlineResources] 里 COLLECT_RESOURCES_JS 的 cloneNode(true) 冻结成
+         *   window.__legadoReviewSnapshotRoot 那一刻定型，此后所有操作都只针对这份脱离活页面的
+         *   副本。因此兜底强展必须发生在该冻结之前、仍能在真实活 DOM 上点击；这里正是在
+         *   PAGE_EXECUTION 阶段（inlineResources 里的 startQueueWaitStage 才切阶段），仍在
+         *   60s PAGE_EXECUTION_TIMEOUT_MS 看门狗覆盖内，故不会单独无限期拖累抓取。
+         *
+         * 展开循环重入防护：
+         * - FORCE_EXPAND_REPLIES_JS 在 click 前给每个元素打 data-legado-force-expanded 标记，
+         *   后续所有轮都跳过带标记的元素；任何 toggle 至多被强展一次。
+         * - 否则一个“点了会立刻收起/展开失败又复原”的 toggle 会每轮都被重复点击，形成
+         *   “展开→收起→再展开”死循环，最终快照反而永久停留在收起态。
+         */
+        private fun forceExpandRemaining() {
+            if (destroyed) return
+            webView.evaluateJavascript(FORCE_EXPAND_REPLIES_JS) { json ->
+                mHandler.post {
+                    if (destroyed) return@post
+                    val stats = parseForceExpandStats(json)
+                    if (stats == null) {
+                        // 页面在收口瞬间已不可轮询（例如看门狗已切走）：不冒险反复兜底，
+                        // 直接进入既有冻结流程，与改动前行为等价。
+                        inlineResources()
+                        return@post
+                    }
+                    totalExpandClicks += stats.clicked
+                    forceExpandStableRounds = if (stats.clicked == 0) forceExpandStableRounds + 1 else 0
+                    forceExpandRounds++
+                    if (forceExpandStableRounds >= FORCE_EXPAND_STABLE_ROUNDS ||
+                        forceExpandRounds >= MAX_FORCE_EXPAND_ROUNDS
+                    ) {
+                        inlineResources()
+                    } else {
+                        mHandler.postDelayed({ forceExpandRemaining() }, EXPAND_ROUND_INTERVAL_MS)
+                    }
+                }
+            }
         }
 
         /** 收集图片与样式表并内联，然后取最终 HTML */
@@ -1567,6 +1638,40 @@ object ReviewSnapshotCapture {
             "var h=document.body?document.body.scrollHeight:0;" +
             "var n=document.getElementsByTagName('*').length;" +
             "return JSON.stringify({c:clicked,t:document.body?document.body.innerText.length:0,h:h,n:n});" +
+            "})()"
+
+    /**
+     * 序列化前的兜底强展脚本：穷尽展开收口后仍残留的楼中楼/折叠回复 toggle 平铺到最内层。
+     *
+     * 与 EXPAND_JS 的区别与用意：
+     * - 无“每轮最多 6 个”上限（该上限是 EXPAND_JS 避免一轮抢点太多、给异步加载留节奏，
+     *   却也让深层楼中楼可能在 MAX_EXPAND_ROUNDS 前没被扫到）；兜底轮点尽量多。
+     * - 文本命中“展开类”且不命中“收起类”词，避免误点收起；仍保留可见性与子树约束。
+     * - 防重入是本脚本的关键：click 前打 data-legado-force-expanded 标记并跳过已标记元素，
+     *   任何 toggle 至多被点一次，杜绝“展开→收起→再展开”的无限往返把快照留在收起态。
+     */
+    private const val FORCE_EXPAND_REPLIES_JS =
+        "(function(){" +
+            "var expandRe=/(展开|更多回复|查看回复|查看更多|查看全部|显示全部|继续阅读|load\\s*more|show\\s*more|view\\s*more|expand)/i;" +
+            "var collapseRe=/(收起|折叠|collapse|hide\\s*(reply|comment|all))/i;" +
+            "var clicked=0;" +
+            "var els=document.querySelectorAll('a,button,[role=\"button\"],[onclick],div,span,p');" +
+            "for(var i=0;i<els.length;i++){var el=els[i];" +
+            "if(el.getAttribute('data-legado-force-expanded'))continue;" +
+            "var t=(el.innerText||'').trim();" +
+            "if(!t||t.length>24||!expandRe.test(t)||collapseRe.test(t))continue;" +
+            "var r=el.getBoundingClientRect();" +
+            "if(r.width<1||r.height<1)continue;" +
+            "if(el.children.length>2)continue;" +
+            "el.setAttribute('data-legado-force-expanded','1');" +
+            "el.scrollIntoView({block:'center'});" +
+            "try{el.click();}catch(e){}" +
+            "try{el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));" +
+            "el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));" +
+            "el.dispatchEvent(new TouchEvent('touchend',{bubbles:true}));}catch(e){}" +
+            "clicked++;}" +
+            "try{window.scrollTo(0,document.body?document.body.scrollHeight:0);}catch(e){}" +
+            "return JSON.stringify({c:clicked});" +
             "})()"
 
     /** Shared DOM classifier for collection and inlining so each image obeys the same switch. */
