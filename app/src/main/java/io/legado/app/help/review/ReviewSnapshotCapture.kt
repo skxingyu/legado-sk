@@ -1646,18 +1646,43 @@ object ReviewSnapshotCapture {
      * 与 EXPAND_JS 的区别与用意：
      * - 无“每轮最多 6 个”上限（该上限是 EXPAND_JS 避免一轮抢点太多、给异步加载留节奏，
      *   却也让深层楼中楼可能在 MAX_EXPAND_ROUNDS 前没被扫到）；兜底轮点尽量多。
-     * - 文本命中“展开类”且不命中“收起类”词，避免误点收起；仍保留可见性与子树约束。
-     * - 防重入是本脚本的关键：click 前打 data-legado-force-expanded 标记并跳过已标记元素，
-     *   任何 toggle 至多被点一次，杜绝“展开→收起→再展开”的无限往返把快照留在收起态。
+     * - 两段式：一) 结构定位契约类 .reply-toggle（楼中楼展开开关），直接把它后面
+     *   display:none 的回复容器(.replies-container)显示出来。起因是实测本平台“1 条回复”这类
+     *   reply toggle 从不被旧版纯文本正则匹配（expandRe 只有“展开/查看回复/查看更多”等，
+     *   没有“N 条回复”），导致强展从没真正展开过任何楼中楼；而回复 DOM 其实早已预置在收起的
+     *   容器里（非点击懒加载），强制显示即可让回复进入冻结快照，纯 DOM 操作、不依赖 toggle
+     *   事件与异步、无往返风险。
+     *   二) 文本兜底，覆盖没有 .reply-toggle 契约类名的平台：命中“展开类”且不命中“收起类”词
+     *   的可点击元素。
+     * - 防重入是本脚本的关键：处理前打 data-legado-force-expanded 标记并跳过已标记元素，
+     *   任何 toggle 至多被处理一次，杜绝“展开→收起→再展开”的无限往返把快照留在收起态。
      */
     private const val FORCE_EXPAND_REPLIES_JS =
         "(function(){" +
-            "var expandRe=/(展开|更多回复|查看回复|查看更多|查看全部|显示全部|继续阅读|load\\s*more|show\\s*more|view\\s*more|expand)/i;" +
+            "var expandRe=/(展开|更多回复|查看回复|查看更多|查看全部|显示全部|继续阅读|load\\s*more|show\\s*more|view\\s*more|expand|\\d+\\s*条回复|\\d+\\s*个回复|\\d+\\s*楼回复)/i;" +
             "var collapseRe=/(收起|折叠|collapse|hide\\s*(reply|comment|all))/i;" +
             "var clicked=0;" +
+            // 一) 结构定位优先：平台契约类 .reply-toggle 是楼中楼展开开关，其后兄弟 .replies-container
+            //    已预置回复 DOM（抓取时回复并非懒加载，只是容器 display:none 收起）。
+            //    直接把它显示出来即可让回复在冻结快照里可见——纯 DOM 操作，不依赖 toggle 事件与异步，
+            //    也杜绝“点击后再收起”的往返。文本正则曾漏掉“N 条回复”类按钮导致强展从未真正展开过。
+            "document.querySelectorAll('.reply-toggle').forEach(function(t){" +
+            "if(t.getAttribute('data-legado-force-expanded'))return;" +
+            "var box=t.nextElementSibling;" +
+            "if(!box)return;" +
+            "var st=box.style?box.style.display:'';" +
+            "if(st==='none'||!st){" +
+            "box.style.display='block';" +
+            "if(t.classList)t.classList.add('open');" +
+            "t.setAttribute('data-legado-force-expanded','1');" +
+            "clicked++;}});" +
+            // 二) 文本兜底：命中展开类词的可点击元素（覆盖无 .reply-toggle 契约类名的平台）
             "var els=document.querySelectorAll('a,button,[role=\"button\"],[onclick],div,span,p');" +
             "for(var i=0;i<els.length;i++){var el=els[i];" +
             "if(el.getAttribute('data-legado-force-expanded'))continue;" +
+            "var anc=el.parentElement,skip=false;" +
+            "while(anc){if(anc.getAttribute&&anc.getAttribute('data-legado-force-expanded')){skip=true;break;}anc=anc.parentElement;}" +
+            "if(skip)continue;" +
             "var t=(el.innerText||'').trim();" +
             "if(!t||t.length>24||!expandRe.test(t)||collapseRe.test(t))continue;" +
             "var r=el.getBoundingClientRect();" +
