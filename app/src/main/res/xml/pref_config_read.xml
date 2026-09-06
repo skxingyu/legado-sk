@@ -413,6 +413,13 @@
         android:title="@string/comment_cache_concurrency"
         app:iconSpaceReserved="false" />
 
+    <io.legado.app.lib.prefs.Preference
+        android:dependency="syncCacheReview"
+        android:key="reviewCaptureConcurrency"
+        android:summary="@string/review_capture_concurrency_summary"
+        android:title="@string/review_capture_concurrency"
+        app:iconSpaceReserved="false" />
+
     <io.legado.app.lib.prefs.SwitchPreference
         android:defaultValue="false"
         android:key="ttsCacheIncludeInPackage"

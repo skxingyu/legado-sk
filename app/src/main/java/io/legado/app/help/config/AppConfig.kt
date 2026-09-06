@@ -1159,6 +1159,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.reviewCacheConcurrency, value)
         }
 
+    /**
+     * 评论快照抓取全局流水线并发上限（单章可并发的按钮 Capture 数上限，
+     * 也是整个进程同时进行的评论页抓取数上限）。默认 4、钳制 1..4，
+     * 与 MoreConfigDialog 显示/输入范围一致。
+     */
+    var reviewCaptureConcurrency: Int
+        get() = appCtx.getPrefInt(PreferKey.reviewCaptureConcurrency, 4).coerceIn(1, 4)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.reviewCaptureConcurrency, value.coerceIn(1, 4))
+        }
+
     /** 评论打开方式：network / snapshot_first / snapshot_only */
     val reviewOpenMode: String
         get() = appCtx.getPrefString(PreferKey.reviewOpenMode, ReviewOpenMode.NETWORK)

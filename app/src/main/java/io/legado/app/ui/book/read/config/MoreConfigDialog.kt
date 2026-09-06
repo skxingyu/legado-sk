@@ -130,6 +130,7 @@ class MoreConfigDialog : BaseReaderSheetPrefDialogFragment() {
             upPreferenceSummary(PreferKey.pageAnimationSpeed, AppConfig.pageAnimationSpeed.toString())
             upPreferenceSummary(PreferKey.keyPageAnimationSpeed, AppConfig.keyPageAnimationSpeed.toString())
             upPreferenceSummary(PreferKey.reviewCacheConcurrency, AppConfig.reviewResourceDownloadConcurrency.toString())
+            upPreferenceSummary(PreferKey.reviewCaptureConcurrency, AppConfig.reviewCaptureConcurrency.toString())
             upReviewCompressionSummary(
                 PreferKey.compressReviewAvatars,
                 AppConfig.reviewAvatarCompressionMaxKb
@@ -280,6 +281,7 @@ class MoreConfigDialog : BaseReaderSheetPrefDialogFragment() {
             findPreference<Preference>(PreferKey.cacheReviewImages)?.isVisible = cacheReview
             findPreference<Preference>(PreferKey.compressReviewImages)?.isVisible = cacheImages
             findPreference<Preference>(PreferKey.reviewCacheConcurrency)?.isVisible = cacheReview
+            findPreference<Preference>(PreferKey.reviewCaptureConcurrency)?.isVisible = cacheReview
         }
 
         private fun showReviewCompressionSizeInput(isAvatar: Boolean, preferenceKey: String) {
@@ -400,6 +402,21 @@ class MoreConfigDialog : BaseReaderSheetPrefDialogFragment() {
                         upPreferenceSummary(
                             PreferKey.reviewCacheConcurrency,
                             AppConfig.reviewResourceDownloadConcurrency.toString()
+                        )
+                    }
+                }
+
+                PreferKey.reviewCaptureConcurrency -> {
+                    showIntegerInputDialog(
+                        title = R.string.review_capture_concurrency,
+                        currentValue = AppConfig.reviewCaptureConcurrency,
+                        validRange = 1..4,
+                        defaultValue = 4
+                    ) {
+                        AppConfig.reviewCaptureConcurrency = it
+                        upPreferenceSummary(
+                            PreferKey.reviewCaptureConcurrency,
+                            AppConfig.reviewCaptureConcurrency.toString()
                         )
                     }
                 }
