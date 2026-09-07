@@ -7,7 +7,6 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
-import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
@@ -394,9 +393,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
-        Looper.myQueue().addIdleHandler {
+        // 进书加载提前到布局完成时执行：不再挂在主线程 IdleHandler 上排队，
+        // 避免被在线书缓存等后台事件消息插队，进书更快（移植 legadoC 9c23b7e7）。
+        binding.readView.doOnLayout {
             viewModel.initData(intent)
-            false
         }
         justInitData = true
     }
