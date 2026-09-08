@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.RadioButton
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.viewModels
@@ -14,6 +15,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
@@ -21,6 +23,10 @@ import io.legado.app.databinding.DialogRecyclerViewBinding
 import io.legado.app.databinding.ItemHttpTtsBinding
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.http.decompressed
+import io.legado.app.help.http.newCallResponseBody
+import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.http.text
 import io.legado.app.help.tts.TtsEngineImportConflictAction
 import io.legado.app.help.tts.TtsEngineImportConflictException
 import io.legado.app.help.tts.TtsEngineStore
@@ -404,8 +410,57 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
                 mode = HandleFileContract.FILE
                 allowExtensions = arrayOf("txt", "json", "js")
             }
+            R.id.menu_import_net -> importNetTtsAlert()
         }
         return true
+    }
+
+    /** 网络导入：弹窗输入引擎 JSON 网址，拉取后按内容分流（脚本引擎 / HTTP 引擎）。 */
+    private fun importNetTtsAlert() {
+        alert(R.string.advanced_title_input_url) {
+            val input = EditText(requireContext()).apply {
+                hint = "https://..."
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_URI
+            }
+            customView { input }
+            okButton {
+                val url = input.text?.toString().orEmpty().trim()
+                if (url.isNotEmpty()) importNetTts(url)
+            }
+            cancelButton()
+        }
+    }
+
+    private fun importNetTts(url: String) {
+        lifecycleScope.launch {
+            runCatching {
+                withContext(IO) {
+                    okHttpClient.newCallResponseBody {
+                        if (url.endsWith("#requestWithoutUA")) {
+                            url(url.substringBeforeLast("#requestWithoutUA"))
+                            header(AppConst.UA_NAME, "null")
+                        } else {
+                            url(url)
+                        }
+                    }.decompressed().text()
+                }
+            }.onSuccess { source ->
+                when {
+                    source.isNullOrBlank() -> toastOnUi(R.string.tts_engine_v2_import_empty)
+                    TtsEngineStore.isScriptEngineImport(source) ->
+                        importScriptEngineText(source, TtsEngineImportConflictAction.ASK)
+                    else ->
+                        // HTTP 源不经过脚本解析或重序列化，保留既有社区格式及选择流程。
+                        showDialogFragment(ImportHttpTtsDialog(source))
+                }
+            }.onFailure { error ->
+                AppLog.put("网络导入朗读引擎失败：$url\n${error.localizedMessage}", error)
+                toastOnUi(
+                    getString(R.string.advanced_title_import_net_failed, error.localizedMessage.orEmpty())
+                )
+            }
+        }
     }
 
     fun clearCache() {
