@@ -24,9 +24,8 @@ data class BookProgress(
     )
 
     fun compareWith(book: Book): BookProgressComparison {
+        // SK 定制：只按阅读位置比较，忽略时间戳，避免多设备同步因时间差异互相覆盖
         return when {
-            durChapterTime > book.durChapterTime -> BookProgressComparison.REMOTE_NEWER
-            durChapterTime < book.durChapterTime -> BookProgressComparison.LOCAL_NEWER
             durChapterIndex > book.durChapterIndex -> BookProgressComparison.REMOTE_NEWER
             durChapterIndex < book.durChapterIndex -> BookProgressComparison.LOCAL_NEWER
             durChapterPos > book.durChapterPos -> BookProgressComparison.REMOTE_NEWER

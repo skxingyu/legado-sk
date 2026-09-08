@@ -60,7 +60,7 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.SwitchPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:dependency="syncBookProgress"
             android:key="syncBookProgressPlus"
             android:summary="@string/sync_book_progress_plus_s"
