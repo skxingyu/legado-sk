@@ -1055,12 +1055,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiLayoutAlpha: Int
-        get() = appCtx.getPrefInt(
-            PreferKey.uiLayoutAlpha,
-            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 50)
-        ).coerceIn(0, 100)
+        // SK 定制：全局界面透明度强制为 0（完全不透明），不可调整
+        get() = 0
         set(value) {
-            appCtx.putPrefInt(PreferKey.uiLayoutAlpha, value.coerceIn(0, 100))
+            // no-op：忽略任何写入，保证恒为 0
         }
 
     var bookshelfCoverAlpha: Int
@@ -1070,13 +1068,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var dialogAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 50).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 20).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
         }
 
     var dialogBlur: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 100).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 50).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogBlur, value.coerceIn(0, 100))
         }

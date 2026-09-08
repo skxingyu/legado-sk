@@ -36,13 +36,13 @@
         app:iconSpaceReserved="false" />
 
     <io.legado.app.lib.prefs.Preference
-        android:defaultValue="50"
+        android:defaultValue="20"
         android:key="dialogAlpha"
         android:title="@string/dialog_alpha"
         app:iconSpaceReserved="false" />
 
     <io.legado.app.lib.prefs.Preference
-        android:defaultValue="100"
+        android:defaultValue="50"
         android:key="dialogBlur"
         android:title="@string/dialog_blur"
         app:iconSpaceReserved="false" />
@@ -52,12 +52,6 @@
         android:key="blurExcludeText"
         android:summary="@string/blur_exclude_text_summary"
         android:title="@string/blur_exclude_text"
-        app:iconSpaceReserved="false" />
-
-    <io.legado.app.lib.prefs.Preference
-        android:defaultValue="50"
-        android:key="uiLayoutAlpha"
-        android:title="@string/ui_layout_alpha"
         app:iconSpaceReserved="false" />
 
     <io.legado.app.lib.prefs.Preference
