@@ -927,6 +927,11 @@ class AudioPlayActivity : BaseActivity<ActivityAudioPlayBinding>(toolBarTheme = 
                         val end = alertBinding.editEnd.text?.toString()?.toIntOrNull()
                             ?.coerceIn(start, total) ?: total
                         val chapterIndexes = (start - 1)..(end - 1)
+                        // 音频页显式“缓存章节范围”：重复下载已缓存章时，评论不再“有快照就跳过”，
+                        // 而是由 MEDIA 任务追加的 READER REVIEW 按待刷新标记走 force 整页重抓最新快照。
+                        for (chapterIndex in chapterIndexes) {
+                            CacheCoordinator.markReviewRefresh(book.bookUrl, chapterIndex)
+                        }
                         CacheCoordinator.submitBookDownload(
                             book = book,
                             chapterIndexes = chapterIndexes,
