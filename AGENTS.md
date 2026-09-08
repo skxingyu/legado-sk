@@ -1,33 +1,25 @@
-# 阅读 C / legadoC 项目总则
+# 阅读SK / legado-sk 项目总则
 
-> 本文件是项目唯一的长期规则来源。它只保留可复用的原则、流程、环境约束和当前交付状态；一次性排障过程、界面细节、截图和临时记录不写入这里。
-> 规则只写在 `AGENTS.md`。`docs` 下为具体方面的细则与补充。需要的时候再看。
+> 本文件是项目的长期规则来源，只保留可复用的原则、流程、环境约束和当前交付状态；一次性排障过程、界面细节、截图和临时记录不写入这里。
+> 规则以 `AGENTS.md` 为准。2026-09-04 起在迁移后的电脑上工作：无 D 盘，不再使用 `D:\OneDrive\桌面\Ai\legado-sk\` 外部工作目录，配套文档策略见 §7「当前机器环境与配套文档」。`docs` 下仅保留 `api.md` 与截图。
+> ⚠️ 本文件是随仓库分发的运行手册；其中 §2/§3/§7 含本机路径与设备信息，只在当前机器的检出副本上维护，不要把这些机器专属路径推送到公开仓库。
 
-### 不要故意设置限制。
+## 0. 新会话 AGENT 交接速读（凡在本仓库动手前必读）
 
-本项目是自用开发版：不得擅自添加面向用户的数据处理条数上限、章节上限、结果截断，大小限制，长度限制，或其他的“保护性”限制，用户自己搞自己炸了，自己负责。不要把用户当巨婴。。需要控制运行资源时只能采用透明、统一的调度机制，不能丢弃用户请求、静默截断数据或把限制伪装成成功；任何确需限制的外部系统约束必须直接暴露并记录原因。
+> 目的：让**下一个新对话的 AGENT**（看不到此前任何会话，只能读工作目录文件）在动手改代码前，无歧义地弄清「项目做了什么、每个版本改了哪些、改哪里不能改错」。本小节为强制入口，按序读完再动代码。
 
-### 整个 AI 相关的设计都要遵循破坏性升级习惯（强调！！！）
-
-版本一升级，AI 配置就重置，不管以前是什么。版本只看 `AgentConfig.SCHEMA_VERSION`，对不上就过期，过期就删了重建。
-
-再次强调，版本一升级，AI 配置就重置，不管以前是什么。版本只看 `AgentConfig.SCHEMA_VERSION`，对不上就过期，过期就删了重建。
-
-第3次强调，版本一升级，AI 配置就重置，不管以前是什么。版本只看 `AgentConfig.SCHEMA_VERSION`，对不上就过期，过期就删了重建。
-
-不校验、不迁移、不保留旧配置，旧数据，直接重置。
-
-禁止写任何兼容旧数据的代码!!!!!!! 直接重置!!!!!!
-
-这是自用应用，不要在乎不存在的用户的历史数据，每次升级直接重置。
+1. **项目全貌与结构** → 读 `companion/项目文档.md`：项目定位/谱系、工程结构、核心改动方向、§2.1「版本时间线」（每个已发布版 versionCode ⇄ 该版实际修改，精确对应）。
+2. **改某个功能/开关/DB 前先反查它由哪个版本引入、有什么红线** → 读 `companion/发布版更新记录.md`：第 0 节「防改错速查」（全局透明度锁 0、进度同步三禁、朗读架构唯一形态=10023、DB 迁移线、R8 永不启用等）、逐版净增量、第 2 节「功能→引入版本」反查表。
+3. **需要作者原始文案佐证** → `companion/发布版更新原文-releasenotes.md`（GitHub Releases 逐版全文备份，可 grep）。
+4. **红线与排错** → 以本文件（AGENTS.md）为准：§4 UI/工程质量、§3 构建版本产物、§6 交付基线；具体历史红线见 §4「功能红线」。
+5. **机器环境/路径** → 本文件 §7「当前机器环境与配套文档」§7.1 环境快照、§7.2 配套文档与缺失项。
+6. ⚠️ 三份 companion 文档在 `.gitignore` 中忽略、不推送公开仓库；只读不随意改动，改动需与对应事实一致。若发现文档与源码事实不符，以源码和 GitHub Releases 为准并先核实再改文档。
 
 ## 1. 核心工作原则
 
 每次开始编程前，先重申并遵守以下原则：
 
 > 解决根本问题，拒绝任何兜底；有问题，直接暴露。统一维护、统一修复，避免特殊代码不断膨胀。鼓励调查，鼓励详细日志和探针，鼓励联网搜索。
-
-**本项目的默认工作模式永远是纯编码模式。** 用户未明确点名其他模式或验证动作时，不得启动编译、测试、运行、模拟器、动态调试、安装或回归；完成根因确认和必要源码修改后，立即提交并推送。
 
 具体要求：
 
@@ -36,208 +28,186 @@
 - 结论必须区分“已由证据确认”和“仍属假设”。复杂问题要补足日志、探针、截图或 trace，使后续排查可以复现。
 - 任何失败都必须说明原因和下一步。构建异常在解决后记录现象、根因、修复方式和是否交付；只把能长期复用的结论保留在本文件，并及时修正或删除失效规则。
 
-### 请求范围与执行边界
-
-项目规则中已经明确规定的默认工作流属于用户未另行指定时的默认执行项，不视为擅自扩展；用户明确指令始终优先。语义不清时立即停下并询问，不自行猜测。
-
-- 用户请求按字面含义执行，不推定隐藏含义，不擅自扩展任务范围，不以“顺便完善”“完整闭环”或其他理由追加用户未要求的工作。
-- 用户要求修改某个文件、整理代码或执行其他具体动作时，只完成明确要求的事项。完成的独立修改按第 5 节 Git 规则自动分类提交；自动提交属于修改工作的固定收尾，不视为扩大任务范围，也不需要用户另行要求。
-- 除全自动模式外，只有用户明确要求正式编译、安装或正式模拟器回归时，才执行对应动作。用户明确启用全自动模式后，可为解决当前问题自动执行编译、安装、运行、测试、回归和循环迭代，无需逐项再次授权。
-- 用户未明确指定工作模式时，一律使用纯编码模式：确认根因后修改必要源码，完成后提交并推送，然后结束。纯编码模式禁止编译、构建、测试、运行、模拟器、动态调试、F 工具、安装和回归；只有用户明确要求其他模式或具体验证动作时才切换。
-
-### 工作模式与执行层级
-
-写代码和排障统一按下面的模式理解。模式决定“做到哪一步、是否进入验证、由谁操作、何时结束”，不改变根因优先、真机禁令、构建约束、代码修改授权和 Git 规则。
-
-**默认模式就是纯编码模式。** 用户只描述问题、要求修复、要求改代码，或没有明确点名任何工作模式时，都按纯编码模式执行。只有用户明确说“低频率人工介入模式”“半自动模式 / 高频率人工介入模式”“全自动模式”，或明确要求正式编译、安装、正式回归时，才进入对应模式。任何模式都不得自行升级。
-
-| 模式 | 触发说法 | AI / Codex 负责 | 人工负责 | 源码修改 | 编译 / 测试 / 动态验证 / 安装 / 回归 | 结束条件 |
-|---|---|---|---|---|---|---|
-| **纯编码模式** | **默认模式**；用户未明确指定其他模式时；或明确说“纯编码模式” | 静态定位并确认根因，把解决方案直接落实到源码 | 无 | **是** | **全部不做**；包括测试编译，也不得用编译找错 | 代码写完并按 Git 规则提交、推送后立即结束 |
-| **低频率人工介入模式** | “低频率人工介入模式” | 排查、形成方案，并通过 F 工具把临时补丁注入当前模拟器进程 | 补丁注入后自行长期测试，并在下一轮反馈结果 | 默认**不是**；F 补丁不是源码修改 | **不自动编译、不自动测试、不自动安装、不自动回归** | F 补丁和状态悬浮窗保持有效后结束当前调试回合 |
-| **半自动 / 高频率人工介入模式** | “半自动模式”“半自动调试模式”“高频率人工介入模式” | 持续运行 Frida、日志、截图、Perfetto、Winscope 等采集与分析 | 在同一连续回合中实时点击、滑动、返回、翻页、启动播放等 | 按用户授权；动态补丁可用于验证 | **不自动编译、不自动测试、不自动安装、不自动回归**；仅做当前运行进程上的动态诊断/验证 | 在同一回合持续复现、观察、分析，直到当前问题确认或用户停止 |
-| **全自动模式** | 仅当用户明确说“全自动模式” | **完整接管问题闭环：自主复现 → 定位根因 → 修改源码 → 提交并推送 → 自动编译 → 自动安装和运行 → 自动测试和回归；如果问题仍未解决，继续重复以上流程直到问题收敛。** | 无 | **是** | **是；这是所有模式中唯一会主动自动编译、自动测试并持续循环迭代的模式** | 自动循环直到修复被验证通过，或证据证明当前方案不可行并形成明确结论 |
-| **正式验证 / 交付** | 用户明确要求“正式编译”“安装”“正式回归”“完整验证闭环”或交付 | 按用户明确授权执行对应正式动作 | 仅在明确需要人工操作时参与 | 已完成的源码必须先提交 | **是，仅执行用户明确要求的部分** | 对应正式动作完成并记录结果；完整闭环为 `appC` 编译 → 模拟器安装 → 复现与回归 |
-
-#### 纯编码模式
-
-这是最轻量、也是默认的源码修改模式：**找到原因 → 把问题落实到代码 → 写完立即提交并推送 → 到此结束。** 纯编码模式的目标是完成代码修改，不承担任何验证工作。
-
-- 先通过源码、调用链、配置、已有日志、仓库搜索和现有证据定位并确认根因；**不得为了找错、确认能否通过或提前发现小问题而启动编译、构建或测试**。
-- 确认原因后只修改解决该问题所必需的代码；不顺手增加测试、动态探针、额外重构、文档或其他非必要工作。
-- 写完后只做静态收尾检查，例如 `git diff` / `git status` 和必要的代码审查；这不属于运行验证。随后立即按第 5 节 Git 规则提交并自动推送，不等待用户另行要求。
-- 纯编码模式禁止任何验证性操作，包括 Gradle 编译、构建、测试、Lint、启动 APP、模拟器、ADB、uiautomator2、Frida/F 工具、截图、logcat、Perfetto、Winscope、安装和回归；也不得新增、修改或删除测试和 CI 文件，或为了测试额外修改生产代码。
-- 这样做是为了避免编译同时占用时间和大量内存，并避免多个并行编码请求与正式编译争抢构建资源。纯编码阶段允许把尚未暴露的编译小错误留到之后的正式编译阶段统一发现和处理，**不得为了提前消灭这些错误而把纯编码模式升级成验证模式**。
-- 只有用户明确要求某项验证动作或明确切换到其他模式时，才执行该动作；否则代码提交、推送完成即结束。
-
-#### 低频率人工介入模式
-
-这是“AI 完成动态方案，人工之后慢慢测试”的模式。
-
-- AI 先完成原因排查和动态方案验证所需准备，再通过 F 工具把补丁注入当前雷电模拟器中正在运行的阅读C-自用（appC）进程。
-- 补丁注入成功后，不设置自动失效时间，并同时显示持续可见、足够醒目的状态悬浮窗，明确标记“Frida 补丁已注入并生效”。
-- 补丁与悬浮窗保持同一生命周期；补丁仍有效时，悬浮窗不得自行消失。
-- 注入完成后结束当前调试回合，不继续要求人工实时配合；之后由人工自行测试，并在下一轮对话反馈结果。
-- F 工具补丁属于运行时临时验证，不等于把补丁写入源码。
-
-#### 半自动 / 高频率人工介入模式
-
-“半自动模式”“半自动调试模式”和“高频率人工介入模式”视为同一套协作协议：**AI 持续采集和分析，人工实时操作界面。**
-
-- 调试工具链由 Codex 持续运行和采集，包括显式目标的 ADB、uiautomator2、截图、logcat、Perfetto、Winscope 和 Frida；根据当前问题和假设选择需要的工具，不设固定升级层级。
-- 界面操作由用户实时完成，包括点击、滑动、返回、打开菜单、启动播放和翻页。Codex 根据当前排障目标持续准备采集、观察和分析，不要求用户逐轮确认下一步。
-- 这是一个连续调试回合，不得把每个操作拆成“先停下来询问、等待回复、再启动工具”的串行流程；工具采集、日志读取和证据对齐应在用户操作窗口内持续进行。
-- Codex 可以在 commentary 中简短说明当前正在监听的目标和所需操作，但不得重复已经明确的操作指令，也不得因为等待用户操作而结束调试回合。
-- 人工每次操作后，AI 立即继续观察和分析，不把结果留到下一轮再处理。
-- 每次复现必须记录开始时间、用户操作窗口、结束时间和使用的设备；用户只操作唯一允许的雷电模拟器，Codex 只对雷电模拟器执行命令。
-- 本模式不改变真机禁令、构建约束、诊断与动态验证规则或代码修改授权。
-
-#### 全自动模式
-
-这是用户**明确点名后才启用**的最高强度工作模式，也是**所有模式中唯一会自动编译、自动测试、自动安装/运行并持续循环迭代的模式**。它不是“只做动态诊断”，而是由 AI 完整接管从定位到最终验证的整个工程闭环。
-
-- 启用后，AI 不再等待用户逐项授权编译、安装、测试或回归；这些动作属于全自动模式本身的固定权限。
-- 全自动模式按以下流程循环执行：自主复现 → 定位根因 → 修改源码 → 提交并推送 → 正式编译 `appC` → 安装到设备名包含 `emulator` 的模拟器 → 自动运行、测试和回归。若验证失败，直接进入下一轮修复，直到问题解决或确认当前方案不可行。
-- AI 自主选择 ADB、uiautomator2、截图、logcat、Frida、Perfetto、Winscope 等工具；Frida 既可用于定位，也可用于在正式编译前快速验证假设，但不能替代最终自动编译后的实际回归。
-- 编译或测试暴露出的源码错误、资源错误、运行错误或新回归，直接进入下一轮修复，不停下来等用户确认；这正是全自动模式与其他模式的核心区别。
-- 每一轮正式编译、安装、产物校验和回归仍必须遵守第 2、3 节的设备、版本、构建和产物约束；“自动”只表示无需逐项人工授权，不表示可以绕过正式构建规则。
-- 结束条件是：当前问题已在自动编译后的真实 APK 上完成自动复现与回归并确认解决；或者经过自动迭代后有充分证据证明当前方向不可行，并形成明确原因与下一步。
-
-#### 正式验证 / 交付
-
-正式验证不是排障模式的自动下一步，而是独立授权层级。
-
-- 用户只要求“正式编译”“安装”或“正式回归”其中一项时，只执行该项，不自行补齐其他动作。
-- 用户明确要求“完整验证闭环”时，执行：正式编译 `appC` APK → 安装到设备名包含 `emulator` 的模拟器 → 复现并回归验证。
-- 所有正式动作继续遵守第 2、3 节的设备、构建、版本和产物约束。
-
-#### F 工具术语与修饰指令
-
-- **F 工具就是 Frida。** 用户说“F 工具”时按 Frida 理解。
-- “用 F 工具推上去永久有效”表示：把补丁通过 Frida 注入到当前模拟器中正在运行的阅读C-自用（appC）APP，并且不设置失效时间，用于持续验证方案可靠性；**不是把补丁写进源码**。
-- 任何需要持续有效的 F 工具补丁，注入成功后必须同时显示持续可见、足够醒目的悬浮窗，明确标记“Frida 补丁已注入并生效”；补丁仍有效时悬浮窗不得自行消失。
-
 ## 2. 设备与测试边界
 
-### 真机禁令
+### 真机设备
 
-- 绝对禁止对用户真机执行任何操作，包括所有 `adb` 子命令、截图、点击、安装、卸载、push/pull 和 shell。
-- 真机问题只能依据用户描述、代码和用户提供的日志排查；高级调试工具不是例外。
+| 设备 | 型号 | 序列号 |
+|---|---|---|
+| 手机 | 华为 MAR-AL00 | `9HQDU19903003356` |
+| 平板 | 联想 TB-9707F | `HA1KAPWG` |
 
-### 雷电模拟器与 ADB 身份判定
+- 所有 `adb` 命令必须显式带 `-s <serial>`；执行前确认目标设备，禁止裸 `adb`。
+- 真机安装统一 `adb -s <serial> install -r legado-sk-arm64-v8a.apk`（同 debug 签名，覆盖升级保数据）；最终验证由用户真机手动完成。
+- 换签名迁移数据走 run-as tar 打包流程：导出必须用 Python subprocess 二进制流（git bash `>` 重定向会 CRLF 污染 tar）；`pm uninstall -k` 不可行（数据绑定签名）。备份与导出在仓库根的 `backup\`（被 .gitignore 忽略）。
+- 真机问题优先依据用户描述、代码和用户提供的日志排查。
+- ⚠️ 迁移后本机（2026-09-04）`adb devices` 为空：真机并未接入，回归以雷电模拟器为准；真机安装/验证仅当用户已接上设备并明确指示时进行。
 
-- APK 安装、运行和调试只使用雷电模拟器（LDPlayer），路径为 `F:\leidian\LDPlayer14\dnplayer.exe`。未启动时可尝试启动；失败则请用户手动打开。
-- 真实小说优先用于阅读功能验证。`C:\Users\user\Documents\leidian14\Pictures` 与模拟器 Pictures 目录互通，可作为导入素材。
-- ADB 设备身份只按设备名判断：设备名包含 `emulator` 的，才认定为模拟器；设备名不包含 `emulator` 的，一律不认定为模拟器。只认这一条规则。
+### 雷电模拟器
+
+- APK 安装、运行和调试只使用雷电模拟器（LDPlayer）。**迁移后本机（2026-09-04）使用的 LDPlayer 在 C 盘**，启动程序路径为 `C:\download\down\cloud-down\雷电模拟器14纯净绿色版+狐狸+LSP+微霸\LDPlayer14\dnplayer.exe`（同目录含 `ldconsole.exe`、`adb.exe`；实例 `leidian0`，instanceIndex=0）。未启动时可尝试启动；失败则请用户手动打开。旧的 `F:\down\...\LDPlayer14` 与本机 `F:\leidian\LDPlayer14` 均不再使用。
+- android-dev 工具链统一目标在 `tools\android-dev\target.json`，已改指上述 C 盘 LDPlayer；其 ADB 走环路 `127.0.0.1:5555` + ldconsole 启动序列号校验（见 §4 分层调试），禁止以该环路之外的裸 serial 操作。常规手动 `adb` 序列号仍用 `emulator-5554`，每条命令都必须显式带 `-s`；执行前确认目标确为模拟器，不确定时停止。
+- 分辨率 1440x2560，模拟器内建议配置 WebDAV。每条 `adb` 命令都必须显式带序列号，例如 `-s emulator-5554`。执行前确认目标确为模拟器；不确定时停止，禁止裸 `adb`。
+- 真实小说优先用于阅读功能验证。`C:\Users\skxingyu\Documents\leidian14\Pictures` 与模拟器 Pictures 目录互通，可作为导入素材。
+- ⚠️ 迁移后模拟器为全新实例，未必已装 10018；覆盖安装前先 `adb -s <serial> shell dumpsys package io.legado.app.c` 读已装 versionCode，只允许 ≥ 已装版本的覆盖。
 
 ### 验证闭环
 
-**规则裁决：ADB 设备是否为模拟器只按设备名是否包含 `emulator` 判定；不包含 `emulator` 的设备一律不是模拟器。不得以任何其他字段或外部校验替代、补充或推翻这条规则。**
+- 每次代码改动都按以下闭环执行：正式编译（`assembleAppRelease`）APK -> 安装到已确认的雷电模拟器 -> 复现并回归验证；真机最终验证由用户手动完成。
+- AI 侧回归只在雷电模拟器执行；真机安装仅在用户明确指示下进行。
 
-本节只在两种情况下生效：用户明确要求正式验证，或用户明确启用全自动模式。普通模式下只执行用户明确要求的验证动作；用户要求完整验证闭环时，执行 `appC` 正式编译 → 安装到设备名包含 `emulator` 的模拟器 → 复现并回归。全自动模式下自动重复这一闭环直到问题收敛。
-
-- 模拟器不可用时不得改用真机。
-- 崩溃或行为异常时，先按当前模式完成原因定位。**非全自动模式**只有用户已明确要求正式验证闭环时，才在正式修复后继续正式编译和回归；**全自动模式**则自动进入编译、安装、测试和回归，并在失败时继续下一轮修改。
+- 崩溃或行为异常时，先收集日志和复现证据，定位根因后修复，再重新正式编译和回归；不能报告未经验证的修复。
 - UI 改动必须覆盖受影响的交互、显示、主题/状态切换和关闭重开等生命周期，而不是只确认一张静态截图。
 
 ## 3. 构建、版本与产物
 
 ### 不可变交付约束
 
-- 用户明确要求正式验证或交付代码改动时，只能使用正式 `appC` 变体：`app\build\outputs\apk\app\c`。禁止以中间 Gradle 任务、debug APK 或改名旧包充当正式验证/交付物。
-- 正式编译必须使用目标分支最新且已经提交的完整源码和资源。禁止从旧提交、detached worktree、临时快照或其他落后副本构建。编译前确认目标分支、`HEAD` 和工作区一致；编译期间如果目标分支出现新提交，必须基于新的分支头重新编译。
-- 覆盖安装前必须显式传入 `VERSION_CODE` 和 `VERSION_NAME`。`VERSION_NAME` 仅用于展示，格式为 `3.26.MMddHH`：其中 `3.26` 后面的 `MMddHH` 是 UTC（世界零点）编译时间（月份、日期、小时），因此版本名按 UTC 时间记录。
-- 如果 APK 或本文件基线里的 `versionName` 时间部分异常、跑到未来，直接按正确的 UTC 时间修正即可；这不会触发降级，因为安卓升级、降级判断只看 `versionCode`。
-- `VERSION_CODE` 是与时间无关的独立整数序号，不是时间戳，不得按日期解读或计算；每次交付只需比最近一次交付的 `VERSION_CODE` 大，保持单调递增。
-- `appC` flavor 会自动添加版本名后缀 `c`，传给 `-PVERSION_NAME` 的值不得包含 `c`。最终必须以 `aapt` 输出为准，产物版本名应为 `3.26.MMddHHc`。
-- 若只是 APK 文件名末尾的 `c` 多一个或少一个，或文件名中的 `versionName` 文本写错，而 `aapt dump badging` 确认 APK 内部 `versionName`、`versionCode` 和包名均正确，直接修正文件名或记录即可，不得为此重新编译；只有 APK 内部元数据确实错误时才重编译。
-- 编译前直接使用第 6 节的最近交付基线，不查模拟器已安装版本。确认新版本后，只删除 `app\build\outputs\apk\app\c` 中对应的旧 APK，绝不删除宽泛目录或源码。
+- 代码改动只能用正式版（`app` flavor + `release` buildType，包名 `io.legado.app.c`）验证与交付，产物在 `app\build\outputs\apk\app\release`。禁止以中间 Gradle 任务、debug APK 或改名旧包充当验证/交付物。
+- 覆盖安装前必须显式传入 `VERSION_CODE` 和 `VERSION_NAME`。新 `VERSION_CODE` 必须比最近一次交付大；`VERSION_NAME` 必须按 GMT+8 编译时刻单调递增，格式为 `3.26.MMddHH`。
+- 正式版 = `app` flavor + `release` buildType（`assembleAppRelease`，包名 `io.legado.app.c`）。`versionName` 需直接传完整值（含 `c` 后缀，如 `3.26.090812c`），无自动加后缀机制；`versionCode` 遵循 SK 独立递增约定（当前基线 10036）。
+- 编译前先从模拟器已安装包确认版本；模拟器不可用时使用第 6 节的最近交付基线。确认新版本后，只删除 `app\build\outputs\apk\app\release` 中对应的旧 APK，绝不删除宽泛目录或源码。
+- 编译前必读 §7 的《编译注意事项与排错手册》（迁移后已并入仓库，见 §7）；若尚未创建，按 §7 指引补充后再编译。
 
-### 本机环境与正式命令
+### 本机环境与正式命令（迁移后 2026-09-04 核对）
 
-- JDK: `C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot`
-- Android SDK: `D:\AI\audio\android-sdk`
-- Gradle user home: `D:\AI\audio\android-gradle-user-home`
-- Gradle wrapper: `8.14.4`; compileSdk: `36`
+- 代码/构建唯一目录（无 D 盘，不再分编译树）：`C:\code\ai-code\legado-sk`（git 仓库，remote = `skxingyu/legado-sk`，main 分支，gh auth 直连推送）。
+- JDK 17：`C:\Users\skxingyu\AndroidDev\jdk-17.0.2`
+- Android SDK：`C:\Users\skxingyu\AndroidDev\android-sdk`（platforms `android-34`/`android-36`；build-tools `34.0.0`/`36.0.0`）
+- Gradle：用项目 wrapper `gradlew.bat`（distributionUrl = gradle-8.14.4-bin，首次自动下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；本机另有 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` 备用，勿覆盖 wrapper 约定
+- Gradle user home：不显式设置 → 默认 `C:\Users\skxingyu\.gradle`
+- 系统 adb：`C:\Users\skxingyu\AndroidDev\android-sdk\platform-tools\adb.exe`
+- Gradle wrapper: `8.14.4`; AGP `8.13.2`; compileSdk `36`; 依赖/平台已按此装齐
+- 交付 APK（`-Pabi=arm64-v8a`）产物在 `app\build\outputs\apk\app\release`
 
 ```powershell
 $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-$env:ANDROID_HOME = 'D:\AI\audio\android-sdk'
-$env:ANDROID_SDK_ROOT = 'D:\AI\audio\android-sdk'
-$env:GRADLE_USER_HOME = 'D:\AI\audio\android-gradle-user-home'
+$env:JAVA_HOME = 'C:\Users\skxingyu\AndroidDev\jdk-17.0.2'
+$env:ANDROID_HOME = 'C:\Users\skxingyu\AndroidDev\android-sdk'
+$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+# GRADLE_USER_HOME 不设置，走默认 C:\Users\skxingyu\.gradle
 $env:Path = @(
   "$env:JAVA_HOME\bin",
   "$env:ANDROID_HOME\cmdline-tools\latest\bin",
-  "$env:ANDROID_HOME\platform-tools"
+  "$env:ANDROID_HOME\platform-tools",
+  "$env:ANDROID_HOME\build-tools\36.0.0"
 ) + ($env:Path -split ';') -join ';'
 
-$versionCode = <new-version-code> # 独立递增整数，不是时间戳
-$versionName = '3.26.<MMddHH>' # <MMddHH> uses UTC; appC automatically appends c
-.\gradlew.bat ':app:assembleAppC' '-Pabi=arm64-v8a' "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
+Set-Location 'C:\code\ai-code\legado-sk'   # 编译必须在仓库根执行
+$versionCode = <new-version-code>
+$versionName = '3.26.<MMddHH>c'            # 完整版本名（含 c 后缀）
+.\gradlew.bat ':app:assembleAppRelease' "-Pabi=arm64-v8a" "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
 ```
+
+编译成功后必须把新 APK 收进仓库根已忽略的交付目录：
+1. 覆盖 `C:\code\ai-code\legado-sk\release\legado-sk-arm64-v8a.apk`（「当前交付 APK」，固定名；`/release` 已被 .gitignore 忽略）。
+2. 按版本命名同存于 `C:\code\ai-code\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a.apk`。
 
 ### 长命令和构建失败
 
-* 任何可能长时间运行的命令都必须监控实际进度；以进程、CPU、日志和产物是否持续变化判断是否仍在运行，不得无限等待，也不得仅凭启动器退出或工具超时误判任务失败。
-* 构建失败时先读取实际错误、文件、行号和异常信息，再判断根因；不得在没有证据时把源码错误、文件锁、缓存问题或内存问题混为一谈并盲目重跑。
-* 只有证据明确指向缓存、Gradle/Kotlin 进程、文件锁或内存问题时，才执行对应的进程清理、冷编译或局部构建目录清理；不得无依据删除整个构建目录，也不得终止不属于本次任务的进程。
-* 同一检出目录同时只允许一个正式构建。构建结束、中断或失败后，必须清理属于本次构建的残留进程；构建结果以真实日志、退出状态和产物校验为准。
-
-### 双构建路线（自有 / 开源）
-
-主代码只经 `app/src/main/java/io/legado/app/plugin` 的空接口与注册表（`ReadAloudEngines` / `TtsVoiceDirectories` / 各 flavor 的 `AppPlugins.init`）接触专有功能；插件缺失时主代码正常运行：引擎列表不渲染该行、路由到未内置引擎 id 明示回退系统 TTS、AI 选角在发音人目录缺失时自动降级。
-
-**版本与应用名**：自用版（`assembleAppC` / `io.legado.app.dev`）应用名 `阅读C-自用`；公开版（`assembleOssRelease` / `io.legado.app.c`）应用名 `阅读C`。文档、Release 正文、日常交流一律使用上述应用名，不得再把自用版称为"阅读C"。
-
-- 自用版使用 `assembleAppC`，应用名固定为 `阅读C-自用`，包名固定为 `io.legado.app.dev`。`app` flavor 会包含 `app/src/app` 中的全部专有功能和依赖，并通过自有 `AppPlugins` 注册；自用版与公开版包名不同，可同时安装。
-- 公开版使用 `assembleOssRelease`，应用名固定为 `阅读C`，包名固定为 `io.legado.app.c`，版本名为 `3.26.MMddHH`，不带后缀。`oss` flavor 不包含 `app/src/app` 中的任何专有源码、so、组件声明或专有依赖。
-- 新增专有功能一律放 `app/src/app`（或另开 flavor 专属源集）并在自有 `AppPlugins` 注册；开源构建自动剥离。
-- 若公开发布整个仓库源码而非仅 APK，`app/src/app` 下的专有代码会随源码泄露，需要导出过滤（只发布 APK 不受影响）。
-
-编译选择规则（默认自用，按用户点名才变）：
-
-- 用户未指明构建路线时，"编译/正式编译/交付"一律指自用构建 `assembleAppC`（阅读C-自用），完全沿用"不可变交付约束"与本节的版本、产物规则；不得自行切换成开源构建。
-- 仅当用户明确要求“开源编译”“发布编译”或“oss 编译”时，才执行 `assembleOssRelease`；构建时传入 `-PVERSION_CODE` 和 `-PVERSION_NAME`，版本名不带 `c` 后缀，产物位于 `app\build\outputs\apk\oss\release\`，并使用 `aapt` 和 `apksigner` 验证；公开版固定包名为 `io.legado.app.c`、应用名为 `阅读C`。不得将 `assembleOssRelease` 产物作为自用版交付，也不得将 `assembleAppC` 产物作为公开版发布。
-- 用户明确要求"双编译"时，两个构建都执行：先自用 `assembleAppC`，再开源 `assembleOssRelease`，各自完整走一遍版本传参与产物验证；两包包名不同（自用 `io.legado.app.dev` / 公开 `io.legado.app.c`），互不影响覆盖安装，可共存装在同一设备。
-- 只允许构建两个 release 系产物：自用版 `assembleAppC` 和公开版 `assembleOssRelease`，绝对禁止任何 debug buildType。两个版本统一使用 SDK 自带的 debug 签名，不创建、不使用任何正式密钥；所有 APK 必须通过 `apksigner` 验证。
-
-开源源码发布（历史清洗镜像）：
-
-- 远程 `origin`（CCSSNE/legadoC）是公开仓库（默认分支 `own`）。`origin/own` = 本地完整历史剥离专有路径后的清洗镜像；本地 `own` = 完整私有历史，同步推送私有备份仓 `private`（CCSSNE/legadoC-private，已验证 `private:true`）。
-- 所有专有和自用代码必须放在剥离清单指定的路径中，现行专有代码统一放在 `app/src/app`。`AGENTS.md`、`docs`、`tools` 不在剥离范围，会随公开历史发布；新增专有功能前必须确认对应路径已经加入剥离清单。
-- **严禁把本地 `own` 直接 `git push` 到 `origin/own`**：两边历史不同，非快进必被拒（这是防泄露保护，不得绕过）；强推会把专有历史重新公开。（私有备份仓 `private` 收的就是完整历史，直接 `git push private own` 快进属正常操作，不在禁止之列。）
-- 公开源码只能通过仓库根目录的 `publish-oss-source.ps1` 发布。脚本负责临时克隆、剥离专有路径、校验历史、生成公开镜像并推送到 `origin/own`，同时把完整私有历史推送到 `private`。禁止绕过脚本直接把本地 `own` 推送到 `origin/own`。
-- 已有 fork 与 GitHub 服务端缓存可能仍留存清洗前的旧对象；需要彻底清除时联系 GitHub Support（remove sensitive data）。
-- 剥离清单改动必须同步脚本头部注释与本节；新增专有功能若不放进剥离清单所列路径（新专有功能一律放 `app/src/app`），必须先更新剥离清单再发布。
-- README 等随公开镜像全文公开：更新记录只写开源构建（oss flavor）也包含的主代码功能，专有功能（百度引擎等）一律不得写入 README；写入前按功能对应源码是否在 `app/src/main` 判定，不确定时先查源码位置再落笔。
+- 任何可能超过 30 秒的命令必须实时监控。每 30 秒以内检查进程是否存活、CPU 是否增长、日志/产物是否更新；停滞时终止并报告，不能无限等待。
+- 后台编译须保存 stdout、stderr 和退出码。`cmd /c` 的内联重定向不可靠时，改用 `.bat` 文件启动，不得把空日志误判为正常编译。
+- 先阅读实际错误中的文件、行号和异常，再选择修复。不得把源码错误猜成内存问题后盲目重跑。
+- 仅在证据指向缓存锁定、守护进程或原生内存问题时，先停止 Gradle，清理残留 Gradle/Kotlin/Java 进程，再用正式 `assembleAppRelease` 进行最小必要的冷编译诊断，例如 `--no-daemon --max-workers=1 -Dkotlin.incremental=false -Dksp.incremental=false -Dkotlin.compiler.execution.strategy=in-process`。目录清理仅限受影响模块的 `build` 目录。
+- 构建无论成功或失败，执行 `.\gradlew.bat --stop` 并按 PID 清理残留构建进程，避免占用内存。
+- 2026-08-15：`HeaderlessDialogChrome` 首次正式编译在 `AccentTextView(context)` 失败，因为该控件构造器强制要求 `AttributeSet?`；读取 Kotlin 报错后改为 `AccentTextView(context, null)`，同版本重编译成功。失败包未产出、未交付。动态创建项目自定义 View 时必须先核对构造器签名，不能假定存在单参构造器。
+- 2026-08-15：首次启动 10608 构建时，把批处理和退出码写入拼在 `cmd /c` 参数中，Windows 报“文件名、目录名或卷标语法不正确”，没有 Gradle 进程、构建日志或 APK。改为由 `.bat` 自己记录退出码，再以 `Start-Process` 直接启动，构建正常。后台构建的重定向/引号错误必须以“未启动”处理，不能等待或误判为 Gradle 卡死。
+- 2026-09-05（10029 编译两次失败复盘）：在 DSH 沙箱 `workspace-write` 会话里启动 `gradlew.bat`，wrapper 阶段即报 `gradle-8.14.4-bin.zip.lck (拒绝访问)` 退出。判别要点：① 报错在 `GradleWrapperMain`/`ExclusiveFileAccessManager` 而非 Gradle 任务 → 不是项目代码或内存问题，不要跑冷编译诊断；② 删锁文件、杀光残留 java 进程后**仍**报同一处拒绝访问，且系统无 java 进程持锁 → 说明不是锁被占用，而是进程根本没有写 `C:\Users\skxingyu\.gradle`（wrapper 锁/缓存/daemon，仓库外用户级目录）的沙箱授权。处理：用 `sandbox_permissions` 放开权限**原样重试同一条编译命令**（pwsh `danger-full-access`，justification 说明 Gradle 必须写 `.gradle`），一次成功。规则：**在本机跑 Gradle 构建（含 `gradlew --stop`）必须默认带放开权限执行**；`workspace-write` 下 Gradle 必失败，不要浪费轮次删锁/杀进程重试。另注意：残留 daemon 清理仍有价值（本次 10028 遗留 4.5GB+3.6GB 两个 java 进程），但它是例行卫生，不是该报错的根因。
 
 ### 产物验证
 
 ```powershell
-$apk = 'D:\AI\audio\legadoC-own\app\build\outputs\apk\app\c\legado_app_<version>.apk'
+$apk = 'C:\code\ai-code\legado-sk\app\build\outputs\apk\app\release\legado_sk_<version>_<code>.apk'
 & "$env:ANDROID_HOME\build-tools\36.0.0\aapt.exe" dump badging $apk
 & "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" verify --print-certs $apk
 ```
 
-交付前确认两版身份：公开版（阅读C）= 包名 `io.legado.app.c`、应用名 `阅读C`、产物来自 `assembleOssRelease`；自用版（阅读C-自用）= 包名 `io.legado.app.dev`、应用名 `阅读C-自用`、产物来自 `assembleAppC`；两版版本号均需递增、`arm64-v8a`、`apksigner` 退出码为 0。部分 `META-INF` 条目未受签名保护的提示可接受。
+交付前确认：包名 `io.legado.app.c`、版本号递增、中文名 `阅读SK`、`arm64-v8a`、产物来自 `assembleAppRelease`，且 `apksigner` 退出码为 0。部分 `META-INF` 条目未受签名保护的提示可接受。
 
-**应用名核对是强制校验项（2026-09-02 明文）**：`aapt dump badging` 输出的 `application-label-zh`（及 `application-label` 默认值）必须逐字匹配目标版本的应用名——自用版为 `阅读C-自用`、公开版为 `阅读C`。aapt 输出与预期不符即视为构建失败，不得宣称验证通过；严禁只看 package/versionCode/versionName/native-code 就判定符合标准。核对命令固定如下，必须检查截取结果中的 label 值：
+## 4. 工程质量规则
 
-```powershell
-& "$env:ANDROID_HOME\build-tools\36.0.0\aapt.exe" dump badging $apk | Select-String -Pattern "application-label-zh:|package:"
+- 无头弹窗的统一策略只负责移除 `Toolbar` 并把菜单动作迁到标准底部操作区；不得以保留空白 Toolbar 伪装“无头”。移除 Toolbar 前必须核对布局测量：原来依赖 Toolbar 固定高度的 `0dp` / weight 内容区，要改成显式的“内容区 + 底部操作区”结构，否则 `wrap_content` Dialog 会塌缩。
+- 无头迁移器向 `ConstraintLayout` 加入底部操作区时，所有原先 `bottomToBottom=parent` 的内容必须统一改为约束到 footer 顶部；禁止仅增加 parent padding 伪造预留空间，否则滚动内容会与按钮重叠。`dialog_content_edit` 于 2026-08-15 以此规则完成回归。
+- 标准 `AlertDialog` 的标题不能直接追加到 `contentPanel`：该面板是叠放容器，会与选择列表重叠。统一表面路径应将标题和原内容重组为垂直内容列后再隐藏 `topPanel`，使标题成为同一玻璃面上的正文首行，而非独立顶栏。使用 `setCustomView` 时内容位于 `customPanel`；标题迁移后只能保持 `customPanel` 或 `contentPanel` 之一作为中段，禁止额外启用另一个面板挤占 `buttonPanel` 的测量空间。缺少相应面板属于结构错误，应直接暴露，不能悄悄丢弃标题或遮住首项。
+
+### UI 内核与浮层规范
+
+本项目的 UI 内核不是一套普通页面和另一套弹窗页面，而是四层单向组合。所有新 UI 必须先在此树中归类；业务页面只能使用下层能力，不能反向改写或复制下层逻辑。
+
+```text
+主题语义层
+ThemeStore / ThemeUtils / UiCorner
+    └─ UI、阅读、Dialog 三组颜色、透明度、圆角和描边语义
+        │
+表面描述与渲染层
+SurfaceStyle / SurfaceStyles / SurfaceDrawable
+    └─ 同一裁剪路径绘制模糊底图、tint、描边和几何
+        │
+表面生命周期层
+SurfaceBackdrop
+    └─ 稳定几何、PixelCopy、局部模糊、代际丢弃和位图回收
+        │
+宿主适配与内容层
+BaseDialogFragment / BasePrefDialogFragment / BaseBottomSheetDialogFragment
+AndroidAlertBuilder / SurfacePopupMenu / 阅读页显式浮层
+    └─ Feature 的业务内容、操作和布局
 ```
 
-- 应用名由各版本独立源集决定，修改时必须同步核对：自用版 appC 由 buildType `c` 源集 `app/src/c/res/values*(/strings.xml)` 覆盖（`app_name`、`app_name_sigma`、`receiving_shared_label`）；公开版 oss 由 flavor `oss` 源集 `app/src/oss/res/values*(/strings.xml)` 覆盖。main 里的 `@string/app_name`（`阅读 C`）只是共享兜底，不是任何版本的实际交付名。
+#### 首先分类，不得按“看起来像”处理
 
-## 4. 工程细则
+| 类型 | 统一入口 | 表面规则 |
+|---|---|---|
+| 普通 Activity / Fragment 页面与页内控件 | `ThemeStore`、`UiCorner`、现有主题 View/样式 | 只使用 UI 组样式；不是模糊浮层，禁止为整页安装 `SurfaceBackdrop`。 |
+| 普通模态 Dialog | `BaseDialogFragment` | 声明真实可见表面（优先 `vw_bg`），由基类安装 Dialog 表面。 |
+| Preference Dialog | `BasePrefDialogFragment` 或现有 preference adapter | 走同一 Dialog 表面与无头 Alert 规则。 |
+| 底部 Sheet / 阅读设置 Sheet | `BaseBottomSheetDialogFragment`；阅读页使用 `BaseReaderSheet*` | 仅上角几何；阅读色彩只能来自 `ReaderSheetStyle`。 |
+| 简单确认、选择、输入框 | `alert` / `selector` / `AndroidAlertBuilder` | 由 `applyAlertSurface()` 处理 AppCompat 面板和无头标题。 |
+| 右上角更多、列表行更多等 PopupWindow 菜单 | `SurfacePopupMenu` 或 `View.showPopupMenu` | 应用拥有唯一可见外壳，显示前完成其局部表面准备。 |
+| 阅读页 Activity 内的主菜单、搜索菜单、文本操作浮层 | 调用方声明的专用背景层 | 这是同窗口浮层，不是 Dialog；只能刷新明确命名的目标表面。 |
 
-### 写 UI 之前，看一看 UI 相关架构规则。
-UI 设计相关规则（无头弹窗策略、UI 内核与浮层规范、异步 UI 与局部模糊）已单独维护在 `docs/ui-design-spec.md`。
+Activity 页面标题和正文标题不是“弹窗头”，不得为追求无头规则而删除。无头规则只适用于广义浮层的独立顶栏：Dialog、Alert、Sheet、PopupWindow 和阅读页浮层都不得新增 `Toolbar` / `TitleBar` 顶栏；操作应放在内容内的标准底部操作区。标题有业务语义时只能作为正文首行，不能恢复独立 chrome。
 
-### 主题与控件约束
+#### 只有一个表面内核
 
-- 应用主题统一为 `Base.AppTheme`（`Theme.AppCompat.DayNight` 系），对话框窗口主题同属 AppCompat 家族。`MaterialButton` 在构造器强制校验 `Theme.MaterialComponents` 主题（TabLayout、FloatingActionButton、TextInputLayout 均无此强制校验），放进任何对话框布局都会在 inflate 时直接崩溃；布局禁止使用这类强制校验控件，弹窗与列表条目按钮统一用 `<Button>` + `?android:attr/buttonBarButtonStyle` + `@color/selector_btn_text_color`。
+- `SurfaceStyle` 只描述视觉：tint、圆角、描边、模糊半径；它不得知道窗口类型、布局树或业务状态。
+- `SurfaceBackdrop` 是唯一可做 PixelCopy、模糊、稳定几何等待、显示代际和位图回收的地方。`SurfaceDrawable` 是唯一把底图、tint、描边绘入同一裁剪路径的地方。
+- 每个浮层必须显式声明一个真实、唯一的可见表面。不能扫描控件树猜目标，不能把内容按钮、列表或宿主 decor 当作表面，也不能缓存宿主整页后按猜测坐标裁剪。
+- UI、阅读、Dialog 的颜色和透明度只能经 `UiCorner` / `SurfaceStyles` / `ReaderSheetStyle` 取得；Feature 不得重算 alpha、圆角、描边、模糊半径或写另一套玻璃颜色公式。
+- `updateStyle()` 只更新同一目标的样式，不得中断该目标在途取图；关闭、换目标、重新显示和尺寸变化才创建新代际。Feature 不得自行管理另一套 generation 或 Bitmap 生命周期。
+
+#### 新代码的强制入口
+
+- 新的自定义模态框只能继承相应 `Base*DialogFragment`。新的简单 Alert 只能走 `alert` / `selector` / `AndroidAlertBuilder`；新的菜单只能走 `SurfacePopupMenu` 或其扩展入口。
+- 新的阅读页浮层必须先声明“宿主 Window、唯一背景层、显示前准备点、关闭点、尺寸变化点”，然后复用 `SurfaceBackdrop`。这些条件无法表达时，先扩展内核/宿主适配器并完成全路径验证，禁止在 Feature 内新建 `xxxBlur`、`xxxGlass`、`xxxPopup` 或私有表面助手。
+- 需要跨两个以上 Feature 或两种以上宿主复用的视觉/交互模式，提升到 `lib/theme`、`lib/theme/surface`、`lib/dialogs` 或 `ui/widget` 的现有内核旁；只属于一个 Feature 的业务内容留在 Feature 内，但仍使用核心表面和样式。
+- 现存直接 `Dialog`、`PopupWindow` 或第三方窗口类属于迁移存量，不是新代码模板。修改它们时优先接入上述入口；确有宿主限制时，先记录限制和适配方案，不能复制一份私有实现。
+
+#### 绝对禁止
+
+- 禁止给宿主 Activity `decorView` 做全局 `RenderEffect`；禁止 `FLAG_BLUR_BEHIND`、`setBackgroundBlurRadius`、`DIM_BEHIND` 或任何系统整窗变暗来替代局部表面。
+- 禁止反射 PopupWindow 私有字段、共享可变背景 Drawable、叠加“矩形 Bitmap + 另一层圆角颜色”背景，或以透明/纯色/全屏模糊作为取图失败的 Feature 级兜底。
+- 禁止在新 Dialog 布局中新增 `Toolbar` / `TitleBar`，禁止新建特定页面的 alpha、blur、corner、surface-color 常量或 `when (页面名)` 特例。
+- 禁止为绕过本规范添加新的 suppress、静默 catch、默认回退目标或吞掉表面安装错误。内核无法表达的需求必须直接暴露并先修内核。
+
+#### UI 变更验收清单
+
+- [ ] 已明确它是普通 UI、Dialog、Preference、Sheet、Alert、PopupWindow 还是阅读页同窗口浮层，并使用了表中唯一入口。
+- [ ] 浮层已明确真实背景层；目标 attach、连续两帧几何稳定后才取图，首次可见前背景已安装。
+- [ ] 没有全局模糊、系统 DIM、私有反射、Feature 自建表面算法、独立 Bitmap 生命周期或页面专属兜底。
+- [ ] Dialog/Alert/Popup 没有独立头栏；需要的操作在标准底部区，关闭、重开、主题变化和尺寸变化都不会让旧回调覆盖新表面。
+- [ ] 已在雷电模拟器回归：截图检查范围/圆角/透明度，uiautomator2 检查层级和可点击性；普通证据不足才按分层调试规则同时采集 Perfetto、Winscope 与 Frida。
+
+### 功能红线（历史踩坑，违反即回归）
+
+- **R8/混淆永久禁用**：legado 是重反射应用（书源引擎 / JS 桥 / 动态类加载），开启 `minifyEnabled` / `shrinkResources` 会破坏反射链并误删系统过渡动画，实测运行时卡顿（10009 已回退）。瘦身只允许资源层：图片重编码但保持文件名不变、删除零引用资源、`resConfigs "zh"` 语言裁剪。
+- **阅读进度同步三禁**（移植上游后逐项核对防回归）：
+  1. `BookProgress.compareWith` 禁止时间戳优先，只比较 `durChapterIndex` → `durChapterPos`；
+  2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
+  3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
+- **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
+- **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
+- **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
+- **语言裁剪边界**：`resConfigs "zh"` 后繁体及其他语言回退默认 `values/`（英文），属预期行为而非缺陷。
 
 ### 设置默认值
 
@@ -249,13 +219,21 @@ UI 设计相关规则（无头弹窗策略、UI 内核与浮层规范、异步 U
 - 背景图这类文件型默认值不能写成某台设备的绝对路径。必须把素材随 APK 提供，并由统一主题初始化在 `applyDayNightInit()` 前复制到应用私有目录，再为尚未配置的日间/夜间 key 写入该稳定路径。`backgroundImage` / `backgroundImageNight` 缺失表示从未配置；空字符串表示用户明确移除背景，后续启动不得覆盖。
 - `uiLayoutAlpha` 的值表示“全局界面透明度”：`0` 为不透明、`100` 为全透明。数值到物理表面 alpha 的换算只能在 `UiCorner.uiLayoutSurfaceAlpha()` 中发生；普通 UI、底栏玻璃外壳和液态玻璃内容均复用该入口，业务页面不得再自行反向计算。
 
-### 诊断与动态验证 
+### 异步 UI 与局部模糊
 
-工作模式的定义、人工介入频率和 F 工具持续补丁规则统一见第 1 节“工作模式与执行层级”。本节只定义所有调试模式共同使用的诊断能力。
+- 只处理真实浮层表面或明确声明的背景层，禁止扫描控件树猜测目标；找不到可靠目标时应暴露问题，不能扩大为宿主 Activity 全屏模糊或纯色兜底。
+- 几何、着色、描边与模糊底图必须由同一表面模型和同一裁剪路径管理。每个浮层实例使用独立背景副本，不能混用可变 Drawable 或叠加互相冲突的形状背景。
+- 取图必须在目标和宿主 attach、且几何连续两帧稳定后进行。`PixelCopy` 源矩形必须使用源 Window 坐标并严格相交裁剪；不能用强制最小 1 像素矩形掩盖坐标错误。
+- 首次可见前完成背景安装。关闭、换目标、重新显示和尺寸变化要使旧回调失效并释放旧位图；样式更新只更新样式，不应取消同一目标仍有效的取图，回调安装时使用最新样式。
+- 禁止 `RenderEffect` 作用于宿主 `decorView`，以及 `setBackgroundBlurRadius` / `FLAG_BLUR_BEHIND` 等整窗模糊路径。若要改变浮层外壳几何，先分离外壳、背景层、内容层并完成模拟器全路径验证。
 
-- ADB、`uiautomator2`、截图、logcat、源码检查、运行时对象检查、Frida、Perfetto、Winscope 都可以参与找原因、收敛假设和验证现象；它们是并列的诊断工具，需要什么，用什么。
-- Frida 本身既是找原因的工具，也是验证解决方案的工具：可以用 `trace`、运行时对象检查或 Hook 观察真实行为、试探变量、缩小原因范围；不需要等其他工具先得出结论后才能使用。
-- 动态验证只能证明当前运行环境中的假设与方案；不能被可靠等价注入的资源/XML、Manifest、Gradle、native 或类结构改动，必须明确标记为“Frida 未完整验证”，不得冒充正式 APK 回归。
+### 分层调试
+
+- 常规问题先用模拟器 ADB、`uiautomator2`、截图和 logcat。
+- 只有常规证据不足，且明确怀疑时序、线程、Window/Surface 合成或运行时调用链时，才升级到 Perfetto、Winscope 或 Frida。
+- 高级证据必须围绕同一次复现采集：记录开始时间、操作、结束时间；将 UI 层级、时间线、Window/Surface 与调用证据对齐，明确观察结果、排除项、根因和结构性修复。
+- 工具入口为 `tools\android-dev`，输出写入已忽略的 `test-records\android-dev`，不得提交 trace、截图、临时二进制或虚拟环境。雷电 Android 14 不支持的 WindowManager 时间序列 tracing 必须如实标为快照降级模式。
+- Frida 仅能连接 `127.0.0.1:5555`，默认只读；方法跟踪须限定包、类、方法和最长 30 秒，不修改参数、字段或返回值。脚本错误、`Java is not defined` 或初始化缺失均为失败；结束后卸载脚本并移除模拟器临时 server。
 
 理想环境操作：
 uiautomator2 / ADB
@@ -272,38 +250,69 @@ uiautomator2 / ADB
  └────────────────── Frida / AI Debug Probe
                       看真实运行时对象和调用链
 
-
-
-### 模型只作为参数，不要再详细设置。
-
-AI 铁律（死路，见到先复述给用户再定夺）：模型永远只当参数，不配自己的东西；大模型只认通用协议，要接别的协议就在上面写转接层，下游不动；画图/视频参数相同的模型挤一个供应商，不同的复制一个供应商。想原生兼容 Anthropic、谷歌、OpenAI Response 协议，或把配置绑到模型上，属于吃饱了没事干，此路不通。全文见 `AiCreationProviderStore` 头部注释。
-
 ## 5. 发布与版本控制
 
-### Release
-
-- 发布前重新执行第 3 节的 APK 验证。tag 必须为 `v<versionName>`，与 APK 版本名一致；`target_commitish` 指向 `own` 分支最新提交。
-- Release 正文通过 UTF-8 无 BOM JSON 文件提交：设置 `PYTHONUTF8=1`，用 `json.dump(..., ensure_ascii=False)` 生成（本机一律用 `python`；`python3.exe` 只是 WindowsApps 存根，调用无输出无动作），并使用 `curl.exe --data-binary "@<file>"`。不得将中文正文或二进制通过 PowerShell 文本管道传递。
-- APK 上传使用 `Content-Type: application/octet-stream` 和 `curl.exe --data-binary @<apk>`。
-- 发布后通过 API 和 GitHub 网页复查中文、排版、`draft=false`、`prerelease` 与用户要求一致（正式版为 `false`，用户点名 Pre 版时为 `true`）、tag、目标提交、资产大小和下载 200；发现乱码则用 UTF-8 无 BOM JSON PATCH 后重新复查。Pre 版创建时显式传 `"make_latest": "false"`，使 `Latest` 标记保持在正式版不动。
-- 公开仓库（`origin` / CCSSNE/legadoC）的 Release 只允许上传文件名含 `oss` 的公开版 APK（`assembleOssRelease` 产物，包名 `io.legado.app.c`、应用名 `阅读C`）；自用版 APK（`assembleAppC` 产物，包名 `io.legado.app.dev`、文件名 `legado_app_*`）绝对禁止作为资产出现在公开仓库的任何 Release（含 Pre 版）。判定以 `aapt` 包名为准，改名不算数。
-- 上一条是软性流程钩子：Git 钩子拦不到 Release 通道（网页 / `gh` / API 上传不经过本地 `commit` / `push`），只能靠上传前执行第 3 节产物验证并核对文件名含 `oss` 来自觉遵守；上传后按上一条复查Release资产，发现历史误传立即删除对应资产。
+- 发布前重新执行第 3 节的 APK 验证（aapt badging + apksigner verify）。
+- ⚠️ 迁移后：下述第 3、4 条里的「migrate 仓库 / 只读上游 CCSSNE / 指定代理端口 31180/31181 与 github.com 代理 10808」是旧机的单向推送环境，本机不复存在。本机检出即 `skxingyu/legado-sk` 目标仓库本身（git init + remote 后直接推 main），推送前先用 `git remote -v` 与代理环境实测确认通道，不要照搬旧机代理参数。
+- 推送代码到 `skxingyu/legado-sk` 的 main：若走 gh CLI 直连可先 `gh api user` 确认可用；git 直连不通时用 gh token + 显式 URL（`$token = gh auth token`；目标仓库若 shallow，先 `git fetch --unshallow`）。具体直连命令写入 `companion\项目文档.md`（缺失时按实况重建）。
+- 用 gh CLI 分步发布，避免大文件上传中断：先 `gh release create "<tag>" --title "..." --notes-file "<CHANGELOG路径>"`（pre/Beta 版加 `--prerelease`），再 `gh release upload "<tag>" "<APK路径>"`；上传大文件前如走代理受阻，按实测 `unset HTTPS_PROXY HTTP_PROXY; export GODEBUG=http2client=0` 处理。
+- tag 格式 `v3.26.<MMddHH>-<versionCode>`（如 `v3.26.082220-10018`）；发布后用 GitHub MCP `get_release_by_tag` 或网页复核 tag、目标提交、资产大小、中文排版与 Latest/prerelease 状态。
+- **发布类型默认 Pre-release**：除非作者明说「发布正式版/Latest」，一律以 `--prerelease` 发布为预览版（不顶替当前 Latest）；正式/转正需作者另行指示才发布非 Pre。此前 10030/10033 等即按此惯例发布 Pre。
 
 ### Git
 
-- git 提交必须为中文说明。 如果遇到历史的提交是英文说明，也会顺手改为中文，并且强推到线上。
-
 - 提交前检查 `git status`、`git diff`、`git log`。只暂存本次需要的文件，不提交 APK、构建日志、trace 或临时文件。
 - 提交信息简洁且准确，遵循现有仓库风格。
-- 项目不使用远程 CI：`.github/workflows` 下全部工作流已移除，远程 Actions 无存量运行负担。单元测试与编译检查一律在本地执行；不得重新引入或恢复远程 CI 工作流。
-- 每个独立修改完成并通过代码审查后必须立即自动创建一个只包含该修改的 Git 提交，不等待用户另行要求，也不能把多个无关修改堆积后一次提交。正式 APK 编译只能在这些提交完成后开始；正式编译、安装和回归通过后，再提交版本基线与验证记录。发生回归时只允许从这些明确提交边界回退，禁止猜测性撤销工作区文件。
-- 本地出现新提交后，立即运行 `publish-oss-source.ps1`：把清洗后的公开镜像同步到 `origin/own`，并把完整私有历史同步到 `private`。禁止直接 `git push origin own`。自动推送只包含 Git 提交，不包含 GitHub Release；Release 必须由用户明确要求后才能创建。
+- 每个独立修改在完成代码审查、且准备开始正式 APK 编译前，必须先创建一个只包含该已确认修改的 Git 提交；正式编译、安装和回归通过后，再提交版本基线与验证记录。发生回归时只允许从这些明确提交边界回退，禁止猜测性撤销工作区文件。
 
 ## 6. 当前交付基线
 
-仅保留最近一次已交付版本，下一次覆盖安装必须在此基础上递增：
+仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- 最近一次自用版交付为 `3.26.090710c` / `10877`，2026-09-07，基于提交 `e284f289`（图片测试连接接上生成进度与拉起状态提示，与书内生图同口径）使用 `assembleAppC` 编译成功（`BUILD SUCCESSFUL in 37s`，`75 actionable tasks: 13 executed, 62 up-to-date`）。产物包名 `io.legado.app.dev`、versionName `3.26.090710c`、versionCode `10877`、架构 `arm64-v8a`，`aapt` 确认应用名 `阅读C-自用`（label-zh 逐字匹配）、`apksigner verify` 退出码 0；APK 位于 `app\build\outputs\apk\app\c\legado_app_3.26.090710_10877.apk`，尚未安装。
-- 最近一次公开版交付为 `3.26.090809` / `10878`，2026-09-08，基于提交 `41c6a8a7`（AI思考过程实时横条展示：流式跟尾冒字加扫光，可展开，结束后永久保留）使用 `assembleOssRelease` 编译成功（`BUILD SUCCESSFUL in 5m 9s`，`121 actionable tasks: 29 executed, 1 from cache, 91 up-to-date`）。产物包名 `io.legado.app.c`、versionName `3.26.090809`（无 c 后缀）、versionCode `10878`、架构 `arm64-v8a`，`aapt` 确认应用名 `阅读C`（label-zh 逐字匹配）、`apksigner verify` 退出码 0；APK 位于 `app\build\outputs\apk\oss\release\legado_oss_3.26.090809_10878.apk`，已发布预发布 `v3.26.090809`（`prerelease=true`、`make_latest=false`，`Latest` 保持 `v3.26.090522` 不动）。
+- ✅ **10036（`3.26.090812c`）已装平板 HA1KAPWG + 雷电模拟器（2026-09-08）——当前交付（全新上游基底重植首版，实机回归通过）**：以 **legadoC v3.26.090809（`e3ee7b81`，含 AI 全套）为新上游基底**整体重植全部 SK 定制（放弃旧基底 legadoC a3a447e）。git 历史随之重建：main 现 = 新基底 + 14 个重植提交，tag 起点 `v3.26.090812-10036`（Pre）。完整移植清单见 `companion/移植方案-v3.26.090809.md` §8。保留全部 SK 定制（网络导入/HTTP TTS 语速/朗读跟随增强/快照强展+并发/刷新触发评论下载/换源卡片/透明锁 0/进度同步三禁/小悬浮窗 0 停留/品牌）+ 上游 AI 全套（问AI悬浮窗/Agent/Local Dream/高亮规则/md 编辑器等）。产物 `release/legado_sk_3.26.090812c_10036_arm64-v8a.apk`（30,929,502 字节），aapt(包名 io.legado.app.c/10036/3.26.090812c/阅读SK/arm64-v8a) + apksigner 通过；平板卸载旧 legadoC「阅读C」10874 后全新装 + 模拟器 10035 覆盖升级，实机回归通过。
+- 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
+- 下一次交付 versionCode 从 `10037` 递增。
 
-每次交付后当场更新本节。历史发布信息应从 Git、GitHub Release 或提交记录查询，不在本文件累积。
+每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或 `companion\项目文档.md` §2.1 时间线查询，不在本文件累积。
+
+## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
+
+> 迁移后的电脑为全新环境：无 D 盘，原先 `D:\code\...`、`D:\OneDrive\桌面\Ai\legado-sk\`、`F:\leidian\LDPlayer14`、`F:\down\雷电模拟器14...` 均已失效或弃用。本节统一登记本机事实；若某条与实际不符，先核实再改，勿让 AGENTS 出现悬空路径。
+
+### 7.1 环境快照（已逐项核对）
+
+| 项 | 值 |
+|---|---|
+| 代码/构建唯一目录 | `C:\code\ai-code\legado-sk`（git 仓库，remote = `skxingyu/legado-sk`，main 分支） |
+| JDK 17 | `C:\Users\skxingyu\AndroidDev\jdk-17.0.2` |
+| Android SDK | `C:\Users\skxingyu\AndroidDev\android-sdk`（platforms 34/36；build-tools 34.0.0/36.0.0；cmdline-tools latest） |
+| Gradle | 项目 wrapper `gradlew.bat`（gradle-8.14.4，dist 下载到 `C:\Users\skxingyu\.gradle\wrapper\dists`）；备用 `C:\Users\skxingyu\AndroidDev\gradle-9.7.1` |
+| Gradle user home | 默认 `C:\Users\skxingyu\.gradle`（不显式设置） |
+| 系统 adb | `C:\Users\skxingyu\AndroidDev\android-sdk\platform-tools\adb.exe` |
+| 雷电模拟器（C 盘） | `C:\download\down\cloud-down\雷电模拟器14纯净绿色版+狐狸+LSP+微霸\LDPlayer14`（实例 `leidian0`=index 0） |
+| sdkmanager | `cmdline-tools\latest\bin\sdkmanager.bat`（已装 android-36 / build-tools 36.0.0） |
+
+shell 选择：默认 Git Bash（POSIX）；原生 Windows 工具 / `.ps1` / 需 PowerShell 场景改用 Pwsh。
+
+### 7.2 配套工作文档（从外部工作目录收敛进仓库）
+
+原散落在 `D:\OneDrive\桌面\Ai\legado-sk\` 的配套文档，迁移后统一收进 **`C:\code\ai-code\legado-sk\companion\`**（含 backup、release 也在 gitignored 位置）。该目录已在 `.gitignore` 忽略，含机器信息，绝不推送公开仓库。
+
+**现有 companion 工作文档**（新会话先读 §0；此处为目录概览，避免歧义）：
+- `companion\项目文档.md` —— 项目概览 + **§2.1 版本时间线**（版本 ⇄ 修改精确对应，已建）。
+- `companion\发布版更新记录.md` —— 逐版净增量 + 第 0 节防改错速查 / 第 2 节功能→版本反查（已建）。
+- `companion\发布版更新原文-releasenotes.md` —— GitHub Releases 逐版作者原文全文（已建，备份可 grep）。
+
+**当前仍缺失、待重建/迁移的配套文档**（AGENTS 多处引用但当前检出不存在，不要凭空假设其内容）：
+- `companion\编译注意事项与排错手册.md` —— 每次编译前必读；缺失时按 §3「本机环境与正式命令」已含内容执行，重建后补回。
+- `companion\代码审查报告-第三轮.md` —— §6 交付记录引用的审查报告，缺失。
+- `release\legado_sk_3.26.090212c_10026_arm64-v8a.apk` —— §6 记录的 10026 产物，当前检出没有；需从 GitHub Release 重新下载。
+- `backup\` —— 真机数据备份，本机尚无。
+
+**用途约定**：AGENTS.md 本身随公开仓库分发（其中 §2/§3/§7 为机器专属运行信息）；凡机器/本机信息应只写进 AGENTS 检出副本与 `companion\`，不要新增进公开可读的 README/docs。本机 `~/.dsh/AGENTS.md` 为本机级总则，与仓库 AGENTS.md 并行。
+
+### 7.3 仓库检出状态与首启清单
+
+- 当前目录已是完整 git 仓库（2026-09-05 `git init` 并对齐 `origin/main` 历史，gh auth 直连推送成功）；提交时勿把机器路径/`companion\`、`release\`、`build_logs\` 误提交。
+- 首次正式编译前：确认 SDK36/build-tools 36 已装（已装）、`android-36` platform 存在；首次 `gradlew.bat` 会自动下载 gradle-8.14.4（联网）。
+- android-dev 高级调试工具链依赖 `.android-dev-venv\`（uiautomator2/frida/adbutils）与 `tools\android-dev\bin\frida-server-17.17.0-...`，本机未就绪；仅当需要 Perfetto/Winscope/Frida 分层调试时再重建，不影响常规编译/模拟器回归。
