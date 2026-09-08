@@ -27,4 +27,9 @@
         android:title="@string/import_local"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/menu_import_net"
+        android:title="@string/import_on_line"
+        app:showAsAction="never" />
+
 </menu>
