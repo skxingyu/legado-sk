@@ -171,7 +171,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun play() {
         pageChanged = false
         exoPlayer.stop()
-        applyPlaybackRate()
+        applyPlaybackSpeedForEngine()
         if (!requestFocus()) return
         httpTtsSnapshot = ReadAloud.httpTTS
         if (ReadAloud.currentScriptTtsEngine() != null) {
@@ -206,15 +206,31 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     /**
-     * 播放端变速（对齐 legado_NG）：V2 脚本引擎的合成速度只取引擎自身配置，
-     * 用户调节的朗读语速经 ExoPlayer 播放变速生效；经典 HTTP TTS 的语速已
-     * 编码进合成 URL，播放速度必须保持 1.0，否则双重加速。
+     * 判定 HTTP 引擎 URL 是否支持「服务端变速」：
+     * URL 模板含 speakSpeed / speak_speed / speechRate 占位符（或 JS 间接拼接）时，
+     * 服务端会按新语速合成，播放端应保持 1x；否则服务端永远按默认语速合成，
+     * 播放端需倍速兜底（在线语速修复，对齐 10027 方案）。
      */
-    private fun applyPlaybackRate() {
-        val rate = if (ReadAloud.currentScriptTtsEngine() != null) {
-            TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
-        } else {
-            1f
+    private fun httpTtsSupportsServerSpeed(httpTts: HttpTTS?): Boolean {
+        val url = httpTts?.url?.orEmpty() ?: return false
+        return url.contains("speakSpeed") || url.contains("speak_speed") ||
+            url.contains("speechRate")
+    }
+
+    /**
+     * 播放端变速（对齐 legado_NG）：V2 脚本引擎的合成速度只取引擎自身配置，
+     * 用户调节的朗读语速经 ExoPlayer 播放变速生效；经典 HTTP TTS 若合成 URL 已
+     * 携带语速占位符则服务端变速、播放端复位 1x；URL 无语速占位符的引擎（服务端
+     * 不响应语速）在播放端倍速兜底（在线语速修复，对齐 10027 方案）。
+     */
+    private fun applyPlaybackSpeedForEngine() {
+        val rate = when {
+            ReadAloud.currentScriptTtsEngine() != null ->
+                TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+            // httpTtsSnapshot 未就绪（play 初始）时保持 1x，避免误判双加速
+            httpTtsSnapshot != null && !httpTtsSupportsServerSpeed(httpTtsSnapshot) ->
+                TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+            else -> 1f
         }
         exoPlayer.setPlaybackSpeed(rate)
     }
@@ -1120,13 +1136,22 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun upSpeechRate(reset: Boolean) {
         if (ReadAloud.currentScriptTtsEngine() != null) {
             // V2 脚本引擎：语速经播放端变速即时生效，不重新合成
-            applyPlaybackRate()
-            if (!pause) {
+            applyPlaybackSpeedForEngine()
+            // 变速后重启句内轮询，让过界发布步长按新播放速度折算立即生效
+            if (!pause && isRun) {
                 upPlayPos()
             }
             return
         }
         if (!isRun || contentList.isEmpty() || httpTtsSnapshot == null) {
+            return
+        }
+        if (!httpTtsSupportsServerSpeed(httpTtsSnapshot)) {
+            // 服务端不响应语速的引擎：播放端倍速兜底，即时生效，避免无谓的网络重启
+            applyPlaybackSpeedForEngine()
+            if (!pause) {
+                upPlayPos()
+            }
             return
         }
         cancelHttpWork()
