@@ -2301,7 +2301,13 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun shouldFollowAloudAdvance(
         prev: ReadAloudPosition?,
         current: ReadAloudPosition,
+        switchConfirmed: Boolean = false,
     ): Boolean {
+        // SK 定制：用户双击换段/从本页读定位后，引擎发布的首个位置是「起点确认」，
+        // 不是自然朗读推进，此时不得拽动显示（setAloudStart 只写朗读起点）。
+        // switchConfirmed 由 ReadAloud.publishAloudPosition 在 pendingSwitchPosition 命中时生成，
+        // 无此短路时向前双击会把显示拽走（向后双击被下方单调性拦住，行为不对称）。
+        if (switchConfirmed) return false
         if (prev == null) return false
         if (current.chapterIndex != ReadBook.durChapterIndex) return false
         val chapter = ReadBook.curTextChapter ?: return false
@@ -3661,13 +3667,36 @@ class ReadBookActivity : BaseReadBookActivity(),
                     )
                     return@launch
                 }
-                if (shouldFollowAloudAdvance(update.previousPosition, position)) {
+                // SK 定制：翻页动画期间不得跟随写。
+                // PageDelegate.onAnimStop() 才真正推进页面，动画期间 curPage 仍是旧页，
+                // 跟随判定会误判为「显示页 == 朗读出发页」从而中途改 durChapterPos
+                // 并重渲染，动画结束后 fillPage() 再推进一次 → 页面回跳/多跳。
+                // 红字投影已由上面的 invalidateReadAloudHighlight 失效缓存，不受影响。
+                if (binding.readView.pageDelegate?.isRunning == true) {
+                    AppLog.putDebug(
+                        "[朗读] 位置事件忽略(翻页动画中) pos:${position.chapterPosition}",
+                        module = LogModule.READ_ALOUD
+                    )
+                    return@launch
+                }
+                if (shouldFollowAloudAdvance(
+                        update.previousPosition,
+                        position,
+                        update.switchConfirmed
+                    )
+                ) {
                     AppLog.putDebug(
                         "[朗读] 跟随写显示 pos:${position.chapterPosition}",
                         module = LogModule.READ_ALOUD
                     )
                     ReadBook.durChapterPos = position.chapterPosition
-                    upContent()
+                    // SK 定制：跟随写后立即落库（异步），避免进程被杀丢失听书进度。
+                    // 不传 pageChanged=true：那会跳过书源 SAVE_READ 回调，
+                    // 而跟随写是持续行为，不能长期跳过。
+                    ReadBook.saveRead()
+                    // SK 定制：滚动模式下 resetPageOffset=true 会清零滚动偏移，
+                    // 导致每次朗读位置事件都把用户拽回页首
+                    upContent(resetPageOffset = false)
                 } else {
                     AppLog.putDebug(
                         "[朗读] 不跟随 显示页与朗读出发页不同 显示pos:${ReadBook.durChapterPos} " +
