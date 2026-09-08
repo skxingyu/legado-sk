@@ -52,17 +52,24 @@ object ReviewSnapshotManager {
     /** 评论网络打开链路有本地快照时的网络加载上限。 */
     const val NETWORK_FALLBACK_LOAD_TIMEOUT_MS = 5_000L
 
-    /** 预热当前 Capture 与下一条 Capture；不随用户资源下载设置改变。 */
-    private const val CAPTURE_PIPELINE_CONCURRENCY = 2
+    /**
+     * 全局页面流水线并发上限（运行时动态读用户设置）。
+     *
+     * 不再像旧版那样在编译期写死为 2：改为每次使用前读 [AppConfig.reviewCaptureConcurrency]，
+     * 让「缓存评论页快照」的用户设置即时影响本流水线的全局并发上限。钳制 1..4，
+     * 与 AppConfig / MoreConfigDialog 显示值保持一致（AGENTS 设置默认值红线）。
+     */
+    private fun capturePipelineConcurrency(): Int = AppConfig.reviewCaptureConcurrency.coerceIn(1, 4)
 
-    /** 全局页面流水线固定为两条；无论按钮数多少，活动 Capture 都不会超过该值。 */
+    /** 全局页面流水线信号量锁；活动 Capture 数由 [activePipelines] 维护。 */
     private val pipelineLock = Any()
     private var activePipelines = 0
 
     private suspend fun <T> withPipelinePermit(block: suspend () -> T): T {
         while (true) {
+            val cap = capturePipelineConcurrency()
             val acquired = synchronized(pipelineLock) {
-                if (activePipelines < CAPTURE_PIPELINE_CONCURRENCY) {
+                if (activePipelines < cap) {
                     activePipelines++
                     true
                 } else {
@@ -650,8 +657,9 @@ object ReviewSnapshotManager {
             }
         }
         reportChapterProgress()
-        // 单章只预热当前按钮与下一条；全局也由 [withPipelinePermit] 固定为两条 Capture。
-        val buttonConcurrency = CAPTURE_PIPELINE_CONCURRENCY.coerceAtMost(
+        // 单章按钮并发与全局流水线并发同读同一运行时设置；实际仍受 [withPipelinePermit]
+        // 的进程级信号量钳制，因此并发再高也不会让活动 Capture 超过配置上限。
+        val buttonConcurrency = capturePipelineConcurrency().coerceAtMost(
             processButtons.size.coerceAtLeast(1)
         )
         val resolvedPageRecorder = AtomicReference<ResolvedPageContext?>(null)

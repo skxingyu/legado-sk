@@ -1846,6 +1846,8 @@
     <string name="cache_review_compression_size_summary">Maximum output size: %1$d KB</string>
     <string name="comment_cache_concurrency">Comment resource download concurrency</string>
     <string name="comment_cache_concurrency_summary">Maximum concurrent resource downloads while caching one comment-page snapshot, default 8</string>
+    <string name="review_capture_concurrency">Comment snapshot capture concurrency</string>
+    <string name="review_capture_concurrency_summary">Maximum comment-page snapshots captured in parallel across the whole process, default 4</string>
     <string name="export_reviews">Export comments</string>
     <string name="export_reviews_summary">Include cached comment page snapshots in the TXT-ZIP archive</string>
     <string name="review_sync_running">Caching comment-page snapshots</string>
