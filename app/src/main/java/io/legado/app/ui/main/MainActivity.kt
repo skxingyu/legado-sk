@@ -56,7 +56,6 @@ import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
-import io.legado.app.help.update.UpdateManager
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.UiCorner
@@ -86,7 +85,6 @@ import io.legado.app.utils.isCreated
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.observeEvent
-import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setHuaweiDisplayCutoutShortEdgesCompat
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
@@ -291,10 +289,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         lifecycleScope.launch {
-            //自动检查更新
-            if (getPrefBoolean(PreferKey.updateCheckOnStart, true)) {
-                UpdateManager.checkUpdate(this@MainActivity)
-            }
             notifyAppCrash()
             //备份同步
             backupSync()

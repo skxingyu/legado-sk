@@ -14,10 +14,10 @@ plugins {
 apply from: 'download.gradle'
 
 static def releaseTime() {
-    return new Date().format("yy.MMddHH", TimeZone.getTimeZone("UTC"))
+    return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
 }
 
-def name = "legado"
+def name = "legado_sk"
 def version = project.hasProperty("VERSION_NAME")
         ? project.property("VERSION_NAME").toString()
         : "3." + releaseTime()
@@ -52,6 +52,8 @@ android {
         targetSdk 36
         versionCode buildVersionCode
         versionName version
+        // 只保留简体中文，其余语言资源一律裁剪（瘦身）
+        resConfigs "zh"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         project.ext.set("archivesBaseName", name + "_" + version)
 
@@ -140,8 +142,7 @@ android {
 
     android.applicationVariants.configureEach { variant ->
         variant.outputs.configureEach {
-            def flavor = variant.productFlavors[0].name
-            outputFileName = "${name}_${flavor}_${defaultConfig.versionName}_${defaultConfig.versionCode}.apk"
+            outputFileName = "${name}_${defaultConfig.versionName}_${defaultConfig.versionCode}.apk"
         }
     }
 

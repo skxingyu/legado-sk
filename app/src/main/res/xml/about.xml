@@ -9,16 +9,25 @@
         app:iconSpaceReserved="false" />
 
     <io.legado.app.lib.prefs.Preference
-        android:key="telegram"
-        android:summary="@string/telegram_channel_summary"
-        android:title="@string/join_telegram_channel"
+        android:key="update_log"
+        android:title="@string/update_log"
+        app:allowDividerAbove="false"
+        app:allowDividerBelow="false"
+        app:iconSpaceReserved="false" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="false"
+        android:key="updateCheckPre"
+        android:summary="@string/update_check_pre_desc"
+        android:title="@string/update_check_pre"
         app:allowDividerAbove="false"
         app:allowDividerBelow="false"
         app:iconSpaceReserved="false" />
 
     <io.legado.app.lib.prefs.Preference
-        android:key="update_log"
-        android:title="@string/update_log"
+        android:key="updateCheckNow"
+        android:summary="@string/update_check_now_desc"
+        android:title="@string/update_check_now"
         app:allowDividerAbove="false"
         app:allowDividerBelow="false"
         app:iconSpaceReserved="false" />
