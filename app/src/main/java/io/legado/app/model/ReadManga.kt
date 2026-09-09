@@ -75,6 +75,9 @@ object ReadManga : CoroutineScope by MainScope() {
     val hasNextChapter get() = durChapterIndex < simulatedChapterSize - 1
 
     fun resetData(book: Book) {
+        // F1: 换书先取消旧书在途下载（旧书协程经 contentLoadFinish 的 canceled/bookUrl 守卫短路，不污染新书）
+        preDownloadTask?.cancel()
+        downloadScope.coroutineContext.cancelChildren()
         ReadManga.book = book
         readRecord.deviceId = AppConst.androidId
         readRecord.bookName = book.name
@@ -97,6 +100,9 @@ object ReadManga : CoroutineScope by MainScope() {
     }
 
     fun upData(book: Book) {
+        // F1: 换书先取消旧书在途下载（同 resetData）
+        preDownloadTask?.cancel()
+        downloadScope.coroutineContext.cancelChildren()
         ReadManga.book = book
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
         simulatedChapterSize = if (book.readSimulating()) {
@@ -207,6 +213,12 @@ object ReadManga : CoroutineScope by MainScope() {
         errorMsg: String = "加载内容失败",
         canceled: Boolean = false
     ) {
+        // F2: 换书守卫——旧书在途回写（loadContent/download/error/cancel 的汇聚点）不得污染当前书。
+        //     不改 loadingChapters：换书时 resetData/upData 已在 synchronized 内 clear，
+        //     若此处误 removeLoading 可能删掉新书同 index 的加载标记。
+        if (chapter.bookUrl != ReadManga.book?.bookUrl) {
+            return
+        }
         removeLoading(chapter.index)
         if (canceled || chapter.index !in durChapterIndex - 1..durChapterIndex + 1) {
             return
@@ -457,10 +469,17 @@ object ReadManga : CoroutineScope by MainScope() {
         val bookSource = bookSource
         if (bookSource != null) {
             downloadNetworkContent(bookSource, scope, chapter, book, semaphore, success = {
+                // F2: 换书守卫——旧书在途回写不得污染当前书的 downloadedChapters/downloadFailChapters
+                if (chapter.bookUrl != ReadManga.book?.bookUrl) {
+                    return@downloadNetworkContent
+                }
                 downloadedChapters.add(chapter.index)
                 downloadFailChapters.remove(chapter.index)
                 contentLoadFinish(chapter, it)
             }, error = {
+                if (chapter.bookUrl != ReadManga.book?.bookUrl) {
+                    return@downloadNetworkContent
+                }
                 downloadFailChapters[chapter.index] =
                     (downloadFailChapters[chapter.index] ?: 0) + 1
                 contentLoadFinish(chapter, null)
