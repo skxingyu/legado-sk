@@ -1373,4 +1373,6 @@
     <string name="disable_all_toast">關閉所有底部彈窗</string>
     <string name="disable_all_toast_summary">不顯示應用程式透過 Toast 發出的所有底部彈窗，包括書源彈窗</string>
     <string name="reverse_toc_display">&#x53CD;&#x5411;&#x986F;&#x793A;</string>
+    <string name="toc_load_failed_using_cache">目錄載入失敗，已使用本機快取目錄</string>
+    <string name="migrate_book_origin_done">書源地址變更，已自動遷移書架上該書源的關聯書籍</string>
 </resources>
