@@ -1073,15 +1073,19 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 if (AppearanceKitManager.isKitPackage(file)) {
                     AppearanceKitManager.importPackage(file)
                 } else {
-                    ThemePackageManager.importZip(file).also {
-                        enqueueUploadIfNeeded(it)
-                    }
+                    val entries = ThemePackageManager.importZip(file)
+                    entries.forEach { enqueueUploadIfNeeded(it) }
+                    // 原生包恒返回单个 Entry；MD3 包固定拆分为日/夜两份
+                    toastOnUi(
+                        getString(
+                            if (entries.size > 1) R.string.md3_theme_imported
+                            else R.string.theme_imported
+                        )
+                    )
                     null
                 }
             }.onSuccess { summary ->
-                if (summary == null) {
-                    toastOnUi(getString(R.string.theme_imported))
-                } else {
+                if (summary != null) {
                     toastOnUi(getString(R.string.appearance_kit_imported, summary.kitName))
                 }
                 loadThemes()
