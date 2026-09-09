@@ -7,6 +7,9 @@ build/
 /captures
 .externalNativeBuild
 /release
+# 迁移后配套工作文档（项目文档/编译排错手册/代码审查报告/backup 等）
+# 收敛进仓库目录但含机器信息，一律不推送到公开仓库
+/companion
 /tmp
 node_modules/
 /app/app
