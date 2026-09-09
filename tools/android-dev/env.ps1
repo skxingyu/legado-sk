@@ -19,10 +19,10 @@ if ($script:LDPlayerSerial -notmatch '^127\.0\.0\.1:\d+$') {
     throw "Refusing non-loopback Android target: $script:LDPlayerSerial"
 }
 
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
-$env:ANDROID_HOME = 'D:\AI\audio\android-sdk'
+$env:JAVA_HOME = 'C:\Users\skxingyu\AndroidDev\jdk-17.0.2'
+$env:ANDROID_HOME = 'C:\Users\skxingyu\AndroidDev\android-sdk'
 $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
-$env:GRADLE_USER_HOME = 'D:\AI\audio\android-gradle-user-home'
+# Gradle user home 不显式设置，走默认 C:\Users\skxingyu\.gradle
 $env:LEIDIAN_SERIAL = $script:LDPlayerSerial
 $env:LEIDIAN_HOME = $script:LDPlayerHome
 
