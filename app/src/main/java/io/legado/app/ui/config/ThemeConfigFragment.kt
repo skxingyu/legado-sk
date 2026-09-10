@@ -305,7 +305,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogAlpha)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogAlpha, 50)
+                putPrefInt(PreferKey.dialogAlpha, AppConfig.DEFAULT_DIALOG_ALPHA)
             }
             .show {
                 putPrefInt(PreferKey.dialogAlpha, it.coerceIn(0, 100))
@@ -319,7 +319,7 @@ class ThemeConfigFragment : PreferenceFragment(),
             .setMinValue(0)
             .setValue(AppConfig.dialogBlur)
             .setCustomButton(R.string.btn_default_s) {
-                putPrefInt(PreferKey.dialogBlur, 100)
+                putPrefInt(PreferKey.dialogBlur, AppConfig.DEFAULT_DIALOG_BLUR)
             }
             .show {
                 putPrefInt(PreferKey.dialogBlur, it.coerceIn(0, 100))

@@ -789,7 +789,10 @@ object ThemeConfig {
                 panelBorderAlpha = context.getPrefInt(PreferKey.panelBorderAlpha, 100),
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
-                dialogAlpha = appCtx.getPrefInt(PreferKey.dialogAlpha, 50).coerceIn(0, 100),
+                dialogAlpha = appCtx.getPrefInt(
+                    PreferKey.dialogAlpha,
+                    AppConfig.DEFAULT_DIALOG_ALPHA
+                ).coerceIn(0, 100),
                 cardColor = context.getPrefString(PreferKey.themeCardColor)
                     ?.takeIf { it.isNotBlank() } ?: stored?.cardColor,
                 mutedColor = context.getPrefString(PreferKey.themeMutedColor)
@@ -873,7 +876,10 @@ object ThemeConfig {
                 panelBorderAlpha = context.getPrefInt(PreferKey.panelBorderAlphaN, 100),
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
-                dialogAlpha = appCtx.getPrefInt(PreferKey.dialogAlpha, 50).coerceIn(0, 100),
+                dialogAlpha = appCtx.getPrefInt(
+                    PreferKey.dialogAlpha,
+                    AppConfig.DEFAULT_DIALOG_ALPHA
+                ).coerceIn(0, 100),
                 cardColor = context.getPrefString(PreferKey.themeCardColorN)
                     ?.takeIf { it.isNotBlank() } ?: stored?.cardColor,
                 mutedColor = context.getPrefString(PreferKey.themeMutedColorN)

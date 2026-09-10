@@ -1067,14 +1067,20 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.bookshelfCoverAlpha, value.coerceIn(0, 100))
         }
 
+    // 弹窗透明度/模糊的默认值。必须与 res/xml/pref_config_theme.xml 的
+    // android:defaultValue 保持一致（XML 是字面量，无法引用 Kotlin 常量），
+    // 界面「默认」按钮与 ThemeConfig 的读取兜底一律引用此处，避免字面量漂移。
+    const val DEFAULT_DIALOG_ALPHA = 20
+    const val DEFAULT_DIALOG_BLUR = 50
+
     var dialogAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 20).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, DEFAULT_DIALOG_ALPHA).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
         }
 
     var dialogBlur: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogBlur, 50).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(PreferKey.dialogBlur, DEFAULT_DIALOG_BLUR).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(PreferKey.dialogBlur, value.coerceIn(0, 100))
         }
