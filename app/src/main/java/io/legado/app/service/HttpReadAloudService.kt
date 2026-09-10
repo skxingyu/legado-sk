@@ -171,9 +171,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun play() {
         pageChanged = false
         exoPlayer.stop()
+        // 必须先就位：applyPlaybackSpeedForEngine 要据此判断该引擎是否支持服务端变速，
+        // 决定播放端是否倍速兜底。放在调用之后会让首次 play() 恒判为未就绪 → 退回 1x。
+        httpTtsSnapshot = ReadAloud.httpTTS
         applyPlaybackSpeedForEngine()
         if (!requestFocus()) return
-        httpTtsSnapshot = ReadAloud.httpTTS
         if (ReadAloud.currentScriptTtsEngine() != null) {
             // 脚本引擎合成走文件缓存 + 顺序播放管线。
             if (contentList.isEmpty()) {
@@ -227,7 +229,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         val rate = when {
             ReadAloud.currentScriptTtsEngine() != null ->
                 TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
-            // httpTtsSnapshot 未就绪（play 初始）时保持 1x，避免误判双加速
+            // 引擎未知（ReadAloud.httpTTS 为 null）时保持 1x，避免误判双加速
             httpTtsSnapshot != null && !httpTtsSupportsServerSpeed(httpTtsSnapshot) ->
                 TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
             else -> 1f
