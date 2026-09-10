@@ -207,7 +207,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
-- **语言裁剪边界**：`resConfigs "zh"` 后繁体及其他语言回退默认 `values/`（英文），属预期行为而非缺陷。
+- **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
 
 ### 设置默认值
 
@@ -269,10 +269,23 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10037（`3.26.090900c`）已装雷电模拟器（2026-09-09）——当前交付（补齐 10036 重植遗漏的 SK 定制）**：以 `git diff a3a447ea df5fd0ad` 全量比对逐项补回遗漏定制：① **听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板——作者报的界面未改问题）；② 朗读路径断言改诊断提示（`3976f3be` 第三轮审查 M1）；③ 服务侧悬浮窗 bounds/越界容错（10025）；④ 换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；⑤ 数据安全：备份加密失败中止（拒绝静默退明文）、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`（第三轮 L1）、MobiFile fd 关闭；⑥ MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 `release/legado_sk_3.26.090900c_10037_arm64-v8a.apk`（30,934,923 字节），aapt(包名 io.legado.app.c/10037/3.26.090900c/阅读SK/arm64-v8a) + apksigner 通过；模拟器 10036 覆盖升级安装成功。⚠️ 本次回归仅覆盖「编译 + 安装 + 界面层级检查」：模拟器书架为空、真机未接入，朗读菜单与各功能点需作者真机复验。
+- ✅ **10038（`3.26.091014c`）已装雷电模拟器（2026-09-10）——当前交付（重植审计修复：7 项缺陷 + 4 项清理）**：对 `git diff e3ee7b81 HEAD`（106 文件）做全量对抗性审计，29 个候选经「上游对照」否决后确认并修复：
+  - **数据安全**：`WebDav.existsChecked()` 补全三态语义（`fc29e5af` 自建但未实现完 KDoc 承诺）——401/403/5xx 原先被当「明确不存在」，令 `ReadBook.getBookProgress` 返回 null，与 `LOCAL_NEWER` 同分支 → 本地旧进度**反向覆盖云端**（不可逆）。改为 2xx→true / 404→false / 其余抛异常，由既有的 catch 中止同步（`2a4ad571`）。
+  - **听书**：① HTTP TTS 播放端倍速兜底失效——`applyPlaybackSpeedForEngine()` 在 `httpTtsSnapshot` 赋值**之前**调用，首次 play 恒落 1x（上游该函数不读 snapshot，SK 改造后新增依赖却沿用上游位置，属半改）（`1ab98ccd`）；② 朗读跟随翻页守卫改用「类身份 + 真动画标志」——原`isRunning` 粗判据是 **SK 新增**（上游无此分支），会误伤滚动模式、跳过 `updateReadAloudPanels()`、并使跟随滞后累积（`44ea4b52`）；③ 悬浮窗非法 bounds 早退会跳过唯一后处理并残留陈旧避让区（`45c267df`）。
+  - **主题**：① `dialogAlpha/dialogBlur` 六处字面量漂移统一为 `DEFAULT_DIALOG_*`（`ThemeConfig.kt:792/876` 的 50 会经 `saveDayTheme→addConfig→applyConfig` **写回全局 SP 覆盖 20**）（`fac1a659`）；② 主题配置改 `themeName + isNightTheme` 双键匹配——MD3 导入对同一 themeName 两轮 addConfig，单键会让夜间整条替换日间（`addConfig` 与 `addConfigs` **必须同修**，后者经 `upConfig()` 在恢复备份时重建）（`2335b4ba`）。
+  - **更新链**：关于页补回下载加速源设置——`resolveAcceleratedUrl` 仍在 APK 下载活路径上，但 SK 删 `pref_main` 更新节时未同步删分支，导致加速源**永久锁死 ghfast**。同时补回上游 `MyFragment` 的 `updateAcceleratorCustom` 可见性联动（仅选 custom 时显示）（`223e76cb`）。
+  - **清理/瘦身**：删除 6 个被 `resConfigs "zh"` 裁掉的 `values-zh-rHK|rTW` 死目录（`23b6cf4d`，−2986 行）；`MangaVH.isLastImage` 死形参及两处调用点局部变量（`6bcf3bfb`）；7 个零引用字符串（`ac130963`）。
+  - 同期修正 `MangaVH` 章末图片高度 `MATCH_PARENT`→`WRAP_CONTENT`（与注释相反，父容器 WRAP_CONTENT 下会塌缩）（`502d81c6`）。
+  - 产物 `release/legado_sk_3.26.091014c_10038_arm64-v8a.apk`（30,933,368 字节），aapt(包名 io.legado.app.c/10038/3.26.091014c/阅读SK/arm64-v8a/locales 'zh') + apksigner(exit 0) 通过；模拟器 10037 覆盖升级成功、启动无崩溃、书架 6 本正常。
+  - ⚠️ **回归范围**：模拟器已实测 T3 完整闭环（加速源 5 项可选、选「自定义」后前缀框出现、强杀重启后仍持久），其余项（朗读跟随跟手、MD3 日夜双 tab、HTTP TTS 倍速、WebDAV 鉴权失败中止）**需作者真机复验**。
+  - **方法论沉淀（重要）**：本次审计确立「**上游对照**」为强制否决步骤——大量"看似错配"实为**逐字继承自上游**（`autoReadSpeed` 10/46、`expandTextMenu` 死开关、`hideStatusBar` 三处默认值不一、`Restore.kt` 事务非原子等）。只有「上游有 A+B，SK 只改了 A 而 B 仍是上游值」才是重植缺陷。**未做上游对照即报缺陷会产生大量误报**。
+  - **本次审计驳回的自身误判（记录以免重犯）**：① `ThemePackageManager` 的 `fontScale != 10` 排除**是正确的**——`10` 是字段声明默认值，GSON 经 Unsafe 不应用 Kotlin 默认值（`GsonExtensions.kt` 未注册 `KotlinValueInstantiator`），`1..16` 下界用于区分缺失填的 0；去掉会令「包内 fontScale=10」静默重置用户缩放；② 判断布局控件是否存在时**必须注意 XML id 是 snake_case 而 ViewBinding 才转驼峰**，用 camelCase 搜 `res/layout/` 会假阴性。
+- 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10038` 递增。
+- 下一次交付 versionCode 从 `10039` 递增。
+
+> ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
 > 重植方法论修正（10037 教训）：核对「SK 定制是否全部保留」必须以 `git diff <旧基底> <旧SK main>` 的全量内容比对为准（新增行 + 删除行双向核查），不能只依赖按功能分簇的素材清单——10036 即因分簇清单不全而漏植约十项。
 
