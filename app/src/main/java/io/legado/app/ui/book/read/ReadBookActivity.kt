@@ -3713,11 +3713,24 @@ class ReadBookActivity : BaseReadBookActivity(),
                 // 跟随判定会误判为「显示页 == 朗读出发页」从而中途改 durChapterPos
                 // 并重渲染，动画结束后 fillPage() 再推进一次 → 页面回跳/多跳。
                 // 红字投影已由上面的 invalidateReadAloudHighlight 失效缓存，不受影响。
-                if (binding.readView.pageDelegate?.isRunning == true) {
+                //
+                // 判据必须区分「真动画」与「滚动跟手」：
+                // ScrollPageDelegate 的拖动 (onTouch) 只置 isRunning 不置 isStarted，
+                // 而 isStarted 仅由基类 startScroll()/fling() 置位（二者同时置 isRunning）。
+                // 若只用 isRunning，滚动模式（听书主用模式）下用户一拖动就会整段丢弃
+                // 位置事件；又因 stopScroll() 的 isRunning=false 在 post{} 内延迟执行，
+                // 松手后还会多丢一帧。丢弃期间引擎侧已前移 previousPosition，导致
+                // 跟随判定滞后累积。故滚动模式只在真正有滚动动画时才丢弃。
+                val delegate = binding.readView.pageDelegate
+                val inPageAnim = delegate != null && delegate.isRunning &&
+                    (delegate !is ScrollPageDelegate || delegate.isStarted)
+                if (inPageAnim) {
                     AppLog.putDebug(
                         "[朗读] 位置事件忽略(翻页动画中) pos:${position.chapterPosition}",
                         module = LogModule.READ_ALOUD
                     )
+                    // 面板刷新是本函数的统一收尾，早退也必须执行，否则丢弃期间面板状态停更。
+                    updateReadAloudPanels()
                     return@launch
                 }
                 if (shouldFollowAloudAdvance(
