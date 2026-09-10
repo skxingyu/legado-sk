@@ -844,7 +844,6 @@
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="join_qq_group">Join QQ group</string>
     <string name="bg_image_per">Set the background image requires storage permission</string>
     <string name="input_book_source_url">Input book source address</string>
     <string name="del_file">Delete file</string>
@@ -1143,7 +1142,6 @@
     <string name="config_category_appearance">Appearance and AI</string>
     <string name="config_category_sync">Sync and services</string>
     <string name="config_category_tools">Tools and about</string>
-    <string name="config_category_update">Update</string>
     <string name="update_check_on_start">Check for updates on launch</string>
     <string name="update_check_on_start_desc">Automatically check GitHub for a new version every time the app starts</string>
     <string name="update_check_pre">Include pre-release versions</string>
@@ -1775,11 +1773,6 @@
     <string name="scope_content">Act on the content</string>
     <string name="join_qq_channel">Join QQ channel</string>
     <string name="qq_channel_summary">点击加入阅读QQ频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1004372141</string>
-    <string name="telegram_channel_summary">长按复制 QQ 群号</string>
-    <string name="qq_group_url">https://qun.qq.com/universal-share/share?ac=1&amp;authKey=Ulqf2L2Vfhg5%2Fu%2BoT%2BYEFYzCWvwLLNi0Vnqrbu1xgwhEDje0ET3Xx34IT1xayr%2FO&amp;busi_data=eyJncm91cENvZGUiOiIxMDA0MzcyMTQxIiwidG9rZW4iOiIrQW9wMWNjRkRmR3ZGUG1CYWZlbzFGNUpuays0ZnpmY3k1R0dDVUl6OStCQ1Y0Yi9neEhGK2YxYXJoOFZyaXN5IiwidWluIjoiMjgzMTgzNTgzMSJ9&amp;data=XMopS5ADBDyAfQdXCZsFV5tZg3vNoLOuWMQUohraa4FsBBeCdXmjAP1gFHVWOniA41RtYHDifrACTGs9DKGVZA&amp;svctype=4&amp;tempid=h5_group_info</string>
-    <string name="qq_group_number">1004372141</string>
-    <string name="qq_group_number_copied">群号已复制</string>
     <string name="menu_refresh_dur">Refresh the current chapter</string>
     <string name="menu_refresh_after">Refresh the chapter after</string>
     <string name="menu_refresh_all">Refresh all chapters</string>

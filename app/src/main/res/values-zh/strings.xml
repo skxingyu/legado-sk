@@ -843,7 +843,6 @@
     <string name="theme">主题</string>
     <string name="theme_mode">主题模式</string>
     <string name="theme_mode_desc">选择主题模式</string>
-    <string name="join_qq_group">加入 QQ 群</string>
     <string name="bg_image_per">获取背景图片需存储权限</string>
     <string name="input_book_source_url">输入书源网址</string>
     <string name="del_file">删除文件</string>
@@ -1516,8 +1515,6 @@
     <string name="scope_content">作用于正文</string>
     <string name="join_qq_channel">加入 QQ 频道</string>
     <string name="qq_channel_summary">点击加入阅读 QQ 频道</string>
-    <string name="join_telegram_channel">加入我的 QQ 群 1004372141</string>
-    <string name="telegram_channel_summary">长按复制 QQ 群号</string>
     <string name="menu_refresh_dur">刷新当前章节</string>
     <string name="menu_refresh_after">刷新之后章节</string>
     <string name="menu_refresh_all">刷新全部章节</string>
@@ -2127,7 +2124,6 @@
     <string name="config_category_appearance">外观与 AI</string>
     <string name="config_category_sync">同步与服务</string>
     <string name="config_category_tools">工具与关于</string>
-    <string name="config_category_update">更新设置</string>
     <string name="update_check_on_start">每次启动检测更新</string>
     <string name="update_check_on_start_desc">每次打开应用时自动检查 GitHub 是否有新版本</string>
     <string name="update_check_pre">接收 Pre 版本更新推送</string>
