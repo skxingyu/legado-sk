@@ -1,5 +1,6 @@
 package io.legado.app.ui.about
 
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -19,6 +20,7 @@ import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.update.UpdateManager
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.prefs.EditTextPreference
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.createFileIfNotExist
@@ -27,6 +29,7 @@ import io.legado.app.utils.delete
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.find
 import io.legado.app.utils.getFile
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.list
 import io.legado.app.utils.openInputStream
 import io.legado.app.utils.openOutputStream
@@ -45,17 +48,40 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AboutFragment : PreferenceFragmentCompat() {
+class AboutFragment : PreferenceFragmentCompat(),
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.about)
         findPreference<Preference>("update_log")?.summary =
             "${getString(R.string.version)} ${appInfo.versionName}"
+        // 自定义加速源前缀仅在选了「自定义」时可用
+        findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)?.isVisible =
+            getPrefString(PreferKey.updateAccelerator) == "custom"
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         listView.overScrollMode = View.OVER_SCROLL_NEVER
+    }
+
+    override fun onResume() {
+        super.onResume()
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onPause() {
+        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
+        super.onPause()
+    }
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        when (key) {
+            PreferKey.updateAccelerator -> {
+                findPreference<EditTextPreference>(PreferKey.updateAcceleratorCustom)
+                    ?.isVisible = sharedPreferences?.getString(key, "none") == "custom"
+            }
+        }
     }
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
