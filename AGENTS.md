@@ -334,6 +334,9 @@ uiautomator2 / ADB
 
 > 重植方法论修正（10037 教训）：核对「SK 定制是否全部保留」必须以 `git diff <旧基底> <旧SK main>` 的全量内容比对为准（新增行 + 删除行双向核查），不能只依赖按功能分簇的素材清单——10036 即因分簇清单不全而漏植约十项。
 
+> ⚠️ **重植上游后必须核查并删除 `.github/dependabot.yml`（2026-09-10 补充）**：SK 版**不使用** Dependabot 自动依赖升级（上游 `CCSSNE/legadoC` 仓库仍带该配置，根目录 `.github/dependabot.yml` 声明 gradle / npm / github-actions 三个生态）。因本仓库是独立仓库而非 fork，不继承上游配置，但**每次从上游合并/重植都会把该文件重新带入**——已因此删除过两次（`e080aa96`、`fe4d57a8`）。重植后执行 `git cat-file -e HEAD:.github/dependabot.yml` 确认不存在；若被带入则删除并单独提交（`chore: 删除 dependabot 配置，停用自动依赖升级 PR`）。
+> **历史遗留 PR 处理**：2026-09-10 已将 Dependabot 积压的 8 个 PR（#61~#68）全部关闭并附说明。判断依据可复用：① `modules/web` **不参与 APK 构建**（`settings.gradle` 仅 `include ':app'` / `':modules:book'` / `':modules:rhino'`），故其 20 个 npm 升级 PR 无落地路径；② `gradle/libs.versions.toml` 的 kotlin/ksp/AGP/wrapper 属**已验证的构建工具链组合**（wrapper 8.14.4 + AGP 8.13.2），跨大版本升级会破坏 `assembleAppRelease`，不得自动合入；确需升级的依赖一律**手动评估后单独提交**，不引入机器人 PR。
+
 每次交付后当场更新本节。历史发布信息从 Git、GitHub Release 或 `companion\项目文档.md` §2.1 版本索引 / `companion\发布版更新记录.md` 查询，不在本文件累积。
 
 ## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
