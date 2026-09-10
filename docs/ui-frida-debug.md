@@ -1,7 +1,7 @@
 # Frida UI 调试窗口速查（雷电模拟器 / legadoC）
 
 > 用途：给模拟器里运行的 App 注入带悬浮窗的可调节调试面板（如"背景板下移 offset"）。
-> 环境：frida 16.7.19 + frida-tools 13.0.1（venv：`D:\AI\audio\frida-env`）；或 frida 17.17.0（venv：`.android-dev-venv`，Java 桥来自 `frida_tools\bridges\java.js`，见 `tools/android-dev/frida_probe.py` 的加载方式，用 `const Java = bridge;` 绑定）。frida-server 必须与客户端同版本。模拟器上当前常驻 17.17.0 server（`/data/local/tmp/legadoc-frida-server`，监听 127.0.0.1:27044，root 启动，`-D` 守护）；旧 16.7.19 server 已停。驱动 `ui_drop_ball_inject.py` 用 `.android-dev-venv` python 并自动 `adb forward tcp:27042 tcp:27044`。
+> 环境：frida 17.17.0（venv：`.android-dev-venv`，Java 桥来自 `frida_tools\bridges\java.js`，见 `tools/android-dev/frida_probe.py` 的加载方式，用 `const Java = bridge;` 绑定）。frida-server 必须与客户端同版本。模拟器上常驻 17.17.0 server（`/data/local/tmp/legadoc-frida-server`，监听 127.0.0.1:27044，root 启动，`-D` 守护）。驱动 `ui_drop_ball_inject.py` 用 `.android-dev-venv` python 并自动 `adb forward tcp:27042 tcp:27044`。
 
 ## 注入脚本要点
 

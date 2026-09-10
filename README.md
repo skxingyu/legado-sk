@@ -39,18 +39,16 @@
 
 ### 三、构建与分发
 
-- **新增 `sk2` 共存测试版**：`io.legado.app.sk2`（应用名「阅读SK」），可与正式版 `io.legado.app.c` 共存安装，方便新功能先行测试。
+- **正式版**：`io.legado.app.c`（应用名「阅读SK」），与旧版本可直接覆盖升级。
 - **启用阿里云镜像仓库**：`settings.gradle` 启用 `maven.aliyun.com` 镜像，加快依赖下载与编译速度。
+- **仅提供 `arm64-v8a` 架构**，资源语言裁剪为 `zh`。
 
 ## 安装包
 
-| 文件 | 包名 | 说明 |
-|---|---|---|
-| `legado_sk_3.26.0816c_10004_arm64-v8a.apk` | `io.legado.app.c` | 正式版（可与旧版覆盖升级） |
-| `legado_sk_3.26.0816sk2_10004_arm64-v8a.apk` | `io.legado.app.sk2` | 共存测试版（应用名「阅读SK」） |
+安装包见 [Release 页面](https://github.com/skxingyu/legado-sk/releases)。文件名格式为 `legado_sk_<版本名>_<版本号>_arm64-v8a.apk`，同签名可直接覆盖安装（不丢数据）。
 
-> 安装包见 Release 页面；仅提供 `arm64-v8a` 架构。
+> 后续版本会以 **Pre-release** 形式先行发布；如需在应用内收到预发布版更新提示，请在「关于」页开启「接收预发布版本」。
 
 ## 更新日志
 
-完整更新说明见 [CHANGELOG.md](CHANGELOG.md)。
+完整更新说明见 [GitHub Releases](https://github.com/skxingyu/legado-sk/releases) 页面（每个版本的发布说明即该版更新日志）。
