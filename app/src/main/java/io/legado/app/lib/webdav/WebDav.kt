@@ -275,7 +275,19 @@ open class WebDav(
             addHeader("Depth", "0")
             val requestBody = EXISTS.toRequestBody("application/xml".toMediaType())
             method("PROPFIND", requestBody)
-        }.use { it.isSuccessful }
+        }.use { response ->
+            when {
+                // 2xx（含 WebDAV 的 207 Multi-Status）= 服务器答复存在
+                response.isSuccessful -> true
+                // 404 = 服务器明确答复不存在
+                response.code == 404 -> false
+                // 401/403/5xx 等 = 无法判定，必须上抛而不是当「不存在」，
+                // 否则鉴权失败会被误判为「云端无文件」，令本地旧进度反向覆盖云端
+                else -> throw WebDavException(
+                    "$url\n${response.code}:${response.message}"
+                )
+            }
+        }
     }
 
     /**
