@@ -105,8 +105,10 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                             gravity = Gravity.NO_GRAVITY
                         }
                         // 章末图片按自然高度显示, 不再强制撑高至屏幕 2/3, 避免出现黑色空白背景
+                        // 注意：此处父 itemView 已被置为 WRAP_CONTENT，子视图若用 MATCH_PARENT
+                        // 不会贡献期望高度，会导致本页高度塌缩；必须用 WRAP_CONTENT。
                         mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                            height = ViewGroup.LayoutParams.MATCH_PARENT
+                            height = ViewGroup.LayoutParams.WRAP_CONTENT
                         }
                         itemView.minimumHeight = 0
                         mImage.scaleType = ImageView.ScaleType.FIT_XY
