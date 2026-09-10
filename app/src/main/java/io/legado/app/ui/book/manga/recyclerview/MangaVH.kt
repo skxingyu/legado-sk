@@ -53,7 +53,6 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
     fun loadImageWithRetry(
         imageUrl: String,
         isHorizontal: Boolean,
-        isLastImage: Boolean,
         transformation: Transformation<Bitmap>?
     ) {
         mFlProgress.isVisible = true
