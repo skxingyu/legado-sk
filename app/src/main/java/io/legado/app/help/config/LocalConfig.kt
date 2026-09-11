@@ -57,6 +57,16 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
         edit { putInt(versionKey, version) }
     }
 
+    /**
+     * 出厂内置书源是否已播种过。
+     * 用一次性布尔标记而非版本号：置位后永不重播，用户删掉的内置书源不会在下次升级复活。
+     */
+    var builtinBookSourceSeeded: Boolean
+        get() = getBoolean("builtinBookSourceSeeded", false)
+        set(value) {
+            edit { putBoolean("builtinBookSourceSeeded", value) }
+        }
+
     @Suppress("SameParameterValue")
     private fun isLastVersion(
         lastVersion: Int,

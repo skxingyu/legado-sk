@@ -2,6 +2,7 @@ package io.legado.app.help
 
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.entities.HttpTTS
@@ -14,6 +15,7 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.BookCover
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
@@ -60,10 +62,41 @@ object DefaultData {
             }
             //AI 配置不维护升级号：应用版本号一变就按开关处理，新装只记号
             AiCreationConfig.nukeOnAppVersionChange()
+            //出厂内置书源只种一次（不用版本号：版本号会让用户删掉的书源在每次升级后复活）
+            seedBuiltinBookSourcesOnce()
         }.onError {
             AppLog.put("启动默认数据升级任务失败\n${it.localizedMessage}", it)
         }
     }
+
+    /**
+     * 出厂内置书源只播种一次。
+     *
+     * 刻意不使用 [migrateDefaultData] 的版本号机制：版本号每次提升都会重新执行导入，
+     * 用户删掉的书源就会在下次升级复活。这里用一次性布尔标记，标记置位后永不重播，
+     * 因此用户在书源管理里删掉它就不会再回来。
+     * 判重按 `bookSourceUrl`（书源表主键）跳过已存在项，绝不覆盖用户自建/改过的书源。
+     */
+    fun seedBuiltinBookSourcesOnce() {
+        if (LocalConfig.builtinBookSourceSeeded) return
+        val seeded = builtinBookSourcesToSeed(builtinBookSources) { appDb.bookSourceDao.has(it) }
+        if (seeded.isNotEmpty()) {
+            appDb.bookSourceDao.insert(*seeded.toTypedArray())
+            SourceHelp.adjustSortNumber()
+        }
+        LogUtils.d(
+            "DefaultData",
+            "内置书源播种：候选 ${builtinBookSources.size}，已存在跳过 " +
+                "${builtinBookSources.size - seeded.size}，实际写入 ${seeded.size}"
+        )
+        LocalConfig.builtinBookSourceSeeded = true
+    }
+
+    /** 播种筛选纯函数：只保留库里还没有的（按 bookSourceUrl 判重），不覆盖已存在书源。 */
+    internal fun builtinBookSourcesToSeed(
+        candidates: List<BookSource>,
+        exists: (String) -> Boolean,
+    ): List<BookSource> = candidates.filterNot { exists(it.bookSourceUrl) }
 
     private inline fun migrateDefaultData(
         name: String,
@@ -85,6 +118,21 @@ object DefaultData {
                 "$name 升级失败：$currentVersion -> $targetVersion\n${it.localizedMessage}",
                 it,
             )
+        }
+    }
+
+    /**
+     * 出厂内置书源（`defaultData/bookSources.json`）。
+     * SK 版特供种子，随包分发；用户可在书源管理中自行删除。
+     */
+    val builtinBookSources: List<BookSource> by lazy {
+        val json = String(
+            appCtx.assets.open("defaultData${File.separator}bookSources.json")
+                .readBytes()
+        )
+        GSON.fromJsonArray<BookSource>(json).getOrElse {
+            AppLog.put("读取内置书源失败：${it.localizedMessage}", it)
+            emptyList()
         }
     }
 
