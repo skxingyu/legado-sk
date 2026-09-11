@@ -314,7 +314,15 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10039（`3.26.091101c`）已装雷电模拟器（2026-09-11）——当前交付（内置 opencode-zen 会话请求头，修免费通道 400）**：
+- ✅ **10040（`3.26.091112c`）已装雷电模拟器（2026-09-11）——当前交付（出厂内置「番茄小说」书源，接通内置书源播种链路）**：
+  - **背景**：作者要求把自己用的番茄书源作为 SK 版装机福利（默认就有、但可自行删除）。
+  - **关键发现（原状态是坏的）**：`app/src/main/assets/defaultData/bookSources.json` 自基线提交 `544c1d1a` 引入起，**全库零个运行时读取点**——是彻头彻尾的死资源，历代版本从未真正种入任何书源。故本次不是"加个文件"，而是**先把播种链路接通**。
+  - **实现**：`DefaultData.builtinBookSources` 读取该 asset；`seedBuiltinBookSourcesOnce()` 在 `upVersion()` 末尾执行。判重按 `bookSourceUrl`（书源表**主键**）跳过已存在项——因 `BookSourceDao.insert` 是 `OnConflictStrategy.REPLACE`，**不判重就会静默覆盖用户自建/改过的同名书源**。播种后调 `SourceHelp.adjustSortNumber()`（种子 `customOrder=0` 与存量必撞号，该方法只在重号/越界时才重排，幂等安全）。
+  - **刻意不用版本号机制**：`migrateDefaultData` 的版本号每次提升都会重跑导入，用户删掉的书源会在下次升级**复活**。改用一次性布尔标记 `LocalConfig.builtinBookSourceSeeded`，置位后永不重播。这是"可删"语义的关键，后续若加内置书源**不要**改回版本号。
+  - **种子内容**：番茄小说（`https://fanqienovel.com/`），分组 `SK特供`，备注「SK版阅读特供番茄书源，不保证一直能用。官方接口直连，可长按书源行删除。」；同时删除原有「消消乐听书」种子（需游客鉴权，开箱即用体验差）。`fanqienovel.com` 不在 `18PlusList.txt` 黑名单，不会被 `insertBookSource` 拦掉。
+  - **实证（雷电模拟器）**：① 存量装机（10039 已手动导入同名同 URL 书源）升级后仍为 13 个、分组保持用户原值「番茄」→ **判重跳过、未覆盖 ✅**；② `pm clear` 全新装机后仅 1 个「番茄小说 (SK特供)」→ **出厂播种 ✅**；③ 行菜单删除后 `pm clear` 后续重启**未复活** → **一次性标记 ✅**；④ 发现页「男频·都市」拉回真实书单（《我不是戏神》等含封面作者）→ **书源真实可用 ✅**。
+  - 产物 `release/legado_sk_3.26.091112c_10040_arm64-v8a.apk`（30,965,724 字节，sha256 `efb68787…`），aapt（包名 io.legado.app.c / 10040 / 3.26.091112c / 阅读SK / arm64-v8a / locales 'zh'）+ apksigner(exit 0) 通过；dex 内确认含 `seedBuiltinBookSourcesOnce`/`builtinBookSourcesToSeed`/`builtinBookSourceSeeded` 符号；`DefaultDataSeedTest` 3 项通过。
+- 10039（`3.26.091101c`）内置 opencode-zen 会话请求头，修免费通道 400：
   - **症状**：内置 AI 供应商「问AI」开箱即用即失败。实测 Zen 免费通道对无会话头的请求直接返回 `400 MissingSessionID`，原文 `OpenCode's free tier can only be used in OpenCode`。
   - **根因（两层）**：① `app`/`oss` 两个 flavor 的 `AppPlugins` 都只 `init() = Unit`，谁也没注册 `AiBuiltinDefaults.Plugin` → `llmHeaders()` 恒为空串 → 出厂种入的供应商 `headers` 为空；② 存量安装还踩了**幂等标志**——早期版本已把 `aiLlmBuiltinHeadersFilled` 置位，`fillDefaultAiHeadersIfNeeded()` 直接早退，即便补上注册表也**永远补不到存量装机**（`830e094e`）。
   - **修复**：新增 `AiBuiltinDefaults.openCodeSessionId()`/`openCodeHeaders()`——会话 id 由 `AppConst.androidId` 经 SHA-256 派生（稳定、不可逆推、**逐设备不同**），避免多设备共用同一字面量 id 互相顶掉会话而放大限流与风控；`app` flavor 的 `AppPlugins` 注册出厂头（`user-agent: opencode/1.17.9` + `x-opencode-client` + `X-Session-Id`/`x-opencode-session`/`x-opencode-project`/`x-session-affinity`）。存量补齐走独立的 `fillOpenCodeSessionHeadersIfNeeded()`（新键 `aiOpenCodeSessionHeadersFilled`），只认「出厂供应商且仍无会话头」的目标，**用户自改过的请求头不动**。
@@ -329,7 +337,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10040` 递增。
+- 下一次交付 versionCode 从 `10041` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
