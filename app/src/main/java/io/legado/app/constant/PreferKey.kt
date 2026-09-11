@@ -109,6 +109,7 @@ object PreferKey {
     const val aiCurrentProviderId = "aiCurrentProviderId"
     const val aiDefaultConfigSeeded = "aiDefaultConfigSeeded"
     const val aiLlmBuiltinHeadersFilled = "aiLlmBuiltinHeadersFilled"
+    const val aiOpenCodeSessionHeadersFilled = "aiOpenCodeSessionHeadersFilled"
     const val aiModelConfigList = "aiModelConfigList"
     const val aiCurrentModelId = "aiCurrentModelId"
     const val themePackageSyncTasks = "themePackageSyncTasks"

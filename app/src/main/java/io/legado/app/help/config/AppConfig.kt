@@ -765,7 +765,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
      * 标志打过后不再改写，用户之后清空请求头保持清空。
      */
     private fun fillDefaultAiHeadersIfNeeded() {
-        if (appCtx.getPrefBoolean(PreferKey.aiLlmBuiltinHeadersFilled)) return
+        if (appCtx.getPrefBoolean(PreferKey.aiLlmBuiltinHeadersFilled)) {
+            fillOpenCodeSessionHeadersIfNeeded()
+            return
+        }
         appCtx.putPrefBoolean(PreferKey.aiLlmBuiltinHeadersFilled, true)
         val headers = AiBuiltinDefaults.llmHeaders()
         if (headers.isBlank()) return
@@ -775,6 +778,31 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         val target = providers.firstOrNull {
             it.name == DEFAULT_AI_PROVIDER_NAME && it.headers.isNullOrBlank()
         } ?: return
+        persistAiProviders(
+            providers.map { if (it.id == target.id) it.copy(headers = headers) else it }
+        )
+    }
+
+    /**
+     * 一次性升级：为已装机的内置 opencode-zen 供应商补上会话请求头。
+     *
+     * 背景：Zen 免费通道要求请求带会话标识头，缺失即 400 MissingSessionID。
+     * 早期版本出厂请求头为空串，且 `aiLlmBuiltinHeadersFilled` 已置位，
+     * 使得 [fillDefaultAiHeadersIfNeeded] 直接早退——存量安装永远拿不到可用的请求头。
+     * 此处单独补一次，只认「出厂供应商 + 当前仍无会话头」的目标，用户自改过的请求头不动。
+     */
+    private fun fillOpenCodeSessionHeadersIfNeeded() {
+        if (appCtx.getPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled)) return
+        val headers = AiBuiltinDefaults.llmHeaders()
+        if (headers.isBlank()) return
+        val providers = GSON.fromJsonArray<AiProviderConfig>(
+            appCtx.getPrefString(PreferKey.aiProviderList)
+        ).getOrDefault(emptyList())
+        val target = providers.firstOrNull {
+            it.name == DEFAULT_AI_PROVIDER_NAME &&
+                it.headers.orEmpty().contains("X-Session-Id", ignoreCase = true).not()
+        } ?: return
+        appCtx.putPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled, true)
         persistAiProviders(
             providers.map { if (it.id == target.id) it.copy(headers = headers) else it }
         )
