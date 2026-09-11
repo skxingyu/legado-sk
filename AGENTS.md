@@ -314,21 +314,21 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10038（`3.26.091014c`）已装雷电模拟器（2026-09-10）——当前交付（重植审计修复：7 项缺陷 + 4 项清理）**：对 `git diff e3ee7b81 HEAD`（106 文件）做全量对抗性审计，29 个候选经「上游对照」否决后确认并修复：
-  - **数据安全**：`WebDav.existsChecked()` 补全三态语义（`fc29e5af` 自建但未实现完 KDoc 承诺）——401/403/5xx 原先被当「明确不存在」，令 `ReadBook.getBookProgress` 返回 null，与 `LOCAL_NEWER` 同分支 → 本地旧进度**反向覆盖云端**（不可逆）。改为 2xx→true / 404→false / 其余抛异常，由既有的 catch 中止同步（`2a4ad571`）。
-  - **听书**：① HTTP TTS 播放端倍速兜底失效——`applyPlaybackSpeedForEngine()` 在 `httpTtsSnapshot` 赋值**之前**调用，首次 play 恒落 1x（上游该函数不读 snapshot，SK 改造后新增依赖却沿用上游位置，属半改）（`1ab98ccd`）；② 朗读跟随翻页守卫改用「类身份 + 真动画标志」——原`isRunning` 粗判据是 **SK 新增**（上游无此分支），会误伤滚动模式、跳过 `updateReadAloudPanels()`、并使跟随滞后累积（`44ea4b52`）；③ 悬浮窗非法 bounds 早退会跳过唯一后处理并残留陈旧避让区（`45c267df`）。
-  - **主题**：① `dialogAlpha/dialogBlur` 六处字面量漂移统一为 `DEFAULT_DIALOG_*`（`ThemeConfig.kt:792/876` 的 50 会经 `saveDayTheme→addConfig→applyConfig` **写回全局 SP 覆盖 20**）（`fac1a659`）；② 主题配置改 `themeName + isNightTheme` 双键匹配——MD3 导入对同一 themeName 两轮 addConfig，单键会让夜间整条替换日间（`addConfig` 与 `addConfigs` **必须同修**，后者经 `upConfig()` 在恢复备份时重建）（`2335b4ba`）。
-  - **更新链**：关于页补回下载加速源设置——`resolveAcceleratedUrl` 仍在 APK 下载活路径上，但 SK 删 `pref_main` 更新节时未同步删分支，导致加速源**永久锁死 ghfast**。同时补回上游 `MyFragment` 的 `updateAcceleratorCustom` 可见性联动（仅选 custom 时显示）（`223e76cb`）。
-  - **清理/瘦身**：删除 6 个被 `resConfigs "zh"` 裁掉的 `values-zh-rHK|rTW` 死目录（`23b6cf4d`，−2986 行）；`MangaVH.isLastImage` 死形参及两处调用点局部变量（`6bcf3bfb`）；7 个零引用字符串（`ac130963`）。
-  - 同期修正 `MangaVH` 章末图片高度 `MATCH_PARENT`→`WRAP_CONTENT`（与注释相反，父容器 WRAP_CONTENT 下会塌缩）（`502d81c6`）。
-  - 产物 `release/legado_sk_3.26.091014c_10038_arm64-v8a.apk`（30,933,368 字节），aapt(包名 io.legado.app.c/10038/3.26.091014c/阅读SK/arm64-v8a/locales 'zh') + apksigner(exit 0) 通过；模拟器 10037 覆盖升级成功、启动无崩溃、书架 6 本正常。
-  - ⚠️ **回归范围**：模拟器已实测 T3 完整闭环（加速源 5 项可选、选「自定义」后前缀框出现、强杀重启后仍持久），其余项（朗读跟随跟手、MD3 日夜双 tab、HTTP TTS 倍速、WebDAV 鉴权失败中止）**需作者真机复验**。
+- ✅ **10039（`3.26.091101c`）已装雷电模拟器（2026-09-11）——当前交付（内置 opencode-zen 会话请求头，修免费通道 400）**：
+  - **症状**：内置 AI 供应商「问AI」开箱即用即失败。实测 Zen 免费通道对无会话头的请求直接返回 `400 MissingSessionID`，原文 `OpenCode's free tier can only be used in OpenCode`。
+  - **根因（两层）**：① `app`/`oss` 两个 flavor 的 `AppPlugins` 都只 `init() = Unit`，谁也没注册 `AiBuiltinDefaults.Plugin` → `llmHeaders()` 恒为空串 → 出厂种入的供应商 `headers` 为空；② 存量安装还踩了**幂等标志**——早期版本已把 `aiLlmBuiltinHeadersFilled` 置位，`fillDefaultAiHeadersIfNeeded()` 直接早退，即便补上注册表也**永远补不到存量装机**（`830e094e`）。
+  - **修复**：新增 `AiBuiltinDefaults.openCodeSessionId()`/`openCodeHeaders()`——会话 id 由 `AppConst.androidId` 经 SHA-256 派生（稳定、不可逆推、**逐设备不同**），避免多设备共用同一字面量 id 互相顶掉会话而放大限流与风控；`app` flavor 的 `AppPlugins` 注册出厂头（`user-agent: opencode/1.17.9` + `x-opencode-client` + `X-Session-Id`/`x-opencode-session`/`x-opencode-project`/`x-session-affinity`）。存量补齐走独立的 `fillOpenCodeSessionHeadersIfNeeded()`（新键 `aiOpenCodeSessionHeadersFilled`），只认「出厂供应商且仍无会话头」的目标，**用户自改过的请求头不动**。
+  - **实证**：`Authorization: Bearer public` 由既有 `apiKey` 字段发送，无需重复填。实测最小必要集 = **会话头 + `user-agent`**（仅有 UA → 400；无任何头 → 400；仅会话头可通过会话门）；固定会话 id 连续 3 次请求均 200。**匿名额度按 IP 计**，高频连发会返回 `429 FreeUsageLimitError`（非头问题，换节点或稍后再试）。
+  - 产物 `release/legado_sk_3.26.091101c_10039_arm64-v8a.apk`（30,935,132 字节），aapt(包名 io.legado.app.c/10039/3.26.091101c/阅读SK/arm64-v8a/locales 'zh') + apksigner(exit 0) 通过；模拟器 10038 覆盖升级成功、书架数据保留；`AiBuiltinDefaultsTest` 3 项通过，并逐一把修复标记比对确认已进 dex。
+  - 附带实测：升级后正文长按菜单恢复为**完整多选项**（替换/书签/朗读/字典/问AI/搜索/插入），不再直接跳进问AI。
+  - ⚠️ **遗留（非本次引入，待办）**：`AiChapterPurifyHelperTest.kt` 引用了不存在的 `AiChapterPurifyConfig.resolveRequestTemplate`（10036 重植时上游删方法而测试留下），导致 `testAppReleaseUnitTest` **整体编译失败**；单独跑本模块测试需临时移出该文件。该测试属重植遗留，未在本次修复。
+- 10038（`3.26.091014c`，2026-09-10）重植审计修复（7 项缺陷 + 4 项清理）：**数据安全** `WebDav.existsChecked()` 补全三态语义（401/403/5xx 不再被当「明确不存在」而反向覆盖云端进度，`2a4ad571`）；**听书** HTTP TTS 倍速兜底位置修正（`1ab98ccd`）、朗读跟随翻页守卫改「类身份 + 真动画标志」（`44ea4b52`）、悬浮窗非法 bounds 早退残留陈旧避让区（`45c267df`）；**主题** `dialogAlpha/dialogBlur` 六处字面量漂移统一为 `DEFAULT_DIALOG_*`（`fac1a659`）、主题配置改 `themeName + isNightTheme` 双键匹配（`2335b4ba`）；**更新链** 关于页补回下载加速源设置与 `updateAcceleratorCustom` 可见性联动（`223e76cb`）；**清理** 删 6 个被 `resConfigs "zh"` 裁掉的 `values-zh-rHK|rTW` 死目录（`23b6cf4d`）、`MangaVH.isLastImage` 死形参（`6bcf3bfb`）、7 个零引用字符串（`ac130963`）、`MangaVH` 章末图片高度 `MATCH_PARENT`→`WRAP_CONTENT`（`502d81c6`）。产物 30,933,368 字节，aapt + apksigner 通过。
   - **方法论沉淀（重要）**：本次审计确立「**上游对照**」为强制否决步骤——大量"看似错配"实为**逐字继承自上游**（`autoReadSpeed` 10/46、`expandTextMenu` 死开关、`hideStatusBar` 三处默认值不一、`Restore.kt` 事务非原子等）。只有「上游有 A+B，SK 只改了 A 而 B 仍是上游值」才是重植缺陷。**未做上游对照即报缺陷会产生大量误报**。
-  - **本次审计驳回的自身误判（记录以免重犯）**：① `ThemePackageManager` 的 `fontScale != 10` 排除**是正确的**——`10` 是字段声明默认值，GSON 经 Unsafe 不应用 Kotlin 默认值（`GsonExtensions.kt` 未注册 `KotlinValueInstantiator`），`1..16` 下界用于区分缺失填的 0；去掉会令「包内 fontScale=10」静默重置用户缩放；② 判断布局控件是否存在时**必须注意 XML id 是 snake_case 而 ViewBinding 才转驼峰**，用 camelCase 搜 `res/layout/` 会假阴性。
+  - **驳回的自身误判（记录以免重犯）**：① `ThemePackageManager` 的 `fontScale != 10` 排除**是正确的**——`10` 是字段声明默认值，GSON 经 Unsafe 不应用 Kotlin 默认值（`GsonExtensions.kt` 未注册 `KotlinValueInstantiator`），`1..16` 下界用于区分缺失填的 0；去掉会令「包内 fontScale=10」静默重置用户缩放；② 判断布局控件是否存在时**必须注意 XML id 是 snake_case 而 ViewBinding 才转驼峰**，用 camelCase 搜 `res/layout/` 会假阴性。
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10039` 递增。
+- 下一次交付 versionCode 从 `10040` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
