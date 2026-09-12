@@ -314,7 +314,23 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10040（`3.26.091112c`）已装雷电模拟器（2026-09-11）——当前交付（出厂内置「番茄小说」书源，接通内置书源播种链路）**：
+- ✅ **10041（`3.26.091201c`）已装雷电模拟器（2026-09-12）——当前交付（内置书源加入作者授权校验，仅限阅读SK使用）**：
+  - **背景**：10040 内置的番茄书源任何人拿到都能用，作者要求加「验证版本号与阅读名称」的机制——非作者发布版不得使用。
+  - **实现（书源层面，不影响阅读器其他功能）**：
+    - `AppConst.appInfo` 新增 `packageName` / `appName`（后者取 `getApplicationLabel`，即 manifest 经 `${app_name}` 占位符解析后的名称）。
+    - `JsExtensions` 新增 `getAppPackageName()` / `getAppName()` / `matchApp(包名, 应用名)`——**内核不固定任何版本事实**，期望值由书源自行声明传入。
+    - 内置书源 `jsLib` 末尾定义 `fqAuthOk()`（`this.java.matchApp('io.legado.app.c', '阅读SK')`）与 `FQ_AUTH_DENIED` 提示文案（含作者仓库地址）。
+    - 守卫落在真正承载结果的入口：`ruleSearch.bookList` / `ruleExplore.bookList` 非授权时 `toast` + `result = []`；`ruleContent.content` 非授权时 `toast` + `throw`。`searchUrl` 只拼 URL、不产结果，故不插桩。
+    - `bookSourceComment` 写明「仅限「阅读SK」使用，其他客户端无法使用」。
+  - ⚠️ **两个写书源 JS 时必须避开的坑（本次都踩过并已修）**：
+    1. **`@js:` 必须在规则字符串首位**——legado 只识别开头的 `@js:`，把它挤到第二行整段会退化为字面量，守卫静默失效。
+    2. **JS 字符串里的换行必须写成转义序列 `\n`**——直接写入字面换行会截断字符串导致语法错误。用脚本改书源 JSON 时务必用原始字符串，并**用真实 JS 引擎（node）校验语法**，肉眼看不出来。
+  - **测试**：`BuiltinSourceGuardTest` 5 项（直接校验资产文件本身、零 Android 依赖）：`@js:` 前缀完好、结果入口都调 `fqAuthOk`、jsLib 声明 SK 身份、文案含转义换行、备注声明范围。连 `DefaultDataSeedTest` 共 7 项通过。
+  - ⚠️ **测试写法注意**：`DefaultData.builtinBookSources` 依赖 `appCtx.assets`，**在 JVM 单测里会 ClassNotFoundException**；校验资产内容请直接读 JSON 文件（Gradle 单测 CWD 为模块目录 `app/`）。
+  - **实证（雷电模拟器）**：① `pm uninstall` 后全新安装 10041，日志 `内置书源播种：候选 1，已存在跳过 0，实际写入 1` ✅；② SK 版发现/搜索**正常放行**（拉到《我不是戏神》并成功入架）✅；③ 经阅读A 的 Web 服务 `saveBookSources` 导入后，非 SK 包名 `io.legado.app.yuedu.a.release` 下守卫按预期拦截 ✅（注意 `172.16.1.15:1122` 是**模拟器自身 wlan0 地址**，宿主机连不上）。
+  - 产物 `release/legado_sk_3.26.091201c_10041_arm64-v8a.apk`（30,967,603 字节，sha256 `c27863ee…`），aapt（包名 io.legado.app.c / 10041 / 3.26.091201c / 阅读SK / arm64-v8a / locales 'zh'）+ apksigner(exit 0) 通过。
+  - ⚠️ **已知遗留（未解决，非本次引入）**：书源播种按 `bookSourceUrl` 判重且为**一次性**，故**存量装机升级不会更新已存在的内置书源**——10040 及更早已播种的「无守卫」书源，升级到 10041 后**仍是旧版、守卫不生效**。新装与手动删除后重装的用户不受影响。若要覆盖存量，需先设计「区分用户改过 vs 原样未动」的判据，属独立议题。
+- 10040（`3.26.091112c`，2026-09-11）出厂内置「番茄小说」书源，接通内置书源播种链路（**该 GitHub Release 已按作者要求删除，tag `v3.26.091112-10040` 一并清理；改动已并入 10041**）：
   - **背景**：作者要求把自己用的番茄书源作为 SK 版装机福利（默认就有、但可自行删除）。
   - **关键发现（原状态是坏的）**：`app/src/main/assets/defaultData/bookSources.json` 自基线提交 `544c1d1a` 引入起，**全库零个运行时读取点**——是彻头彻尾的死资源，历代版本从未真正种入任何书源。故本次不是"加个文件"，而是**先把播种链路接通**。
   - **实现**：`DefaultData.builtinBookSources` 读取该 asset；`seedBuiltinBookSourcesOnce()` 在 `upVersion()` 末尾执行。判重按 `bookSourceUrl`（书源表**主键**）跳过已存在项——因 `BookSourceDao.insert` 是 `OnConflictStrategy.REPLACE`，**不判重就会静默覆盖用户自建/改过的同名书源**。播种后调 `SourceHelp.adjustSortNumber()`（种子 `customOrder=0` 与存量必撞号，该方法只在重号/越界时才重排，幂等安全）。
@@ -337,7 +353,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10041` 递增。
+- 下一次交付 versionCode 从 `10042` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
