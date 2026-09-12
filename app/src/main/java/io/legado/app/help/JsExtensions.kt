@@ -1163,6 +1163,36 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     /**
+     * 获取应用包名
+     */
+    @JavascriptInterface
+    fun getAppPackageName(): String {
+        return AppConst.appInfo.packageName
+    }
+
+    /**
+     * 获取应用名称
+     */
+    @JavascriptInterface
+    fun getAppName(): String {
+        return AppConst.appInfo.appName
+    }
+
+    /**
+     * 校验当前运行环境是否为指定的阅读分支（包名 + 应用名双重匹配）。
+     * 供书源判断自身是否运行在作者授权的客户端上，参数由书源自行传入，不在内核中固定版本事实。
+     *
+     * @param packageName 期望的应用包名
+     * @param appName 期望的应用名称
+     * @return 匹配返回 true，否则 false
+     */
+    @JavascriptInterface
+    fun matchApp(packageName: String?, appName: String?): Boolean {
+        return AppConst.appInfo.packageName.equals(packageName, true) &&
+            AppConst.appInfo.appName.equals(appName, true)
+    }
+
+    /**
      * 获取应用版本号
      */
     @JavascriptInterface

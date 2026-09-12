@@ -58,6 +58,7 @@ object AppConst {
         @Suppress("DEPRECATION")
         appCtx.packageManager.getPackageInfo(appCtx.packageName, PackageManager.GET_ACTIVITIES)
             ?.let {
+                appInfo.packageName = it.packageName
                 appInfo.versionName = it.versionName!!
 
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -67,6 +68,9 @@ object AppConst {
                     appInfo.versionCode = it.versionCode.toLong()
                 }
             }
+        appInfo.appName = runCatching {
+            appCtx.packageManager.getApplicationLabel(appCtx.applicationInfo).toString()
+        }.getOrDefault("")
         appInfo
     }
 
@@ -75,6 +79,8 @@ object AppConst {
 
     @Keep
     data class AppInfo(
+        var packageName: String = "",
+        var appName: String = "",
         var versionCode: Long = 0L,
         var versionName: String = "",
         var appVariant: String = "ydr"
