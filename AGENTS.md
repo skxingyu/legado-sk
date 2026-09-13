@@ -314,7 +314,20 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10042（`3.26.091301c`）已装雷电模拟器（2026-09-13）——当前交付（授权校验收窄为只卡正文）**：
+- ✅ **10043（`3.26.091310c`）已装雷电模拟器（2026-09-13）——当前交付（同步上游 legadoC v3.26.091216）**：
+  - **性质**：上游增量同步，非功能开发。上游基底不变（仍 `e3ee7b81` v3.26.090809），并入其 `e3ee7b81..v3.26.091216` 共 **40 提交 / 35 文件（+1864/−847）**。
+  - ⚠️ **同步方法（可复用，务必照做）**：**先量冲突面再动手**——`comm -12 <(git diff --name-only <基底> HEAD|sort) <(git diff --name-only <基底> <上游tag>|sort)` 得**交集 9 个文件**＝真正需人工裁决者；**交集之外 26 个文件直接 `git checkout <tag> -- <file>`**（SK 完全未碰，零风险，且不会带回上游 `dependabot.yml`）。整树 merge/rebase 会波及大量 SK 定制，不要用。
+  - ⚠️⚠️ **三方合并"无冲突"≠"无丢失"（本次最重要教训）**：上游**删除**的代码若与 SK 定制语义相关，会被 `git merge-file` 静默采纳而消失。本次即丢失 `MAX_EXPAND_ROUNDS = 40` 及其 2 处使用点（`expandRound()` 的 `stats==null` 重试分支与正常收口分支，两者**都不在冲突区域内**）。丢失后慢加载页面从「到顶提前收口出快照」退化为「重试到 60s 看门狗超时 → 快照失败」。**同步上游后必须对"上游删除项"单独核查一遍，不能只看冲突标记。**
+  - ⚠️ **行尾差异会造成假性整文件冲突**：仓库工作区为 CRLF、上游对象为 LF，直接 `git merge-file` 会得到整文件 1 处冲突（假象）；先 `tr -d '\r'` 归一化再合并。
+  - **四块上游增量**：① **章节状态与重试**（状态异常章节显示失败重试按钮；缺失状态的评论章节走普通 BODY→REVIEW 链路，`CacheCoordinator.statuslessChapters`）；② **离线评论快照**（弹窗直接展开、按实际绘制位置动态锚定评论栏 + 回写底部安全区、缓存管理复用正文清单 + 评论轻量索引 `ReviewSnapshotInventory.kt`、**评论资源总量门槛整体移除**而单资源超时 `RESOURCE_FETCH_TIMEOUT_MS` 保留）；③ **导出重构**（`ExportBookService.kt` 1133 行变更，TXT/ZIP 改**尽力导出 + 内置失败报告**，新增 `BookExportReport.kt`/`ExportFileWriter.kt`）；④ **AI 四项**（**内联思考块正则补第二捕获组，修 `No group 2` 崩溃**；关闭 Agent 保留普通 AI 对话；修普通 AI 对话系统提示词断裂；出厂 local-core 供应商**未采纳**）。
+  - ⚠️ **`AppWebDav.exportWebDav(uri,…)` 抛出契约（10043 起，改调用方前必读）**：上游把「网络不可用静默 `return`」改为 **`check()`/`requireNotNull`/`IllegalStateException` 抛异常**，新增 `localAlreadySaved` 参数区分文案，`.zip` 按扩展名用 `application/zip`、URL 做 `Uri.encode`。调用点全在 `ExportBookService.kt`（已随上游一并更新：`uploadExportToWebDav()` 显式 catch 并返回失败文案；`.zip` 压缩包路径传 `localAlreadySaved=false`）。**新增调用点必须接住异常**，否则该路径会从"静默失败"变成"崩溃/整条导出失败"。注意 `exportWebDav(byteArray,…)` 重载**上游未改**（仍静默、`@Suppress("unused")`），勿以为两者行为一致。
+  - ⚠️ **未采纳：上游出厂第二供应商 `local-core`**（`http://127.0.0.1:11434/v1`，本机 Ollama 端口）——作者决定剔除。因该决定，`AppConfig.kt` 的上游改动**全部不适用，SK 侧保持原样**（这是本次"冲突文件零改动"的原因，**不是漏改**）。上游是在 `ensureDefaultAiConfigIfNeeded()` 的**同一 if 分支**插入调用的，日后同步勿机械套用。
+  - ⚠️ **`ReviewSnapshotCapture.kt` 的 SK 楼中楼强展必须保留**：上游把 `forceExpandRemaining()`（SK 两段式：`.reply-toggle` 结构定位 + `data-legado-force-expanded` 防往返标记 + 文本兜底）改回简单单轮点击循环 `forceExpandReplies()`，并删掉 `MAX_FORCE_EXPAND_ROUNDS`/`FORCE_EXPAND_STABLE_ROUNDS`。本次**以 SK 语义为主保留强展**，但**采纳了上游一条正确语义**：`parseForceExpandStats` 解析失败改 `fail(IllegalStateException(...))` 显式报错——SK 原注释称「看门狗已切走」，但该情形**实际不可达**（`destroyed` 已被上游 `if (destroyed) return@post` 拦下），真实可达的只有 JS 返回 null/解析异常，而把展开到一半的 DOM 冻结成"完整快照"存盘正是上游要消灭的静默错误（SK 此处照抄上游）。
+  - **验证**：`assembleAppRelease` BUILD SUCCESSFUL；`testAppReleaseUnitTest` **120 项 / 110 通过 / 10 失败**（10 项＝既有已知失败：`CacheTaskStoreTest` 9 项 `LiveEventBusCore` JVM 静态初始化 + `ReadBookConfigTest` lineSpacing，与本次同步无关）；`ReviewSnapshotIntegrityTest` 4/4 通过（覆盖本次手工合并文件）。
+  - **实机回归（雷电模拟器，10042→10043 覆盖升级）**：启动无崩溃；四个主 tab 切换正常；**长按搜索按钮直接进 AI 对话**（上游放开 AI 门禁生效）；`我的→书源管理` 显示 **「番茄小说 (SK特供)」在位 → SK 播种书源与全部数据升级后保留**；搜索「wo」番茄书源返回真实书单；点书→书籍详情→**阅读页正文正常渲染、零错误日志**（关键回归证据）。
+  - 产物 `release/legado_sk_3.26.091310c_10043_arm64-v8a.apk`（31,010,083 字节，sha256 `81a9f6c14814f758408c6b2f5dd52945ba9499c62857c90fc7e8a26efe8e5163`），aapt（包名 io.legado.app.c / 10043 / 3.26.091310c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。
+  - 回归记录与截图：`test-records/upstream-091216/`（gitignore）。
+- 10042（`3.26.091301c`，2026-09-13）授权校验收窄为只卡正文（已被 10043 取代，细节保留于下）：
   - **背景（10041 的体验回归，用户实测反馈）**：10041 把守卫同时插在搜索、发现、正文三处，导致：① **每次全书源搜书都弹一次授权 toast**；② 正文 `throw` 被阅读器当成下载失败——阅读页显示「获取正文失败」而非引导文案，并按重试次数**反复重试 + 反复弹提示**。
   - **改动（纯书源资产 + 测试，无 Kotlin 改动，内核与 10041 完全一致）**：
     - 移除 `ruleSearch.bookList` / `ruleExplore.bookList` 的守卫包装 → 搜索与发现对非授权客户端**完全放行**（能搜到、能入架）。
@@ -362,7 +375,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10043` 递增。
+- 下一次交付 versionCode 从 `10044` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
