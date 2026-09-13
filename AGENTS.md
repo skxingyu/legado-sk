@@ -326,7 +326,7 @@ uiautomator2 / ADB
   - **实证（雷电模拟器）**：① `pm uninstall` 后全新安装 10042，日志 `内置书源播种：候选 1，已存在跳过 0，实际写入 1` ✅；② **SK 版**搜索「wo」拉到 5 本真实书籍，点开阅读**正文正常渲染**、零错误 ✅；③ **非 SK 版阅读A**（`io.legado.app.yuedu.a.release`）经 Web 服务 `saveBookSources` 导入后：搜索「nba」拉到多本真实书籍**无 toast 无报错**，点开阅读**正文区显示引导文案**（【本书源仅限「阅读SK」使用】+ GitHub 地址），**无错误弹窗、失败类日志 0 条**，10 秒后页面截图 sha256 不变（确认无重试覆盖）✅（注意 `172.16.1.15:1122` 是**模拟器自身 wlan0 地址**，宿主机连不上，需在模拟器内 `curl`）。
   - 产物 `release/legado_sk_3.26.091301c_10042_arm64-v8a.apk`（30,967,718 字节，sha256 `44af504cdd64ba5fcb766bc0e18d783522d0fbba7b75b28df050b696e93a3f55`），aapt（包名 io.legado.app.c / 10042 / 3.26.091301c / 阅读SK / arm64-v8a / locales 'zh'）+ apksigner(exit 0) 通过。
   - ⚠️ **已知遗留（与 10041 相同，作者已确认不再处理）**：书源播种按 `bookSourceUrl` 判重且为**一次性**，故**存量装机升级不会更新已存在的内置书源**——10040 播种的「无守卫」书源升级后仍是旧版。新装与手动删除后重装不受影响。
-- 10041（`3.26.091201c`，2026-09-12）内置书源加入作者授权校验（**守卫范围已被 10042 收窄**）：
+- 10041（`3.26.091201c`，2026-09-12）内置书源加入作者授权校验（**守卫范围已被 10042 收窄；该 GitHub Release 已按作者要求删除，tag `v3.26.091201-10041` 一并清理，改动已并入 10042**）：
   - **背景**：10040 内置的番茄书源任何人拿到都能用，作者要求加「验证版本号与阅读名称」的机制——非作者发布版不得使用。
   - **实现（书源层面，不影响阅读器其他功能）**：
     - `AppConst.appInfo` 新增 `packageName` / `appName`（后者取 `getApplicationLabel`，即 manifest 经 `${app_name}` 占位符解析后的名称）。
@@ -339,7 +339,7 @@ uiautomator2 / ADB
   - **测试**：`BuiltinSourceGuardTest` 5 项（10042 已重写为 6 项，见上）。
   - ⚠️ **测试写法注意**：`DefaultData.builtinBookSources` 依赖 `appCtx.assets`，**在 JVM 单测里会 ClassNotFoundException**；校验资产内容请直接读 JSON 文件（Gradle 单测 CWD 为模块目录 `app/`）。
   - 产物 `release/legado_sk_3.26.091201c_10041_arm64-v8a.apk`（30,967,603 字节，sha256 `c27863ee…`），aapt（包名 io.legado.app.c / 10041 / 3.26.091201c / 阅读SK / arm64-v8a / locales 'zh'）+ apksigner(exit 0) 通过。
-- 10040（`3.26.091112c`，2026-09-11）出厂内置「番茄小说」书源，接通内置书源播种链路（**该 GitHub Release 已按作者要求删除，tag `v3.26.091112-10040` 一并清理；改动已并入 10041**）：
+- 10040（`3.26.091112c`，2026-09-11）出厂内置「番茄小说」书源，接通内置书源播种链路（**该 GitHub Release 已按作者要求删除，tag `v3.26.091112-10040` 一并清理；改动已并入 10042**）：
   - **背景**：作者要求把自己用的番茄书源作为 SK 版装机福利（默认就有、但可自行删除）。
   - **关键发现（原状态是坏的）**：`app/src/main/assets/defaultData/bookSources.json` 自基线提交 `544c1d1a` 引入起，**全库零个运行时读取点**——是彻头彻尾的死资源，历代版本从未真正种入任何书源。故本次不是"加个文件"，而是**先把播种链路接通**。
   - **实现**：`DefaultData.builtinBookSources` 读取该 asset；`seedBuiltinBookSourcesOnce()` 在 `upVersion()` 末尾执行。判重按 `bookSourceUrl`（书源表**主键**）跳过已存在项——因 `BookSourceDao.insert` 是 `OnConflictStrategy.REPLACE`，**不判重就会静默覆盖用户自建/改过的同名书源**。播种后调 `SourceHelp.adjustSortNumber()`（种子 `customOrder=0` 与存量必撞号，该方法只在重号/越界时才重排，幂等安全）。
