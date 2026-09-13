@@ -334,17 +334,26 @@ object AppWebDav {
         }
     }
 
-    suspend fun exportWebDav(uri: Uri, fileName: String) {
-        if (!NetworkUtils.isAvailable()) return
+    suspend fun exportWebDav(
+        uri: Uri,
+        fileName: String,
+        localAlreadySaved: Boolean = true,
+    ) {
+        val failurePrefix = if (localAlreadySaved) {
+            "本地导出已保存，WebDAV 上传失败"
+        } else {
+            "WebDAV 上传失败"
+        }
+        check(NetworkUtils.isAvailable()) { "$failurePrefix：网络不可用" }
+        val credentials = requireNotNull(authorization) {
+            "$failurePrefix：未配置认证信息"
+        }
         try {
-            authorization?.let {
-                // 如果导出的本地文件存在,开始上传
-                val putUrl = exportsWebDavUrl + fileName
-                WebDav(putUrl, it).upload(uri, "text/plain")
-            }
-        } catch (e: Exception) {
+            val mime = if (fileName.endsWith(".zip", ignoreCase = true)) "application/zip" else "text/plain"
+            WebDav(exportsWebDavUrl + Uri.encode(fileName), credentials).upload(uri, mime)
+        } catch (error: Exception) {
             currentCoroutineContext().ensureActive()
-            AppLog.put("WebDav导出失败\n${e.localizedMessage}", e, true)
+            throw IllegalStateException("$failurePrefix：${error.localizedMessage}", error)
         }
     }
 

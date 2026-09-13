@@ -42,14 +42,21 @@ class ReviewSnapshotStatusAdapter(
         payloads: MutableList<Any>,
     ) = binding.run {
         tvChapter.text = context.getString(R.string.cache_manage_review_chapter, item.chapter.index + 1)
+        val processedSnapshots = if (item.statusMissing) item.totalSnapshots else item.processedSnapshots
+        val failedSnapshots = if (item.statusMissing) item.totalSnapshots else item.failedSnapshots
+        if (item.statusMissing) {
+            tvStatusMissing.visible()
+        } else {
+            tvStatusMissing.gone()
+        }
         tvProgress.text = context.getString(
             R.string.cache_manage_review_progress,
-            item.processedSnapshots,
+            processedSnapshots,
             item.totalSnapshots
         )
-        if (item.failedSnapshots > 0) {
-            tvState.text = context.getString(R.string.cache_manage_review_failed, item.failedSnapshots)
-            if (item.canRetryFailedSnapshots) {
+        if (failedSnapshots > 0) {
+            tvState.text = context.getString(R.string.cache_manage_review_failed, failedSnapshots)
+            if (item.canRetryChapter) {
                 btnRetry.visible()
             } else {
                 btnRetry.gone()
@@ -63,7 +70,7 @@ class ReviewSnapshotStatusAdapter(
     override fun registerListener(holder: ItemViewHolder, binding: ItemReviewSnapshotStatusBinding) {
         binding.btnRetry.setOnClickListener {
             getItem(holder.layoutPosition)
-                ?.takeIf { it.canRetryFailedSnapshots }
+                ?.takeIf { it.canRetryChapter }
                 ?.let(callback::retry)
         }
     }
