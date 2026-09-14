@@ -314,7 +314,14 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10043（`3.26.091310c`）已发布 Pre-release `v3.26.091310-10043`（2026-09-13）——当前交付（同步上游 legadoC v3.26.091216）；已装雷电模拟器与平板 TB-9707F**：
+- ✅ **10044（`3.26.091320c`）——当前交付（修复 10043 引入的「备份必失败」）**：
+  - **性质**：修回归缺陷，非功能开发。10043 同步上游时，把上游 `ZipUtils.zipFile` 的「源文件不存在静默跳过」改为 `require(srcFile.exists())`（**该变更本身正确，勿回退**），但 `Backup.kt` 仍按 `backupFileNames` 全量拼路径 —— 而 `writeListToJson` 对**空列表刻意不落盘**，于是任何一张空表都让整次备份以 `IllegalArgumentException: ZIP 源文件不存在` 中止。**新装机所有表皆空，必然复现**。
+  - **修复**：`Backup.kt` 打包前按实际落盘结果过滤（新增顶层 `existingZipSources()`，独立于 `Backup` object 以便 JVM 单测覆盖）。同类隐患一并处理：`backgroundAssetDirNames` 目录、`themePackageFontDedupe.json` 清单（仅存在重复字体时写出）、`NavigationBarIconConfig.rootDir`（未预建目录）。`ZipUtils.kt` **未改动**。
+  - ⚠️ **判据（写进 §「功能红线」同级原则）**：给 `ZipUtils` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。回调式清单（备份项目清单、可选 manifest）一律属后者。
+  - **验证**：`BackupZipSourcesTest` 3 项通过（**已实测移除过滤即 3/3 失败**，确认能捕获）；全量单测 **123 项 / 113 通过 / 10 失败**（10 项＝既有已知失败）。
+  - **实机回归（平板 TB-9707F，10043→10044 覆盖升级）**：触发条件仍在（`rssStar.json 列表为空`、`sourceSub.json 列表为空`），但 `ZIP 源文件不存在`/`IllegalArgumentException`/`备份出错` **计数均为 0**；`/sdcard/Download/yuedu/backup.zip`（8,463,794 字节）落盘，`testzip` 干净、28 个条目。
+  - 产物 `release/legado_sk_3.26.091320c_10044_arm64-v8a.apk`（31,010,459 字节，sha256 `2df3addcbbefa8a32cad8a00a8bb454b41dda4138eab7f14abfe6ac5798f24d8`），aapt（io.legado.app.c / 10044 / 3.26.091320c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。
+- 10043（`3.26.091310c`，2026-09-13）已发布 Pre-release `v3.26.091310-10043`（同步上游 legadoC v3.26.091216；**该版备份功能被上游同版本缺陷打坏，已由 10044 修复**）：
   - **性质**：上游增量同步，非功能开发。上游基底不变（仍 `e3ee7b81` v3.26.090809），并入其 `e3ee7b81..v3.26.091216` 共 **40 提交 / 35 文件（+1864/−847）**。
   - ⚠️ **同步方法（可复用，务必照做）**：**先量冲突面再动手**——`comm -12 <(git diff --name-only <基底> HEAD|sort) <(git diff --name-only <基底> <上游tag>|sort)` 得**交集 9 个文件**＝真正需人工裁决者；**交集之外 26 个文件直接 `git checkout <tag> -- <file>`**（SK 完全未碰，零风险，且不会带回上游 `dependabot.yml`）。整树 merge/rebase 会波及大量 SK 定制，不要用。
   - ⚠️⚠️ **三方合并"无冲突"≠"无丢失"（本次最重要教训）**：上游**删除**的代码若与 SK 定制语义相关，会被 `git merge-file` 静默采纳而消失。本次即丢失 `MAX_EXPAND_ROUNDS = 40` 及其 2 处使用点（`expandRound()` 的 `stats==null` 重试分支与正常收口分支，两者**都不在冲突区域内**）。丢失后慢加载页面从「到顶提前收口出快照」退化为「重试到 60s 看门狗超时 → 快照失败」。**同步上游后必须对"上游删除项"单独核查一遍，不能只看冲突标记。**
@@ -375,7 +382,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10044` 递增。
+- 下一次交付 versionCode 从 `10045` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
