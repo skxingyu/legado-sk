@@ -314,7 +314,7 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10044（`3.26.091320c`）——当前交付（修复 10043 引入的「备份必失败」）**：
+- ✅ **10044（`3.26.091320c`）已发布 Pre-release `v3.26.091320-10044`（2026-09-13）——当前交付（修复 10043 引入的「备份必失败」）**：
   - **性质**：修回归缺陷，非功能开发。10043 同步上游时，把上游 `ZipUtils.zipFile` 的「源文件不存在静默跳过」改为 `require(srcFile.exists())`（**该变更本身正确，勿回退**），但 `Backup.kt` 仍按 `backupFileNames` 全量拼路径 —— 而 `writeListToJson` 对**空列表刻意不落盘**，于是任何一张空表都让整次备份以 `IllegalArgumentException: ZIP 源文件不存在` 中止。**新装机所有表皆空，必然复现**。
   - **修复**：`Backup.kt` 打包前按实际落盘结果过滤（新增顶层 `existingZipSources()`，独立于 `Backup` object 以便 JVM 单测覆盖）。同类隐患一并处理：`backgroundAssetDirNames` 目录、`themePackageFontDedupe.json` 清单（仅存在重复字体时写出）、`NavigationBarIconConfig.rootDir`（未预建目录）。`ZipUtils.kt` **未改动**。
   - ⚠️ **判据（写进 §「功能红线」同级原则）**：给 `ZipUtils` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。回调式清单（备份项目清单、可选 manifest）一律属后者。
