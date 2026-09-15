@@ -65,6 +65,23 @@ internal fun existingZipSources(dir: String, names: Collection<String>): List<St
 }
 
 /**
+ * covers 目录是否应进入备份包。
+ *
+ * `prepareCustomCoverBackup()` 会无条件创建 covers 目录，所以"目录存在"不能作为入包依据 ——
+ * 否则从未设过自定义封面时会把一个空目录写进 zip（`ZipUtils` 对空目录会写 ZipEntry）。
+ *
+ * ⚠️ 判据必须是**目录的实际内容**，不能是"本次拷贝了几个文件"：
+ * 用户通过「选择本地图片」设的封面本身就落在 covers 目录内，
+ * `prepareCustomCoverBackup()` 对这类路径会直接跳过拷贝（无需复制到自身），
+ * 用拷贝数判定会把最常见的场景误判为空、导致封面漏备份。
+ *
+ * 独立成顶层函数以便 JVM 单测直接覆盖（同 [existingZipSources]）。
+ */
+internal fun coverDirShouldBeZipped(coversDir: File): Boolean {
+    return coversDir.listFiles()?.isNotEmpty() == true
+}
+
+/**
  * 备份
  */
 object Backup {
@@ -78,10 +95,11 @@ object Backup {
 
     private val mutex = Mutex()
 
+    // 注意：不含 "covers"。该目录由 prepareCustomCoverBackup() 在打包清单构建期间才创建，
+    // 放进这里会被存在性判定（此时目录还不存在）提前跳过，导致自定义封面漏备份。
     private val backgroundAssetDirNames = arrayOf(
         "bg",
         "font",
-        "covers",
         "readRecordGoalAvatar",
         "illustrations",
         PreferKey.bgImage,
@@ -312,12 +330,17 @@ object Backup {
         backgroundAssetDirNames.forEach { dirName ->
             if (targets.shouldBackupTarget(dirName)) {
                 val dir = appCtx.externalFiles.getFile(dirName)
-                // 同上：从未配置过背景/字体/封面时这些目录不存在，不是错误，跳过即可
+                // 同上：从未配置过背景/字体等时这些目录不存在，不是错误，跳过即可
                 if (dir.exists()) paths.add(dir.absolutePath)
             }
         }
         if (targets.shouldBackupTarget("covers")) {
+            // 目录由 prepareCustomCoverBackup() 创建，必须在此之后再判定；
+            // 且只有目录里确实有封面才入包，避免空 covers/ 目录进 zip。
             prepareCustomCoverBackup()
+            if (coverDirShouldBeZipped(appCtx.externalFiles.getFile("covers"))) {
+                paths.add(appCtx.externalFiles.getFile("covers").absolutePath)
+            }
         }
         if (targets.shouldBackupTarget(BackupThemePackageDedupe.themePackagesDirName)) {
             BackupThemePackageDedupe.prepareBackupThemePackages(
