@@ -253,6 +253,11 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
+- **备份打包清单的两类路径（10044 确立，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法是让创建者返回实际产出，非空才入包。
+- **⚠️ 已知继承缺陷（2026-09-15 审查登记，作者决定不修，后续审查勿重复上报）**：以下两项是**上游自带**缺陷（上游 `v3.26.091403` 仍未修），**刻意与上游保持一致**以降低同步成本：
+  1. **`exportWebDav(uri,…)` 三处调用点未接异常**（`ExportBookService.kt` 的 `exportPdf`/`exportEpub`/`save2Drive` 裸调用）。10043 把该重载改为抛异常契约，同文件 TXT-ZIP 与 `uploadExportToWebDav` 已接住，这三处没有 → 异常冒泡到导出循环 `catch (e: Throwable)` → 本地文件其实已写好却被计入 `failedExports`（**不崩溃**）。⚠️ 修它需给 `exportPdf`/`exportEpub`（返回 `Unit`）改签名并调整调用点消费链，**非"3 行"改动**。
+  2. **恢复回滚不含数据库**：`RestoreJournal.buildSnapshotTargets` 不登记 `legado.db`，而 `Restore.kt` 的 `restoreDbData`（SK 10037 引入）事务真实提交 → DB 段之后的步骤失败或进程被杀时，`rollbackNow()` 只还原配置文件、**DB 保持备份内容**（prefs 与 DB 错位）。⚠️ **两条看似显然的修法均已被证伪，勿照做**：① **把 DB 段挪到最后会破坏 `repairLocalCoverPaths`**（其读 `bookDao.all` 回写，必须在 `restoreBackgroundAssets` 之后、且在 DB 恢复后），会让新恢复的书**从未被修复封面路径**且无报错；② **把 DB 纳入快照不可行**：`appDb` 是顶层 `val … by lazy`，全库无 close/reopen 入口。若日后要修，可行方向是把 `RestoreJournal.begin` 下移到 `restoreDbData` **之后**（不动步骤顺序），但须先核查其状态机与 `App.kt` 的 `recoverIfNeeded` 假设。
+- **⚠️ 脆弱点（登记）**：`ThemeConfig.kt` 有 `putPrefInt(PreferKey.uiLayoutAlpha, …)` **绕过 `AppConfig.uiLayoutAlpha` 的 setter 直写 pref**。当前无害的唯一原因是 `getPrefInt(PreferKey.uiLayoutAlpha)` 全库 **0 个读取点**；**若日后新增对该 pref 原始值的读取，即成为透明度锁的真实逃逸路径**。
 
 ### 设置默认值
 
