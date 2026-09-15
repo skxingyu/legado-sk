@@ -1000,12 +1000,6 @@ object ReviewSnapshotCapture {
         /** 兜底强展单轮返回的点击数（用于判定是否收口）。 */
         private data class ForceExpandStats(val clicked: Int)
 
-        /**
-                    val stats = parseForceExpandStats(json) ?: run {
-                        fail(IllegalStateException("无法读取评论回复展开结果"))
-                        return@post
-                    }
-         */
         private fun forceExpandRemaining() {
             if (destroyed) return
             webView.evaluateJavascript(FORCE_EXPAND_REPLIES_JS) { json ->
