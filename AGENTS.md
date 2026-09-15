@@ -253,7 +253,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
-- **备份打包清单的两类路径（10044 确立，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法是让创建者返回实际产出，非空才入包。
+- **备份打包清单的两类路径（10044 确立、10045 补强，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法：先让创建者建好目录并补齐内容，**再按"目录里实际有什么"判定**（`coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。⚠️ **判据必须锚定"最终要被打包的那个对象的状态"，不能锚定"本次流程做了什么动作"**——`prepareCustomCoverBackup()` 对**已在该目录内**的封面会跳过拷贝，用"本次拷了几个"判定会把最常见的场景误判为空（10045 首版实现即犯此错，被实机回归抓到）。
 - **⚠️ 已知继承缺陷（2026-09-15 审查登记，作者决定不修，后续审查勿重复上报）**：以下两项是**上游自带**缺陷（上游 `v3.26.091403` 仍未修），**刻意与上游保持一致**以降低同步成本：
   1. **`exportWebDav(uri,…)` 三处调用点未接异常**（`ExportBookService.kt` 的 `exportPdf`/`exportEpub`/`save2Drive` 裸调用）。10043 把该重载改为抛异常契约，同文件 TXT-ZIP 与 `uploadExportToWebDav` 已接住，这三处没有 → 异常冒泡到导出循环 `catch (e: Throwable)` → 本地文件其实已写好却被计入 `failedExports`（**不崩溃**）。⚠️ 修它需给 `exportPdf`/`exportEpub`（返回 `Unit`）改签名并调整调用点消费链，**非"3 行"改动**。
   2. **恢复回滚不含数据库**：`RestoreJournal.buildSnapshotTargets` 不登记 `legado.db`，而 `Restore.kt` 的 `restoreDbData`（SK 10037 引入）事务真实提交 → DB 段之后的步骤失败或进程被杀时，`rollbackNow()` 只还原配置文件、**DB 保持备份内容**（prefs 与 DB 错位）。⚠️ **两条看似显然的修法均已被证伪，勿照做**：① **把 DB 段挪到最后会破坏 `repairLocalCoverPaths`**（其读 `bookDao.all` 回写，必须在 `restoreBackgroundAssets` 之后、且在 DB 恢复后），会让新恢复的书**从未被修复封面路径**且无报错；② **把 DB 纳入快照不可行**：`appDb` 是顶层 `val … by lazy`，全库无 close/reopen 入口。若日后要修，可行方向是把 `RestoreJournal.begin` 下移到 `restoreDbData` **之后**（不动步骤顺序），但须先核查其状态机与 `App.kt` 的 `recoverIfNeeded` 假设。
@@ -318,6 +318,19 @@ uiautomator2 / ADB
 ## 6. 当前交付基线
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
+
+- ✅ **10045（`3.26.091512c`）已构建并通过模拟器回归（2026-09-15）——当前交付（修 10044 引入的「自定义封面漏备份」+ 全项目审查产出）**：
+  - **性质**：全项目审查后的修复版（4 个只读子代理并行 + 主代理逐条复核 + 上游对照；报告在 gitignore 的 `test-records/review-r1-*/`）。**审查确认当前 main 自洽可编译、7 条功能红线 0 回归**。
+  - **必修回归**：**10044 把 `covers` 的入包判定与其创建顺序搞反**——10044 把「无条件加入 + `ZipUtils` 静默跳过」改成 `if (dir.exists())` 过滤，但 `covers` 是 `prepareCustomCoverBackup()` 在**该判定之后**才创建的 → 目录不存在时被跳过、封面随即被拷进去 → **备份包缺 covers，换机恢复后封面全丢且本机无异常**。10043 及更早不受影响。
+  - **修法**：`"covers"` 移出 `Backup.backgroundAssetDirNames`（**`Restore.kt` 的同名副本不动**，其依赖该目录名做路径重映射），改由 `prepareCustomCoverBackup()` 先建目录 + 补齐外部封面，再按**目录实际内容**判定（顶层 `coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。
+  - ⚠️⚠️ **判据必须锚定"最终要打包的对象的状态"，不能锚定"本次流程做了什么动作"**：封面经「选择本地图片」设置后本身就落在 `covers` 内，`prepareCustomCoverBackup()` 对这类路径会**跳过拷贝**（无需复制到自身）→ 用"本次拷了几个"判定会把**最常见场景**误判为空。**首版实现即犯此错，被实机回归抓到**；这与 §4 红线段落同源。
+  - **顺带修复（SK 独有，10039 引入）**：`fillOpenCodeSessionHeadersIfNeeded` 原用 `copy(headers = headers)` **整条替换**（判据仅「不含 X-Session-Id」），会冲掉用户自改的请求头；改为 `AiBuiltinDefaults.mergeMissingHeaders()` **按行合并、键名大小写不敏感、只补缺失**，并把 `putPrefBoolean(aiOpenCodeSessionHeadersFilled)` 移到 `persistAiProviders` **之后**（原顺序下 persist 抛异常会留下不可自愈的「标记已置位但头没写入」装机）。**判据不变**（只在 `aiLlmBuiltinHeadersFilled` 已置位的早退分支执行，天然只服务存量装机）。
+  - **清理**：删 `ReviewSnapshotCapture.kt` 中被注释掉的代码残骸（10037 重放遗留）。
+  - **作者裁决（记此以免重复上报）**：① **不跟随 `upstream/own` 的评论分页抓取**（`733d1632`，试用体验不佳）——该分支相关议题全部作废；② `exportWebDav` 三处未接异常、恢复回滚不含 DB **只登记不修**（上游继承缺陷，见 §4 登记段）。
+  - **验证**：单测 4 项 covers 用例；**实测把判据退回 `exists()` 即令「空目录不得入包」失败、把 `"covers"` 加回清单即令清单断言失败**，确认能捕获两类回归。全量单测 **131 项 / 10 失败**（10 项＝既有已知失败）；`assembleAppRelease` BUILD SUCCESSFUL。
+  - **实机回归（雷电模拟器，10044 → 10045 覆盖升级，签名一致保数据）**：① 无自定义封面 → 备份 18 条目、**无 `covers/` 空目录条目**、空表如常跳过且未致备份中止；② 设封面后 → 19 条目、**包内出现 `covers/4b3c7a86c14262f47611df96421f3c2b.png`（20000 字节）**；全程 `ZIP 源文件不存在` / `IllegalArgumentException` / `备份出错` / `FATAL` **计数均为 0**。
+  - 产物 `release/legado_sk_3.26.091512c_10045_arm64-v8a.apk`（31,011,993 字节，sha256 `7c083b4e8e8592d9c39cb61c1ddb1fed38c04ec1ca0e12af3eb19f905d97c95f`），aapt（io.legado.app.c / 10045 / 3.26.091512c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。⚠️ 本版 Gradle 输出名为 `legado_sk_<version>.apk`（**无 `_arm64-v8a` 后缀**），收进 `release/` 时按约定补后缀。
+  - ⚠️ **未发布 GitHub Release**：本版仅本地构建 + 模拟器回归，**尚未 `gh release create`**（Pre-release 待作者指示）。下一次交付 versionCode 从 `10046` 递增。
 
 - ✅ **10044（`3.26.091320c`）已发布 Pre-release `v3.26.091320-10044`（2026-09-13）——当前交付（修复 10043 引入的「备份必失败」）**：
   - **性质**：修回归缺陷，非功能开发。10043 同步上游时，把上游 `ZipUtils.zipFile` 的「源文件不存在静默跳过」改为 `require(srcFile.exists())`（**该变更本身正确，勿回退**），但 `Backup.kt` 仍按 `backupFileNames` 全量拼路径 —— 而 `writeListToJson` 对**空列表刻意不落盘**，于是任何一张空表都让整次备份以 `IllegalArgumentException: ZIP 源文件不存在` 中止。**新装机所有表皆空，必然复现**。
@@ -387,7 +400,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10045` 递增。
+- 下一次交付 versionCode 从 `10046` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
