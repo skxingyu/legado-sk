@@ -789,7 +789,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
      * 背景：Zen 免费通道要求请求带会话标识头，缺失即 400 MissingSessionID。
      * 早期版本出厂请求头为空串，且 `aiLlmBuiltinHeadersFilled` 已置位，
      * 使得 [fillDefaultAiHeadersIfNeeded] 直接早退——存量安装永远拿不到可用的请求头。
-     * 此处单独补一次，只认「出厂供应商 + 当前仍无会话头」的目标，用户自改过的请求头不动。
+     *
+     * 判据按「当前是否缺会话头」而非「请求头是否为空」：后者覆盖不到
+     * 「headers 已被填过非空值但缺会话头」的存量态，那正是 400 的真实成因。
+     * 补齐采用**只增不覆盖**的合并（[AiBuiltinDefaults.mergeMissingHeaders]），
+     * 用户自改的请求头不会被冲掉。
      */
     private fun fillOpenCodeSessionHeadersIfNeeded() {
         if (appCtx.getPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled)) return
@@ -802,10 +806,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             it.name == DEFAULT_AI_PROVIDER_NAME &&
                 it.headers.orEmpty().contains("X-Session-Id", ignoreCase = true).not()
         } ?: return
-        appCtx.putPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled, true)
         persistAiProviders(
-            providers.map { if (it.id == target.id) it.copy(headers = headers) else it }
+            providers.map {
+                if (it.id == target.id) {
+                    it.copy(headers = AiBuiltinDefaults.mergeMissingHeaders(it.headers, headers))
+                } else {
+                    it
+                }
+            }
         )
+        // 标记必须在持久化成功之后置位：否则 persist 抛异常时标记已写入，
+        // 该装机将永久失去自动补齐的机会。
+        appCtx.putPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled, true)
     }
 
     private fun resolveAiProviderName(baseUrl: String): String {

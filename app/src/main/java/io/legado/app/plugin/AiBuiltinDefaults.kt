@@ -66,4 +66,44 @@ object AiBuiltinDefaults {
             .digest(seed.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
+
+    /**
+     * 把出厂会话头合并进用户现有请求头，**只补缺失项，不整条替换**。
+     *
+     * 存量装机场景：早期版本出厂请求头为空，用户可能已自行填过 `user-agent` 等自定义头，
+     * 但缺会话头 → Zen 免费通道 400 MissingSessionID。整条覆盖会冲掉用户的自定义头，
+     * 故按**键名大小写不敏感**逐行合并：
+     * - 用户已有的键保留用户值（用户显式配置优先）；
+     * - 用户没有的键补上出厂值。
+     *
+     * 逐行 "K: V" 文本格式，与 [openCodeHeaders] / 供应商 headers 字段一致。
+     * 抽成纯函数便于单测。
+     */
+    fun mergeMissingHeaders(existing: String?, builtin: String): String {
+        val current = existing.orEmpty()
+        val existingKeys = current.lineSequence()
+            .mapNotNull { it.toHeaderPair()?.first?.lowercase() }
+            .toSet()
+        val missing = builtin.lineSequence()
+            .mapNotNull { it.toHeaderPair() }
+            .filter { it.first.lowercase() !in existingKeys }
+            .map { "${it.first}: ${it.second}" }
+            .toList()
+        if (missing.isEmpty()) return current
+        val base = current.trim().trimEnd('\n')
+        val merged = if (base.isBlank()) missing else listOf(base) + missing
+        return merged.joinToString("\n")
+    }
+
+    /** 解析一行 "K: V" 或 "K=V"；空行与 # 注释行返回 null。 */
+    private fun String.toHeaderPair(): Pair<String, String>? {
+        val line = trim()
+        if (line.isBlank() || line.startsWith("#")) return null
+        val separator = line.indexOf(':').takeIf { it > 0 }
+            ?: line.indexOf('=').takeIf { it > 0 }
+            ?: return null
+        val key = line.substring(0, separator).trim()
+        val value = line.substring(separator + 1).trim()
+        return if (key.isNotBlank() && value.isNotBlank()) key to value else null
+    }
 }
