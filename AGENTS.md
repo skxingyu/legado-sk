@@ -330,7 +330,7 @@ uiautomator2 / ADB
   - **验证**：单测 4 项 covers 用例；**实测把判据退回 `exists()` 即令「空目录不得入包」失败、把 `"covers"` 加回清单即令清单断言失败**，确认能捕获两类回归。全量单测 **131 项 / 10 失败**（10 项＝既有已知失败）；`assembleAppRelease` BUILD SUCCESSFUL。
   - **实机回归（雷电模拟器，10044 → 10045 覆盖升级，签名一致保数据）**：① 无自定义封面 → 备份 18 条目、**无 `covers/` 空目录条目**、空表如常跳过且未致备份中止；② 设封面后 → 19 条目、**包内出现 `covers/4b3c7a86c14262f47611df96421f3c2b.png`（20000 字节）**；全程 `ZIP 源文件不存在` / `IllegalArgumentException` / `备份出错` / `FATAL` **计数均为 0**。
   - 产物 `release/legado_sk_3.26.091512c_10045_arm64-v8a.apk`（31,011,993 字节，sha256 `7c083b4e8e8592d9c39cb61c1ddb1fed38c04ec1ca0e12af3eb19f905d97c95f`），aapt（io.legado.app.c / 10045 / 3.26.091512c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。⚠️ 本版 Gradle 输出名为 `legado_sk_<version>.apk`（**无 `_arm64-v8a` 后缀**），收进 `release/` 时按约定补后缀。
-  - ⚠️ **未发布 GitHub Release**：本版仅本地构建 + 模拟器回归，**尚未 `gh release create`**（Pre-release 待作者指示）。下一次交付 versionCode 从 `10046` 递增。
+  - ✅ **已发布 Pre-release `v3.26.091512-10045`（2026-09-15，作者确认可用于发布）**：tag 指向 `784b8e69`（= 发布时 HEAD），资产 `legado_sk_3.26.091512c_10045_arm64-v8a.apk`（31,011,993 字节，sha256 `7c083b4e…`，与本地交付 APK 一致），`isPrerelease=true` / `isDraft=false`。发布说明 `companion/发布说明-10045.md`。**真机实测确认无问题后发布**（联想平板 TB-9707F）。下一次交付 versionCode 从 `10046` 递增。
 
 - ✅ **10044（`3.26.091320c`）已发布 Pre-release `v3.26.091320-10044`（2026-09-13）——当前交付（修复 10043 引入的「备份必失败」）**：
   - **性质**：修回归缺陷，非功能开发。10043 同步上游时，把上游 `ZipUtils.zipFile` 的「源文件不存在静默跳过」改为 `require(srcFile.exists())`（**该变更本身正确，勿回退**），但 `Backup.kt` 仍按 `backupFileNames` 全量拼路径 —— 而 `writeListToJson` 对**空列表刻意不落盘**，于是任何一张空表都让整次备份以 `IllegalArgumentException: ZIP 源文件不存在` 中止。**新装机所有表皆空，必然复现**。
