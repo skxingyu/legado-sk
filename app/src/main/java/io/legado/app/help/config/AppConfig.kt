@@ -10,6 +10,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.DispatchersMonitor
+import io.legado.app.help.exoplayer.VolumeGain
 import io.legado.app.plugin.AiBuiltinDefaults
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
@@ -1029,6 +1030,16 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     val speechRatePlay: Int get() = if (ttsFlowSys) defaultSpeechRate else ttsSpeechRate
+
+    const val defaultVolumeGain = 0
+
+    /** 朗读音量增强百分比：0=不增强，100=2 倍，上限 [VolumeGain.MAX_PERCENT]。 */
+    var ttsVolumeGain: Int
+        get() = appCtx.getPrefInt(PreferKey.ttsVolumeGain, defaultVolumeGain)
+            .coerceIn(0, VolumeGain.MAX_PERCENT)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.ttsVolumeGain, value.coerceIn(0, VolumeGain.MAX_PERCENT))
+        }
 
     var chineseConverterType: Int
         get() = appCtx.getPrefInt(PreferKey.chineseConverterType)

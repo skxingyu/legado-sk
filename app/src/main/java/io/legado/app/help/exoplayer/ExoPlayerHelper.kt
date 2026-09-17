@@ -67,7 +67,9 @@ object ExoPlayerHelper {
     }
 
     fun createHttpExoPlayer(context: Context): ExoPlayer {
-        return ExoPlayer.Builder(context).setLoadControl(
+        return ExoPlayer.Builder(context)
+            .setRenderersFactory(VolumeGainRenderersFactory(context))
+            .setLoadControl(
             DefaultLoadControl.Builder().setBufferDurationsMs(
                 DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
                 DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,

@@ -300,6 +300,67 @@
 
         </LinearLayout>
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <TextView
+                android:id="@+id/tv_tts_volume_gain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/read_aloud_volume_gain"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_tts_volume_gain_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="3dp"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="6dp"
+            android:paddingRight="6dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_volume_gain_reduce"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:contentDescription="@string/tts_volume_gain_reduce"
+                android:src="@drawable/ic_reduce"
+                android:tint="@color/primaryText"
+                android:tooltipText="@string/tts_volume_gain_reduce"
+                tools:ignore="UnusedAttribute" />
+
+            <io.legado.app.lib.theme.view.ThemeSeekBar
+                android:id="@+id/seek_volume_gain"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="40" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_volume_gain_add"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:contentDescription="@string/tts_volume_gain_add"
+                android:src="@drawable/ic_add"
+                android:tint="@color/primaryText"
+                android:tooltipText="@string/tts_volume_gain_add"
+                tools:ignore="UnusedAttribute" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
     <LinearLayout

@@ -88,6 +88,8 @@ object PreferKey {
     const val aiStoryboardMaxChapterChars = "aiStoryboardMaxChapterChars"
     const val ttsFollowSys = "ttsFollowSys"
     const val ttsSpeechRate = "ttsSpeechRate"
+    // 朗读音量增强：0=不增强（原样播放），100=放大到 2 倍，上限 400（5 倍）
+    const val ttsVolumeGain = "ttsVolumeGain"
     const val prevKeys = "prevKeyCodes"
     const val nextKeys = "nextKeyCodes"
     const val showDiscovery = "showDiscovery"

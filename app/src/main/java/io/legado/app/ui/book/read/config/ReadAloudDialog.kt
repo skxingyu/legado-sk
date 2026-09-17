@@ -16,6 +16,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.databinding.DialogReadAloudBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.exoplayer.VolumeGain
 import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.TtsCacheParams
 import io.legado.app.help.tts.TtsEngineStore
@@ -171,6 +172,10 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
             tvTtsSpeed.setTextColor(palette.secondaryTextColor)
             tvTtsSpeedValue.setTextColor(textColor)
             ivTtsSpeechAdd.setColorFilter(textColor)
+            tvTtsVolumeGain.setTextColor(palette.secondaryTextColor)
+            tvTtsVolumeGainValue.setTextColor(textColor)
+            ivVolumeGainReduce.setColorFilter(textColor)
+            ivVolumeGainAdd.setColorFilter(textColor)
             ivCatalog.setColorFilter(textColor)
             tvCatalog.setTextColor(textColor)
             tvCatalogValue.setTextColor(textColor)
@@ -290,6 +295,25 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
                 upTtsSpeechRate()
             }
         })
+        ivVolumeGainReduce.setOnClickListener {
+            seekVolumeGain.progress -= 1
+            saveVolumeGain(seekVolumeGain.progress)
+        }
+        ivVolumeGainAdd.setOnClickListener {
+            seekVolumeGain.progress += 1
+            saveVolumeGain(seekVolumeGain.progress)
+        }
+        seekVolumeGain.setOnSeekBarChangeListener(object : SeekBarChangeListener {
+
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                super.onProgressChanged(seekBar, progress, fromUser)
+                upVolumeGainText(progress)
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                saveVolumeGain(seekBar.progress)
+            }
+        })
         seekTimer.setOnSeekBarChangeListener(object : SeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 upTimerText(progress)
@@ -364,6 +388,7 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
     override fun upSpeakEngineSummary() {
         binding.tvCatalogValue.text = speakEngineSummary()
         bindSpeechRateControls()
+        bindVolumeGainControls()
     }
 
     private fun speakEngineSummary(): String {
@@ -481,6 +506,25 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
         }
     }
 
+    /**
+     * 音量增强为播放端增益（PCM 乘系数），由朗读服务在每次播放新音频时读取设置，
+     * 因此这里只需落盘，无需通知服务。滑条最小位表示"不增强"，不会把音量调小。
+     */
+    private fun bindVolumeGainControls() = binding.run {
+        seekVolumeGain.max = VolumeGain.MAX_PERCENT / GAIN_STEP
+        seekVolumeGain.progress = AppConfig.ttsVolumeGain / GAIN_STEP
+        upVolumeGainText(seekVolumeGain.progress)
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun upVolumeGainText(value: Int) {
+        binding.tvTtsVolumeGainValue.text = VolumeGain.labelFor(value * GAIN_STEP)
+    }
+
+    private fun saveVolumeGain(value: Int) {
+        AppConfig.ttsVolumeGain = value * GAIN_STEP
+    }
+
     private fun configureSpeechRateSlider() = binding.seekTtsSpeechRate.run {
         if (isSourceAudioSelected) {
             max = 25
@@ -583,5 +627,10 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
     interface CallBack {
         fun showMenuBar()
         fun onClickReadAloud()
+    }
+
+    private companion object {
+        /** 滑条每格对应的增益百分比：40 格覆盖上限 400%。 */
+        const val GAIN_STEP = 10
     }
 }

@@ -687,6 +687,7 @@
     <string name="default_expand_first">默认展开第一组发现</string>
     <string name="threads_num">当前线程数 %s</string>
     <string name="read_aloud_speed">朗读语速</string>
+    <string name="read_aloud_volume_gain">音量增强</string>
     <string name="auto_next_page">自动翻页</string>
     <string name="auto_next_page_stop">停止自动翻页</string>
     <string name="auto_next_page_speed">自动翻页间隔</string>
@@ -1448,6 +1449,8 @@
     <string name="font_scale_summary">当前字体大小：%.1f</string>
     <string name="tts_speech_reduce">语速减</string>
     <string name="tts_speech_add">语速加</string>
+    <string name="tts_volume_gain_reduce">音量增强减</string>
+    <string name="tts_volume_gain_add">音量增强加</string>
     <string name="open_sys_dir_picker_error">打开系统文件夹选择器出错，将自动打开应用文件夹选择器</string>
     <string name="open_sys_doc_picker_error">打开系统文件选择器出错，将自动打开应用文件选择器</string>
     <string name="expand_text_menu">展开文本选择菜单</string>

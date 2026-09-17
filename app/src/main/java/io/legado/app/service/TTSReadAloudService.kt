@@ -23,6 +23,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.exoplayer.VolumeGainRenderersFactory
 import io.legado.app.help.tts.TtsCacheLog
 import io.legado.app.help.tts.TtsCacheStore
 import io.legado.app.lib.dialogs.SelectItem
@@ -77,7 +78,10 @@ class TTSReadAloudService : BaseReadAloudService() {
     // 音频时长精确可知，句内进度按真实音频位置轮询发布（与 HTTP 引擎同款），
     // 翻页仍由 UI 侧跟随规则判定；播放当前句时后台预合成下一句保证无缝衔接。
     private val wavPlayer: ExoPlayer by lazy {
-        ExoPlayer.Builder(this).build().apply { addListener(wavPlayerListener) }
+        ExoPlayer.Builder(this)
+            .setRenderersFactory(VolumeGainRenderersFactory(this))
+            .build()
+            .apply { addListener(wavPlayerListener) }
     }
     private val wavDir: File by lazy {
         File(cacheDir, "ttsWav").apply { mkdirs() }

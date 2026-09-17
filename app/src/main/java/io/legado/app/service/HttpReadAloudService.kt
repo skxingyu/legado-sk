@@ -39,6 +39,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.InputStreamDataSource
+import io.legado.app.help.exoplayer.VolumeGainRenderersFactory
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.tts.AiMultiVoiceConfig
 import io.legado.app.help.tts.AiTtsStoryboardHelper
@@ -89,7 +90,9 @@ import java.net.SocketTimeoutException
 class HttpReadAloudService : BaseReadAloudService(),
     Player.Listener {
     private val exoPlayer: ExoPlayer by lazy {
-        ExoPlayer.Builder(this).build()
+        ExoPlayer.Builder(this)
+            .setRenderersFactory(VolumeGainRenderersFactory(this))
+            .build()
     }
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator

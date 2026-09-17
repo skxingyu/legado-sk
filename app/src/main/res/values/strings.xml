@@ -687,6 +687,7 @@
     <string name="default_expand_first">Default expand the first Discovery.</string>
     <string name="threads_num">Current threads %s</string>
     <string name="read_aloud_speed">Speech rate</string>
+    <string name="read_aloud_volume_gain">Volume boost</string>
     <string name="auto_next_page">Auto scroll</string>
     <string name="auto_next_page_stop">Stop Auto scroll</string>
     <string name="auto_next_page_speed">Auto scroll speed</string>
@@ -1706,6 +1707,8 @@
     <string name="search_content_empty">Empty search result, check conversation settings</string>
     <string name="tts_speech_reduce">Decrease speech speed</string>
     <string name="tts_speech_add">Increase speech speed</string>
+    <string name="tts_volume_gain_reduce">Decrease volume boost</string>
+    <string name="tts_volume_gain_add">Increase volume boost</string>
     <string name="open_sys_dir_picker_error">Error opening system folder selector, automatically open application folder selector</string>
     <string name="open_sys_doc_picker_error">Error opening system file selector, automatically open application file selector</string>
     <string name="expand_text_menu">Expand text selection menu</string>
