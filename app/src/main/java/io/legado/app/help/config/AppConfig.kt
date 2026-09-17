@@ -834,9 +834,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val onlyUpdateRead: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.onlyUpdateRead)
 
-    /** 缓存评论时抓取评论页快照 */
+    /**
+     * 缓存评论时抓取评论页快照。
+     * ⚠️ 默认关闭：评论抓取与正文下载共用缓存任务，开启会让章节下载明显变慢。
+     */
     var syncCacheReview: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.syncCacheReview, true)
+        get() = appCtx.getPrefBoolean(PreferKey.syncCacheReview, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.syncCacheReview, value)
         }
@@ -847,7 +850,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
      * 章评按章、书评整本各只缓存一份，不受此开关影响。
      */
     var cacheReviewReplies: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewReplies, true)
+        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewReplies, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.cacheReviewReplies, value)
         }
@@ -861,28 +864,28 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     /** 缓存评论快照时保存评论者头像到资源库。 */
     var cacheReviewAvatars: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewAvatars, true)
+        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewAvatars, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.cacheReviewAvatars, value)
         }
 
     /** 缓存评论快照时保存非头像的评论图片到资源库。 */
     var cacheReviewImages: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewImages, true)
+        get() = appCtx.getPrefBoolean(PreferKey.cacheReviewImages, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.cacheReviewImages, value)
         }
 
     /** 超过阈值时压缩评论者头像。 */
     var compressReviewAvatars: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.compressReviewAvatars, true)
+        get() = appCtx.getPrefBoolean(PreferKey.compressReviewAvatars, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.compressReviewAvatars, value)
         }
 
     /** 超过阈值时压缩评论内图片。 */
     var compressReviewImages: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.compressReviewImages, true)
+        get() = appCtx.getPrefBoolean(PreferKey.compressReviewImages, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.compressReviewImages, value)
         }
