@@ -1036,12 +1036,19 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     const val defaultVolumeGain = 0
 
-    /** 朗读音量增强百分比：0=不增强，100=2 倍，上限 [VolumeGain.MAX_PERCENT]。 */
+    /**
+     * 朗读音量增强百分比：0=不增强，100=2 倍，上限 [VolumeGain.MAX_PERCENT]。
+     * 读写时同步刷新 [VolumeGain.currentFactor]，播放线程只读该 volatile 缓存，
+     * 避免在音频线程上访问 SharedPreferences（锁 + 装箱）。
+     */
     var ttsVolumeGain: Int
         get() = appCtx.getPrefInt(PreferKey.ttsVolumeGain, defaultVolumeGain)
             .coerceIn(0, VolumeGain.MAX_PERCENT)
+            .also { VolumeGain.refresh(it) }
         set(value) {
-            appCtx.putPrefInt(PreferKey.ttsVolumeGain, value.coerceIn(0, VolumeGain.MAX_PERCENT))
+            val gain = value.coerceIn(0, VolumeGain.MAX_PERCENT)
+            appCtx.putPrefInt(PreferKey.ttsVolumeGain, gain)
+            VolumeGain.refresh(gain)
         }
 
     var chineseConverterType: Int

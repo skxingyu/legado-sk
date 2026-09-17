@@ -36,6 +36,20 @@ class VolumeGainTest {
         assertEquals(400, VolumeGain.MAX_PERCENT)
     }
 
+    @Test
+    fun refreshKeepsCachedFactorInSync() {
+        // 播放线程只读 currentFactor，必须与设置值换算一致
+        VolumeGain.refresh(0)
+        assertEquals(1f, VolumeGain.currentFactor)
+        VolumeGain.refresh(150)
+        assertEquals(VolumeGain.factorFor(150), VolumeGain.currentFactor)
+        assertEquals(2.5f, VolumeGain.currentFactor)
+        // 越界值经同一入口收敛，避免缓存里出现非法增益
+        VolumeGain.refresh(Int.MAX_VALUE)
+        assertEquals(VolumeGain.MAX_FACTOR, VolumeGain.currentFactor)
+        VolumeGain.refresh(0)
+    }
+
     private companion object {
         /** 与 AppConfig.defaultVolumeGain 保持一致；单测无法读 SharedPreferences。 */
         const val AppConfigDefaultVolume = 0

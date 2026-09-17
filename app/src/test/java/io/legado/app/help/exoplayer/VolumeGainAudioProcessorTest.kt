@@ -98,6 +98,18 @@ class VolumeGainAudioProcessorTest {
         assertTrue("非整帧输入必须抛异常，实际=$error", error is IllegalStateException)
     }
 
+    @Test
+    fun unsupportedEncoding_passesThroughInsteadOfFailing() {
+        // 非 16bit/float 编码必须降级为"不增强但可播放"。
+        // 若改成抛 UnhandledAudioFormatException，DefaultAudioSink 会包装成
+        // ConfigurationException 令整段音频配置失败（朗读直接报错），已由字节码确认。
+        val p = processor(gain = 2f)
+        val result = p.configure(AudioFormat(SAMPLE_RATE, CHANNELS, C.ENCODING_PCM_24BIT))
+
+        assertEquals(AudioFormat.NOT_SET, result)
+        assertFalse("不支持的编码下必须旁路，不得参与处理链", p.isActive)
+    }
+
     private companion object {
         const val SAMPLE_RATE = 44100
         const val CHANNELS = 2

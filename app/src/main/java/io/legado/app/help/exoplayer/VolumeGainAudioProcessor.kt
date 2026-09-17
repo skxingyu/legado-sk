@@ -2,7 +2,6 @@ package io.legado.app.help.exoplayer
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
-import androidx.media3.common.audio.AudioProcessor.UnhandledAudioFormatException
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 
@@ -32,19 +31,28 @@ class VolumeGainAudioProcessor(
     private val gainProvider: () -> Float = { 1f },
 ) : BaseAudioProcessor() {
 
+    /**
+     * 当前输入编码不受支持（既非 16bit PCM 也非 float PCM）时为 true。
+     * 此时本处理器整体旁路，播放保持原样，只是不增强——绝不抛异常。
+     */
+    private var unsupportedEncoding = false
+
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
-        // 与 media3 自带 GainProcessor 一致：只处理 16bit PCM 与 float PCM。
-        // 其余编码必须抛 UnhandledAudioFormatException，由 media3 绕过本处理器并原样交给 sink；
-        // 若返回 inputAudioFormat 会被视为"已处理"，随后在 queueInput 里按错误宽度解读样本
-        // （无声的数据损坏，比崩溃更难归因）。
-        when (inputAudioFormat.encoding) {
-            C.ENCODING_PCM_16BIT, C.ENCODING_PCM_FLOAT -> Unit
-            else -> throw UnhandledAudioFormatException(inputAudioFormat)
-        }
-        return inputAudioFormat
+        // 只处理 16bit PCM 与 float PCM（与 media3 自带 GainProcessor 的可处理范围一致）。
+        //
+        // ⚠️ 这里**不能**抛 UnhandledAudioFormatException：DefaultAudioSink.configure() 会把它
+        // 包装成 AudioSink.ConfigurationException 抛出，整段音频配置失败、朗读报错，而不是
+        // "绕过本处理器继续播放"（已由字节码确认：catch 后 new ConfigurationException + athrow）。
+        // 正常链路里 media3 已在链首插入 ToInt16/ToFloat 归一化处理器，故本分支实际不可达；
+        // 但一旦可达，必须降级为"无增益仍可播放"而不是让整句播不出来。
+        unsupportedEncoding = inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
+            inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT
+        // 返回 NOT_SET 会让 media3 把本处理器判为不激活并整体跳过
+        return if (unsupportedEncoding) AudioFormat.NOT_SET else inputAudioFormat
     }
 
-    override fun isActive(): Boolean = super.isActive() && gainProvider() != 1f
+    override fun isActive(): Boolean =
+        super.isActive() && !unsupportedEncoding && gainProvider() != 1f
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
@@ -102,5 +110,20 @@ object VolumeGain {
     fun labelFor(percent: Int): String {
         val factor = factorFor(percent)
         return if (factor == 1f) "不增强" else "%.1fX".format(factor)
+    }
+
+    /**
+     * 播放线程使用的缓存增益系数。
+     *
+     * 音频处理链在每段 PCM 入队时都要取增益，直接读 SharedPreferences 会带锁与装箱开销，
+     * 因此在设置变更时（唯一写点见 [refresh]）刷新到这里，播放线程只做一次 volatile 读。
+     */
+    @Volatile
+    var currentFactor: Float = 1f
+        private set
+
+    /** 由设置读取方在读取/写入后调用，保持 [currentFactor] 与设置一致。 */
+    fun refresh(percent: Int) {
+        currentFactor = factorFor(percent)
     }
 }

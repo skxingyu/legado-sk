@@ -21,13 +21,15 @@ class VolumeGainRenderersFactory(context: Context) : DefaultRenderersFactory(con
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean,
     ): AudioSink {
-        // 与父类默认实现等价，仅追加增益处理器；增益值从设置读取，播放中调整在下次 flush 生效
+        // 建 sink 时（非音频线程、且每个播放器只一次）从设置播种一次缓存增益，
+        // 避免首次播放时缓存还是默认值 1f 而漏掉已配置的增强。
+        VolumeGain.refresh(AppConfig.ttsVolumeGain)
+        // 与父类默认实现等价，仅追加增益处理器（父类正是 setEnableFloatOutput +
+        // setEnableAudioTrackPlaybackParams + build，1.8.0 无 AudioCapabilities setter）
         return DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf<AudioProcessor>(VolumeGainAudioProcessor(::currentGain)))
+            .setAudioProcessors(arrayOf<AudioProcessor>(VolumeGainAudioProcessor { VolumeGain.currentFactor }))
             .build()
     }
-
-    private fun currentGain(): Float = VolumeGain.factorFor(AppConfig.ttsVolumeGain)
 }
