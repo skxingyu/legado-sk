@@ -32,5 +32,61 @@
     "uiCornerScale": 1.0,
     "uiCornerSearchFollow": false,
     "uiFontPath": ""
+  },
+  {
+    "accentColor": "#E6FFFF",
+    "backgroundColor": "#B6B6B6",
+    "backgroundImgBlur": 25,
+    "backgroundImgPath": "@asset:defaultData/pre_theme_moxu_day.jpg",
+    "bottomBackground": "#B6B6B6",
+    "isNightTheme": false,
+    "panelBackgroundScaleType": "crop",
+    "primaryColor": "#3A2A1A",
+    "themeName": "MD3·墨墟",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#000000",
+    "backgroundColor": "#6D6D6D",
+    "backgroundImgBlur": 25,
+    "backgroundImgPath": "@asset:defaultData/pre_theme_moxu_night.jpg",
+    "bottomBackground": "#494949",
+    "isNightTheme": true,
+    "panelBackgroundScaleType": "crop",
+    "primaryColor": "#C4B8A0",
+    "themeName": "MD3·墨墟",
+    "transparentNavBar": false
+  },
+  {
+    "accentColor": "#FFFF7400",
+    "backgroundColor": "#F3EFE8",
+    "backgroundImgBlur": 25,
+    "backgroundImgPath": "@asset:defaultData/pre_theme_qinnv_day.jpg",
+    "bookInfoBackgroundImgBlur": 12,
+    "bottomBackground": "#B6B6B6",
+    "fontScale": 11,
+    "isNightTheme": false,
+    "panelBackgroundScaleType": "crop",
+    "primaryColor": "#706B66",
+    "themeName": "MD3·琴女",
+    "titleFontPath": "",
+    "transparentNavBar": true,
+    "uiCornerReplyFollow": false,
+    "uiCornerScale": 1.0,
+    "uiCornerSearchFollow": false,
+    "uiFontPath": "",
+    "uiLayoutAlpha": 0
+  },
+  {
+    "accentColor": "#64605C",
+    "backgroundColor": "#292725",
+    "backgroundImgBlur": 25,
+    "backgroundImgPath": "@asset:defaultData/pre_theme_qinnv_night.jpg",
+    "bottomBackground": "#3A3836",
+    "isNightTheme": true,
+    "panelBackgroundScaleType": "crop",
+    "primaryColor": "#8C8680",
+    "themeName": "MD3·琴女",
+    "transparentNavBar": false
   }
 ]

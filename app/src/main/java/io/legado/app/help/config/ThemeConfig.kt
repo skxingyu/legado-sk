@@ -77,6 +77,8 @@ object ThemeConfig {
     private const val DEFAULT_NIGHT_BACKGROUND_ASSET = "defaultData/pre_default_background_night.png"
     private const val DEFAULT_NIGHT_BACKGROUND_FILE = "pre_default_background_night.png"
     private const val LEGACY_DEFAULT_BACKGROUND_FILE = "pre_default_background.png"
+    /** 主题预设声明「背景图取自 assets」的前缀，见 [resolvePresetBackgrounds]。 */
+    private const val PRESET_ASSET_PREFIX = "@asset:"
     private const val MISAPPLIED_READER_DAY_BACKGROUND_FILE = "护眼漫绿.jpg"
     private const val MISAPPLIED_READER_NIGHT_BACKGROUND_FILE = "宁静夜色.jpg"
     private const val DEFAULT_DAY_PRIMARY = 0xFFF1F2F6.toInt()
@@ -93,7 +95,7 @@ object ThemeConfig {
 
     val configList: ArrayList<Config> by lazy {
         val cList = getConfigs() ?: DefaultData.themeConfigs
-        ArrayList(cList.map { migrateLegacyDefaultDayPrimary(it) })
+        ArrayList(cList.map { migrateLegacyDefaultDayPrimary(it).resolvePresetBackgrounds(appCtx) })
     }
 
     private var needClearImg = true
@@ -157,6 +159,21 @@ object ThemeConfig {
         }.onFailure {
             AppLog.put("Install default theme background failed", it, true)
         }
+    }
+
+    /**
+     * 把内置主题预设里的资产背景引用解析为可读的绝对路径。
+     * 预设是静态 assets，写不了随设备变化的 filesDir 路径，故用 [PRESET_ASSET_PREFIX]
+     * 前缀声明引用；此处按文件名解压到 filesDir/defaultData 后回填绝对路径，
+     * 与 [installDefaultBackgrounds] 落盘位置一致，两者共用同一份文件。
+     * 非引用值（用户自选路径、http、已解压的绝对路径）原样返回。
+     */
+    private fun Config.resolvePresetBackgrounds(context: Context): Config {
+        val path = backgroundImgPath?.takeIf { it.startsWith(PRESET_ASSET_PREFIX) } ?: return this
+        val asset = path.removePrefix(PRESET_ASSET_PREFIX)
+        val target = File(File(context.filesDir, "defaultData"), FileUtils.getName(asset))
+        installBackgroundAsset(context, asset, target)
+        return if (target.isFile) copy(backgroundImgPath = target.absolutePath) else this
     }
 
     fun getTheme() = when {
