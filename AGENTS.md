@@ -319,7 +319,30 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10045（`3.26.091512c`）已构建并通过模拟器回归（2026-09-15）——当前交付（修 10044 引入的「自定义封面漏备份」+ 全项目审查产出）**：
+- ✅ **10051（`3.26.091900c`）已发布 Pre-release `v3.26.091900-10051`（2026-09-18）——当前交付（朗读音量增强 + 音质说明；修 10050 引入的「打开朗读面板必崩」）**：
+  - **性质**：功能版（音量增强）+ 自引入缺陷的修复版。改动链：`5ac5a818`（音量增强）→ `19e7bc25`（评论缓存默认关闭）→ `becd5955`（增益两处加固）→ `76c37b01`（音质说明）→ `cc7a7261`（修崩溃）。发布时已 rebase 到远端 main（含远端 README 提交 `df907548`），提交哈希见 `44cab79c` 等（rebase 后重写），**源码与已交付 APK 同源已核对（零差异）**。
+  - **功能：朗读音量增强（播放端数字增益）**。背景：部分在线 TTS 音源默认合成音量偏小，手机音量调到头仍不够。
+    - ⚠️ **实现选型的根本约束**：`ExoPlayer.setVolume()` 内部被 media3 的 `Util.constrainValue(volume, 0f, 1f)` 钳在 [0,1]（字节码确认），**无法放大**；且 `ExoPlayer.Builder` **没有 `setAudioSink`**。只能在**解码后的 PCM** 上做乘法——自定义 `AudioProcessor`，经 `DefaultRenderersFactory.buildAudioSink` 覆写注入。新增 `help/exoplayer/VolumeGainAudioProcessor.kt` + `VolumeGainRenderersFactory.kt`；接线 3 处（`ExoPlayerHelper.createHttpExoPlayer`、`HttpReadAloudService`、`TTSReadAloudService`）。
+    - **取值语义**：设置 key `ttsVolumeGain`，**增强百分比**，`0` = 不增强（1.0x），上限 `400` = 5.0x。**最小位刻意不衰减**（因子恒 ≥ 1）——作者定下的产品语义，**不要**改成"0 表示静音或允许负值衰减"。默认 `AppConfig.defaultVolumeGain = 0`。
+    - ⚠️⚠️ **缓冲区读写纪律（10048 的「无声」事故根因，绝不可改回）**：`queueInput` 必须**直接用外层 `ByteBuffer` 的 `getShort/putShort`（或 `getFloat/putFloat`）**逐样本读写，末尾对本方法内 `replaceOutputBuffer(...)` 的返回值调**一次** `flip()`。若改用 `asShortBuffer()`/`asFloatBuffer()` **视图**写入：视图 position 前进而**外层 position 仍为 0**，末尾 `flip()` 把 `limit` 置 0 → **输出 0 字节 → 完全无声**。回归锁 `VolumeGainAudioProcessorTest.emitsAllInputBytesAmplified`（把写法退回视图版会让 2 个用例失败）。
+    - ⚠️ **不支持编码不得抛异常**：`DefaultAudioSink.configure()` 会把 `UnhandledAudioFormatException` **包装成 `AudioSink.ConfigurationException` 抛出**（不是优雅旁路），整段音频配置失败。故 `onConfigure` 遇非 16bit/float PCM 时返回 `AudioFormat.NOT_SET` 让本处理器**整体跳过**。
+    - ⚠️ **增益读取移出音频线程**：`@Volatile var VolumeGain.currentFactor`，由 `AppConfig.ttsVolumeGain` 的 getter/setter 统一 `refresh()`。
+    - **生效时机**：`isActive()` 只在 `configure()`/`flush()` 重建，播放中改设置要等下一段音频入队；朗读逐句合成天然满足。
+    - **不覆盖**：系统 TTS 直出（`speak()`，App 拿不到 PCM）；`Exo2MediaPlayer`（视频）与 `AudioBlockPlayer` 刻意未接线。
+  - 🔴 **10050 引入的必崩缺陷（10051 修复）——`TextView.setText(Int)` 语义坑，务必记住**：
+    - 症状：**打开朗读面板即闪退**。栈：`Resources$NotFoundException: String resource ID #0x0` → `TextView.setText(TextView.java:6748)` → `ReadAloudDialog.upVolumeGainText`。
+    - 根因：10050 让"无提示"档返回资源 id `0` 并交给 `setText(...)`。但 **`TextView.setText(Int)` 的参数是「字符串资源 id」而非文本**，`0` 无效 → 抛异常。
+    - ⚠️ **触发条件是默认态**（增益 `0` → `qualityCostFor` 返回 `NONE`），**任何用户首次打开朗读面板必崩**。
+    - ⚠️ **通用坑**：给 `TextView.setText` 传 `Int` **永远是资源 id**。要"清空"用 `text = ""`（CharSequence）或 `setText(null)`。**"0 表示无"是 `setImageResource`/`setBackgroundResource` 的语义，跨控件迁移会直接崩溃。**
+    - 回归锁：`ReadAloudVolumeGainHintTest`（**源码级静态断言**，因 `TextView` 是 Android 类、JVM 单测覆盖不到）；**已验证把缺陷写回即令其失败**。
+  - **UI 说明（10050）**：标题「音量增强（会影响音质）」+ `iv_volume_gain_help`（复用 `ic_help`，**48dp 触控目标**，`padding=15dp` 保持 18dp 视觉尺寸）点击弹完整说明 + 滑条右侧 `tv_volume_gain_hint` 按档位提示。⚠️ **刻意的分层**：`VolumeGain.qualityCostFor(percent)` 只判定等级（`NONE`/`MILD`/`DISTORTION`，分界 `DISTORTION_FACTOR = 2f`），**文案映射留在 UI 层**——`help/exoplayer` 包**不依赖 `R`**，勿把资源 id 引进去。
+  - **附带修复（10049）**：6 项「缓存评论」相关设置默认值 `true` → `false`（`syncCacheReview`、`cacheReviewReplies`、`cacheReviewAvatars`、`cacheReviewImages`、`compressReviewAvatars`、`compressReviewImages`），并同步 `pref_config_read.xml`。⚠️ 两点易误解：① `syncCacheReview` 是**总开关**，`reviewEnabled` 只是挂在**同一次缓存请求**上的附加项，**关掉不阻断章节正文下载**；② **默认值改动只对新装机生效**，存量 pref 已写入 `true`，需手动关。
+  - **验证**：音量增益相关单测全绿（含崩溃回归锁）。**真机实测（平板 TB-9707F，10050 → 10051 覆盖升级）走了完整崩溃路径**——书架进阅读页 → 点屏呼出菜单 → **长按「朗读」**进面板：面板正常打开、显示「音量增强（会影响音质）」+「不增强」；拖到 1.9X → 「音量提高，音质会受影响」；4.1X → 「过高可能失真」；点 **?** 图标正常弹出说明；**全程 `FATAL` 计数 0**。
+  - ⚠️ **操作侧坑（实测）**：`ThemeSeekBar` **不响应 `adb input swipe` 的绝对坐标拖动**（拖不动），验证滑条请用「−/+」按钮或真实触摸。
+  - **产物** `release/legado_sk_3.26.091900c_10051_arm64-v8a.apk`（31,016,331 字节，sha256 `66c8318d175a954ce9e765834f0630c537204644c738894afed472063f40f91b`），aapt（io.legado.app.c / 10051 / 3.26.091900c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。发布说明 `companion/发布说明-10051.md`。**已发布 Pre-release `v3.26.091900-10051`（作者要求发布；按 §5 默认 Pre）**：tag 指向 `44cab79c`（= 发布时远端 main HEAD），资产 sha256 与本地一致，`isPrerelease=true` / `isDraft=false`。下一次交付 versionCode 从 `10052` 递增。
+  - ⚠️ **10046/10047 无对应 git 提交**（音量增强开发期中间打包），查改动请从 `5ac5a818` 起看。
+
+- ✅ **10045（`3.26.091512c`）已构建并通过模拟器回归（2026-09-15）——修 10044 引入的「自定义封面漏备份」+ 全项目审查产出**：
   - **性质**：全项目审查后的修复版（4 个只读子代理并行 + 主代理逐条复核 + 上游对照；报告在 gitignore 的 `test-records/review-r1-*/`）。**审查确认当前 main 自洽可编译、7 条功能红线 0 回归**。
   - **必修回归**：**10044 把 `covers` 的入包判定与其创建顺序搞反**——10044 把「无条件加入 + `ZipUtils` 静默跳过」改成 `if (dir.exists())` 过滤，但 `covers` 是 `prepareCustomCoverBackup()` 在**该判定之后**才创建的 → 目录不存在时被跳过、封面随即被拷进去 → **备份包缺 covers，换机恢复后封面全丢且本机无异常**。10043 及更早不受影响。
   - **修法**：`"covers"` 移出 `Backup.backgroundAssetDirNames`（**`Restore.kt` 的同名副本不动**，其依赖该目录名做路径重映射），改由 `prepareCustomCoverBackup()` 先建目录 + 补齐外部封面，再按**目录实际内容**判定（顶层 `coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。
@@ -400,7 +423,7 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10046` 递增。
+- 下一次交付 versionCode 从 `10052` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
