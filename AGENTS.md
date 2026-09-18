@@ -319,7 +319,7 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10054（`3.26.091955c`）待发布 —— 当前交付（书架同书去重 + 内置三套预设主题/排版）**：
+- ✅ **10054（`3.26.091955c`）已发布 Pre-release `v3.26.091955-10054`（2026-09-18）——当前交付（书架同书去重 + 内置三套预设主题/排版）**：
   - **性质**：功能版（两项独立功能）。改动链：`9655ee5e`（统一入库入口，按书名+作者+媒体类型收敛）→ `0aa0e21e`（换源与入库路径收口到统一入口）→ `5008b91a`（书架手动「合并重复书籍」入口）→ `c219e259`（内置墨墟/琴女主题与娑娜排版三套预设）→ `88666e18`（修正娑娜排版页眉内边距与提示位）。
   - ⚠️ **10052 / 10053 无独立交付**：10052 是去重开发的中间版（无 Release 记录），10053 是预设的首个构建（被 10054 取代）。查去重改动从 `9655ee5e` 起看。
   - **功能一：书架同书去重**。背景：同一本书（书名、作者一致）换个书源加入会被当成两本不同书并存。
@@ -341,7 +341,7 @@ uiautomator2 / ADB
   - **验证**：`BuiltinPresetAssetTest` 6/6 通过（`--rerun-tasks` 实跑）。⚠️ **资产类测试必须 `--rerun-tasks`**——曾出现 Gradle 报 BUILD SUCCESSFUL 却未真正执行（注入的错误仍在）的**假绿**。回归锁已双向证伪：改坏主题预设图片名 → `themePresetAssetRefsExist` 失败（第 47 行）；移动 `娑娜` 到 index 0 → `readPresetIsAppendedAtEnd` 失败（第 69 行）。全量单测 **181 项 / 10 失败**（10 项＝既有已知失败：`CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）。
   - **实机回归（作者手动完成）**：换源不重复建书、书架「合并重复书籍」正常；三套预设显示效果确认；**娑娜排版修正后的效果已实测通过**。10054 已覆盖安装到手机与平板（TB-9707F），版本号校验一致。
   - ⚠️ **10054 APK 的资产与当前 HEAD 已逐字节核对（零差异）**：`readConfig.json`（11176 字节）与 `themeConfig.json`（2722 字节）在 APK 内与源码完全一致，**娑娜修正值 `headerPaddingBottom=10 / headerPaddingTop=10 / tipHeaderLeft=1 / tipHeaderMiddle=0` 已在包内**。**不要再重新编译 10055**——10054 就是最终版。
-  - **产物** `release/legado_sk_3.26.091955c_10054_arm64-v8a.apk`（36,196,537 字节，sha256 `50c8b571189add35556ef4d61bfe1d8b1bedf044b1515bda1a5312454448b827`），aapt（io.legado.app.c / 10054 / 3.26.091955c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。发布说明 `companion/发布说明-10054.md`。**下一次交付 versionCode 从 `10055` 递增**。
+  - **产物** `release/legado_sk_3.26.091955c_10054_arm64-v8a.apk`（36,196,537 字节，sha256 `50c8b571189add35556ef4d61bfe1d8b1bedf044b1515bda1a5312454448b827`），aapt（io.legado.app.c / 10054 / 3.26.091955c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。发布说明 `companion/发布说明-10054.md`。**已发布 Pre-release `v3.26.091955-10054`（作者要求发布；按 §5 默认 Pre）**：tag 指向 `7e891a91`（= 发布时远端 main HEAD，docs 提交），远端资产 sha256 `50c8b571…` 与本地 APK **逐字节一致**，`isPrerelease=true` / `isDraft=false`。**下一次交付 versionCode 从 `10055` 递增**。
 
 - ✅ **10051（`3.26.091900c`）已发布 Pre-release `v3.26.091900-10051`（2026-09-18）——朗读音量增强 + 音质说明；修 10050 引入的「打开朗读面板必崩」**：
   - **性质**：功能版（音量增强）+ 自引入缺陷的修复版。改动链：`5ac5a818`（音量增强）→ `19e7bc25`（评论缓存默认关闭）→ `becd5955`（增益两处加固）→ `76c37b01`（音质说明）→ `cc7a7261`（修崩溃）。发布时已 rebase 到远端 main（含远端 README 提交 `df907548`），提交哈希见 `44cab79c` 等（rebase 后重写），**源码与已交付 APK 同源已核对（零差异）**。
