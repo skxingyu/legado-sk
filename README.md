@@ -14,6 +14,8 @@
 
 **好用的话，点个 star，谢谢啦**
 
+长按进朗读页面！（本人喜好，不喜欢可以fork出让ai改，opencode的免费模型就行）
+
 ## 项目介绍
 
 本项目 fork 自 [legadoC](https://github.com/CCSSNE/legadoC)，在 legadoC 的基础上针对**阅读进度同步**与**朗读（听书）体验**做了针对性优化，按个人使用习惯开发，适合自用或自行打包分发。
