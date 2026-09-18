@@ -1715,14 +1715,13 @@ class BookInfoActivity :
             return
         }
         viewModel.getBook()?.let { book ->
+            // 不在架时先打 notShelf 标记（试读不入架）；在架时直接落库。
+            // 两条路径都要走 saveBook：它会做身份收敛，可能把 bookData 换成库里既有那条，
+            // 而 openChapterList() 读的是 bookData，因此无需在此额外处理 bookUrl。
             if (!viewModel.inBookshelf) {
                 book.addType(BookType.notShelf)
-                viewModel.saveBook(book) {
-                    viewModel.saveChapterList {
-                        openChapterList()
-                    }
-                }
-            } else {
+            }
+            viewModel.saveBook(book) {
                 viewModel.saveChapterList {
                     openChapterList()
                 }
@@ -1734,7 +1733,9 @@ class BookInfoActivity :
         viewModel.getBook()?.let { book ->
             chapterChanged = true
             viewModel.saveBookAtChapter(book, chapter) {
-                startReadActivity(book)
+                // saveBookAtChapter 不改 bookUrl（试读路径打 notShelf，不入身份收敛），
+                // 但统一从 bookData 取，避免与后续 saveBook 造成的切换脱节。
+                startReadActivity(viewModel.getBook(false) ?: book)
             }
         }
     }
@@ -1807,6 +1808,7 @@ class BookInfoActivity :
 
     private fun readBook(book: Book) {
         if (!viewModel.inBookshelf) {
+            // 「试读不入架」：打 notShelf 后按 bookUrl 落库，不参与身份收敛，bookUrl 不会变。
             book.addType(BookType.notShelf)
             viewModel.saveBook(book) {
                 viewModel.saveChapterList {
@@ -1814,8 +1816,11 @@ class BookInfoActivity :
                 }
             }
         } else {
+            // 已在架：saveBook 可能把这本书合并进库中同书的既有记录（同书不同源）。
+            // ⚠️ 必须用回填后的 bookData —— 它的 bookUrl 才是库里真正存在的那条，
+            // 沿用过期的 book 会打开「未找到书籍」空页。
             viewModel.saveBook(book) {
-                startReadActivity(book)
+                startReadActivity(viewModel.getBook(false) ?: book)
             }
         }
     }

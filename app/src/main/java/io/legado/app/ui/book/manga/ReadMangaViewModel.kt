@@ -15,6 +15,7 @@ import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
@@ -239,18 +240,20 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
 
     /**
      * 换源
+     *
+     * 统一走 [BookUpsert.upsertByIdentity]：同书已在架时合并进既有记录，不再删旧插新。
+     * 后续一切必须使用**返回值**（合并时它的 bookUrl 是既有记录的身份）。
      */
     fun changeTo(book: Book, toc: List<BookChapter>) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
             //换源中
-            ReadManga.book?.migrateTo(book, toc)
+            val oldBook = ReadManga.book
+            oldBook?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
-            ReadManga.book?.delete()
-            appDb.bookDao.insert(book)
-            appDb.bookChapterDao.insert(*toc.toTypedArray())
-            CacheManifestHelper.refreshAsync(book, toc)
-            ReadManga.resetData(book)
+            val settled = BookUpsert.upsertByIdentity(book, toc, migrateFrom = oldBook)
+            CacheManifestHelper.refreshAsync(settled, toc)
+            ReadManga.resetData(settled)
             ReadManga.loadContent()
         }.onError {
             AppLog.put("换源失败\n$it", it, true)

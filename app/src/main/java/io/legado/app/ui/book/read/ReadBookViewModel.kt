@@ -19,6 +19,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.ai.AiChapterPurifyService
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
@@ -315,20 +316,25 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
 
     /**
      * 换源
+     *
+     * 走 [BookUpsert.upsertByIdentity] 统一入库：书架上已有同一本书（书名+作者+媒体类型相同）
+     * 时**合并进既有记录**，不再删旧插新 —— 否则同书不同源会在书架上留下两条。
+     * ⚠️ 后续一切（缓存清单、引擎重载、事件）都必须使用**返回值**，
+     * 合并发生时它的 bookUrl 是既有记录的身份，而不是传入的 book。
      */
     fun changeTo(book: Book, toc: List<BookChapter>) {
         changeSourceCoroutine?.cancel()
         changeSourceCoroutine = execute {
             ReadBook.upMsg(context.getString(R.string.loading))
-            ReadBook.book?.migrateTo(book, toc)
+            val oldBook = ReadBook.book
+            oldBook?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
-            ReadBook.book?.delete()
-            appDb.bookDao.insert(book)
-            appDb.bookChapterDao.insert(*toc.toTypedArray())
-            CacheManifestHelper.refreshAsync(book, toc)
-            ReadBook.resetData(book)
+            val settled = BookUpsert.upsertByIdentity(book, toc, migrateFrom = oldBook)
+            CacheManifestHelper.refreshAsync(settled, toc)
+            ReadBook.resetData(settled)
             ReadBook.upMsg(null)
             ReadBook.loadContent(resetPageOffset = true)
+            settled
         }.onError {
             AppLog.put("换源失败\n$it", it, true)
             ReadBook.upMsg(null)

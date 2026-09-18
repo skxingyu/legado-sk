@@ -58,6 +58,7 @@ import io.legado.app.help.ai.AiCreationSessionHolder
 import io.legado.app.help.book.AudioTextFusion
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.BookImgClick
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isEpub
@@ -1895,13 +1896,16 @@ class ReadBookActivity : BaseReadBookActivity(),
         } else {
             ReadAloud.stop(this)
             lifecycleScope.launch {
-                withContext(IO) {
-                    ReadBook.book?.migrateTo(book, toc)
+                // 统一入库：同书已在架时合并进既有记录，返回值才是真正落库的那一本。
+                // ⚠️ 重开 Activity 必须使用返回值 —— 合并时它的 bookUrl 是既有记录的，
+                // 用传入的 book.bookUrl 会查不到记录，落到「未找到书籍」空阅读页。
+                val settled = withContext(IO) {
+                    val oldBook = ReadBook.book
+                    oldBook?.migrateTo(book, toc)
                     book.removeType(BookType.updateError)
-                    ReadBook.book?.delete()
-                    appDb.bookDao.insert(book)
+                    BookUpsert.upsertByIdentity(book, toc, migrateFrom = oldBook)
                 }
-                startActivityForBook(book)
+                startActivityForBook(settled)
                 finish()
             }
         }

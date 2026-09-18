@@ -24,6 +24,7 @@ import io.legado.app.help.ai.AiChapterPurifyService
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.getRemoteUrl
@@ -470,18 +471,21 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             bookSource = source.also {
                 hasCustomBtn = it.customButton
             }
-            bookData.value?.migrateTo(book, toc)
+            val oldBook = bookData.value
+            oldBook?.migrateTo(book, toc)
             if (book.isWebFile) {
                 loadWebFile(book)
             }
-            if (inBookshelf) {
-                book.removeType(BookType.updateError)
-                bookData.value?.delete()
-                appDb.bookDao.insert(book)
-                appDb.bookChapterDao.insert(*toc.toTypedArray())
-                CacheManifestHelper.refreshAsync(book, toc)
-            }
-            bookData.postValue(book)
+            // 统一入库：库里已有同书就合并进它，避免「书架里已有这本、从别的源再进详情页」
+            // 时新增一条。不在架的书同样要收敛 —— 它可能已在库中（例如刚被移出书架）。
+            book.removeType(BookType.updateError)
+            val settled = BookUpsert.upsertByIdentity(book, toc, migrateFrom = oldBook)
+            CacheManifestHelper.refreshAsync(settled, toc)
+            // 入库成功后这本书确实在架上了（合并进既有记录也算在架）。
+            inBookshelf = true
+            // ⚠️ 必须推 settled：合并时它的 bookUrl 是既有记录的，
+            // 后续 readBook()/startReadActivity 都从这里取 bookUrl。
+            bookData.postValue(settled)
             chapterListData.postValue(toc)
         }.onFinally {
             postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
@@ -499,26 +503,27 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
+    /**
+     * 把详情页当前这本书落库（点「开始阅读」「目录」等都会走这里）。
+     *
+     * ⚠️ 必须走 [BookUpsert.upsertByIdentity] 而不是裸 `book.save()`：
+     * `save()` 在 `bookUrl` 不在库中时直接 `insert`，会让「换源时刚被合并掉的记录」
+     * 在点「开始阅读」这一步又被插回来 —— 需求目标会因此失效。
+     */
     fun saveBook(book: Book?, success: (() -> Unit)? = null) {
         book ?: return
         execute {
             if (book.order == 0) {
                 book.order = appDb.bookDao.minOrder - 1
             }
-            appDb.bookDao.getBook(
-                book.name,
-                book.author,
-                BookMediaType.fromBookType(book.type)
-            )?.let {
-                book.durChapterIndex = it.durChapterIndex
-                book.durVolumeIndex = it.durVolumeIndex
-                book.chapterInVolumeIndex = it.chapterInVolumeIndex
-                book.durChapterPos = it.durChapterPos
-                book.durChapterTitle = it.durChapterTitle
+            val settled = BookUpsert.upsertByIdentity(book)
+            if (settled.bookUrl != book.bookUrl) {
+                // 入库时命中了既有记录（同书不同源）：把当前页与引擎切到真正落库的那一本，
+                // 否则后续 startReadActivity 会拿已不存在的 bookUrl 去查库。
+                bookData.postValue(settled)
             }
-            book.save()
-            if (ReadBook.book?.isSameNameAuthor(book) == true) {
-                ReadBook.book = book
+            if (ReadBook.book?.isSameNameAuthor(settled) == true) {
+                ReadBook.book = settled
             }
         }.onSuccess {
             success?.invoke()
@@ -542,6 +547,9 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             book.durChapterPos = 0
             book.durChapterTitle = chapter.title
             if (!inBookshelf) {
+                // 「试读不入架」：刻意打上 notShelf 标记后按 bookUrl 落库。
+                // 这类记录不参与身份收敛（BookMergeRules 明确排除 notShelf），
+                // 因此这里不走统一入口 —— 否则试读会被并进书架里的正式记录。
                 book.addType(BookType.notShelf)
                 if (book.order == 0) {
                     book.order = appDb.bookDao.minOrder - 1
@@ -561,27 +569,21 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
 
     fun addToBookshelf(success: (() -> Unit)?) { //点击书架按钮或在加分组时触发
         execute {
-            bookData.value?.let { book ->
-                book.removeType(BookType.notShelf)
+            bookData.value?.let { current ->
+                val book = current.copy().apply { removeType(BookType.notShelf) }
                 if (book.order == 0) {
                     book.order = appDb.bookDao.minOrder - 1
                 }
-                appDb.bookDao.getBook(
-                    book.name,
-                    book.author,
-                    BookMediaType.fromBookType(book.type)
-                )?.let {
-                    book.durChapterIndex = it.durChapterIndex
-                    book.durVolumeIndex = it.durVolumeIndex
-                    book.chapterInVolumeIndex = it.chapterInVolumeIndex
-                    book.durChapterPos = it.durChapterPos
-                    book.durChapterTitle = it.durChapterTitle
+                // 统一入库：库里已有同书时合并进既有记录（保留其 bookUrl 与阅读进度），
+                // 不再按 bookUrl 无脑插新 —— 否则同书不同源会在书架上出现第二条。
+                val settled = BookUpsert.upsertByIdentity(book)
+                if (ReadBook.book?.isSameNameAuthor(settled) == true) {
+                    ReadBook.book = settled
                 }
-                if (ReadBook.book?.isSameNameAuthor(book) == true) {
-                    ReadBook.book = book
+                if (settled.bookUrl != current.bookUrl) {
+                    bookData.postValue(settled)
                 }
-                book.save()
-                SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, bookSource, book)
+                SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, bookSource, settled)
             }
             chapterListData.value?.let {
                 appDb.bookChapterDao.insert(*it.toTypedArray())

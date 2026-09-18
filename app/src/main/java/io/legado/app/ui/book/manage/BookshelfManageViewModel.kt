@@ -11,6 +11,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.ai.AiChapterPurifyService
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.BookMergeRules
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.BookShortcutHelp
@@ -85,8 +87,12 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
         batchChangeSourceCoroutine?.cancel()
         batchChangeSourceCoroutine = execute {
             val changeSourceDelay = AppConfig.batchChangeSourceDelay * 1000L
+            // ⚠️ 必须按身份去重：选中项里可能同时存在互为重复的两本（同书不同源）。
+            // 否则第二本会再次以第一本的合并结果为 keep 合并一次，用 src 的进度把
+            // 刚写好的进度静默覆盖，并且白做一轮删/写章节。
             val bodyBooks = books.map { appDb.bookDao.getBook(it.bookUrl) ?: it }
                 .distinctBy { it.bookUrl }
+                .distinctBy { BookMergeRules.identityKeyOf(it) ?: it.bookUrl }
             bodyBooks.forEachIndexed { index, book ->
                 batchChangeSourceProcessLiveData.postValue("${index + 1} / ${bodyBooks.size}")
                 if (book.isLocal) return@forEachIndexed
@@ -108,9 +114,10 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                         AppLog.put("获取目录出错\n${it.localizedMessage}", it, true)
                     }.getOrNull()?.let { toc ->
                         book.migrateTo(newBook, toc)
-                        book.removeType(BookType.updateError)
-                        appDb.bookDao.insert(newBook)
-                        appDb.bookChapterDao.insert(*toc.toTypedArray())
+                        newBook.removeType(BookType.updateError)
+                        // 统一入库：命同书时合并进既有记录，不再无脑插新（旧版本刻意保留旧书
+                        // 导致批量换源必然产生重复）。
+                        BookUpsert.upsertByIdentity(newBook, toc, migrateFrom = book)
                     }
                 delay(changeSourceDelay)
             }
