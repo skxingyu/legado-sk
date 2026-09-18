@@ -319,7 +319,31 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10051（`3.26.091900c`）已发布 Pre-release `v3.26.091900-10051`（2026-09-18）——当前交付（朗读音量增强 + 音质说明；修 10050 引入的「打开朗读面板必崩」）**：
+- ✅ **10054（`3.26.091955c`）待发布 —— 当前交付（书架同书去重 + 内置三套预设主题/排版）**：
+  - **性质**：功能版（两项独立功能）。改动链：`9655ee5e`（统一入库入口，按书名+作者+媒体类型收敛）→ `0aa0e21e`（换源与入库路径收口到统一入口）→ `5008b91a`（书架手动「合并重复书籍」入口）→ `c219e259`（内置墨墟/琴女主题与娑娜排版三套预设）→ `88666e18`（修正娑娜排版页眉内边距与提示位）。
+  - ⚠️ **10052 / 10053 无独立交付**：10052 是去重开发的中间版（无 Release 记录），10053 是预设的首个构建（被 10054 取代）。查去重改动从 `9655ee5e` 起看。
+  - **功能一：书架同书去重**。背景：同一本书（书名、作者一致）换个书源加入会被当成两本不同书并存。
+    - **同一性判据 = `name` + `author` + `mediaType`**（书名 + 作者 + 媒体类型）。手动「合并重复书籍」的作用域与此完全一致。
+    - ⚠️ **`bookUrl` 仍是主键，且同时充当缓存目录地址**（`getFolderNameNoCache()` = `name.take(9) + md5(bookUrl)`）——**合并是复用旧记录**（保留 keeper 的 `bookUrl`），只更新书源与章节，**不新建书**，因此进度/书签/阅读记录都留在原记录上。
+    - ⚠️ **keeper 选择用 `readRecentBooks.lastRead`，不能用 `durChapterTime`**——后者被 `BookInfoViewModel.topBook()` 与一个 `System.currentTimeMillis()` 字段默认值污染。keeper = **最近打开阅读的那一条**。
+    - **本地书籍不参与**合并（按文件走，不与网络书互认）；**作者为空的书照常合并**。
+    - ⚠️ **`group` 是位掩码，合并时必须取并集**（`keep.group or src.group`），不能直接覆盖。
+    - 新文件：`help/book/BookMergeRules.kt`、`help/book/BookUpsert.kt`、`help/book/ChapterLocator.kt`。⚠️ **`ChapterLocator.kt` 是为可测性做的纯 JVM 抽取**——`BookMergeRules` 若直接调 `BookHelp.getDurChapter` 会在 JVM 单测里 `NoClassDefFoundError: Could not initialize class BookHelp`（其初始化需要 `appCtx`）。`ChapterLocator.regexC` 是**逐字复制的原实现**，不是简化版，勿"顺手优化"。
+    - ⚠️ **DAO 只加了 `@Query`，`AppDatabase.version = 117` 未变，无需迁移**（刻意为之）。
+  - **功能二：内置三套预设**。`MD3·墨墟`（日/夜）、`MD3·琴女`（日/夜）为**主题**预设；`娑娜`为**阅读排版**预设。
+    - ⚠️⚠️ **阅读排版预设只能追加在数组末尾**：`ReadConfig` 内置样式按**数组下标**寻址（`ReadBookConfig.getConfig(index)` → `DefaultData.readConfigs[normalizedIndex]`），**插入到中间会让所有存量用户当前排版发生位移**。回归锁 `BuiltinPresetAssetTest.readPresetIsAppendedAtEnd`（验证过：把 `娑娜` 移到 index 0 即失败）。
+    - ⚠️ **主题预设背景图不能直接写 assets 路径**：`backgroundImgPath` 必须是**可读的绝对路径**（`isReadableThemeFile` 要求 `File.isFile`）。为此在 `ThemeConfig.kt` 引入 `@asset:` 前缀约定 + `Config.resolvePresetBackgrounds()`，在 `configList` 里解析前缀并把 asset 复制到 `filesDir/defaultData/` 后回写绝对路径。未加前缀的值原样透传。
+    - **预设匹配键 = `themeName` + `isNightTheme`**（`addConfig`/`addConfigs` 一致）；MD3 包会按同一 `themeName` 拆成日/夜两条。
+    - **素材取自真机导入产物**（非手算），保证预设与手动导入结果一致。例：墨墟日间 `accentColor #E6FFFF`、夜间 `#000000`（源里带 alpha 0，`md3ColorToHex` 会丢 alpha）；`backgroundImgBlur` 被 `coerceIn(0,25)` 从 97 钳到 25。
+    - 命名：MD3 manifest 无 `name`，会退化成通用名 `MD3主题`，故重命名为 `MD3·墨墟`。
+    - ⚠️ **预设可见性依赖仓库原有机制**：`ThemeConfig.configList = getConfigs() ?: DefaultData.themeConfigs` —— **用户一旦有 `filesDir/themeConfig.json` 就完全遮蔽预设**。该文件只由 `ThemeConfig.save()`（`delConfig` 删除 / `upConfig` 恢复）写入，**导入主题不会触发保存**。故"导入过主题但没删过"的设备仍能看到预设；**自定义过主题/排版则看不到**。这是 10051 之前就有的行为（旧的 `黑猫慢生活`/`黯夜` 同样规则），本次**未改动**。
+    - **不覆盖**：导航图标与封面相册按设计忽略；预设**不改变当前已应用的主题/排版**，只追加到列表末尾。
+  - **验证**：`BuiltinPresetAssetTest` 6/6 通过（`--rerun-tasks` 实跑）。⚠️ **资产类测试必须 `--rerun-tasks`**——曾出现 Gradle 报 BUILD SUCCESSFUL 却未真正执行（注入的错误仍在）的**假绿**。回归锁已双向证伪：改坏主题预设图片名 → `themePresetAssetRefsExist` 失败（第 47 行）；移动 `娑娜` 到 index 0 → `readPresetIsAppendedAtEnd` 失败（第 69 行）。全量单测 **181 项 / 10 失败**（10 项＝既有已知失败：`CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）。
+  - **实机回归（作者手动完成）**：换源不重复建书、书架「合并重复书籍」正常；三套预设显示效果确认；**娑娜排版修正后的效果已实测通过**。10054 已覆盖安装到手机与平板（TB-9707F），版本号校验一致。
+  - ⚠️ **10054 APK 的资产与当前 HEAD 已逐字节核对（零差异）**：`readConfig.json`（11176 字节）与 `themeConfig.json`（2722 字节）在 APK 内与源码完全一致，**娑娜修正值 `headerPaddingBottom=10 / headerPaddingTop=10 / tipHeaderLeft=1 / tipHeaderMiddle=0` 已在包内**。**不要再重新编译 10055**——10054 就是最终版。
+  - **产物** `release/legado_sk_3.26.091955c_10054_arm64-v8a.apk`（36,196,537 字节，sha256 `50c8b571189add35556ef4d61bfe1d8b1bedf044b1515bda1a5312454448b827`），aapt（io.legado.app.c / 10054 / 3.26.091955c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner(exit 0) 通过。发布说明 `companion/发布说明-10054.md`。**下一次交付 versionCode 从 `10055` 递增**。
+
+- ✅ **10051（`3.26.091900c`）已发布 Pre-release `v3.26.091900-10051`（2026-09-18）——朗读音量增强 + 音质说明；修 10050 引入的「打开朗读面板必崩」**：
   - **性质**：功能版（音量增强）+ 自引入缺陷的修复版。改动链：`5ac5a818`（音量增强）→ `19e7bc25`（评论缓存默认关闭）→ `becd5955`（增益两处加固）→ `76c37b01`（音质说明）→ `cc7a7261`（修崩溃）。发布时已 rebase 到远端 main（含远端 README 提交 `df907548`），提交哈希见 `44cab79c` 等（rebase 后重写），**源码与已交付 APK 同源已核对（零差异）**。
   - **功能：朗读音量增强（播放端数字增益）**。背景：部分在线 TTS 音源默认合成音量偏小，手机音量调到头仍不够。
     - ⚠️ **实现选型的根本约束**：`ExoPlayer.setVolume()` 内部被 media3 的 `Util.constrainValue(volume, 0f, 1f)` 钳在 [0,1]（字节码确认），**无法放大**；且 `ExoPlayer.Builder` **没有 `setAudioSink`**。只能在**解码后的 PCM** 上做乘法——自定义 `AudioProcessor`，经 `DefaultRenderersFactory.buildAudioSink` 覆写注入。新增 `help/exoplayer/VolumeGainAudioProcessor.kt` + `VolumeGainRenderersFactory.kt`；接线 3 处（`ExoPlayerHelper.createHttpExoPlayer`、`HttpReadAloudService`、`TTSReadAloudService`）。
