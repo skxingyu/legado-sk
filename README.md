@@ -1,7 +1,16 @@
 <div align="center">
 
 > ⚠️ **本应用主要针对阅读、听书体验做优化更改，按个人喜好开发，不喜勿来。**
-
+> qd说书先生音源（复制以下json->添加->粘贴源）
+[
+  {
+    "name": "起点 Minimax · 说书先生",
+    "url": "http://103.236.85.8:8000/legado/minimax,{\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\"},\"body\":{\"text\":\"{{speakText}}\",\"voice\":6001}}",
+    "contentType": "audio/mpeg",
+    "concurrentRate": "0",
+    "enabledCookieJar": false
+  }
+]
 </div>
 
 <table align="center">
