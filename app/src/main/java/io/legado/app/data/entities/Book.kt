@@ -410,6 +410,17 @@ data class Book(
         return folderName!!
     }
 
+    /**
+     * 丢弃记忆化的目录名缓存。
+     *
+     * [getFolderName] 会把结果缓存进 `@Ignore` 字段，而缓存值由 **书名 + bookUrl** 共同决定。
+     * 任何改变这两者的操作（尤其是换源合并改 `name`）都必须调用本方法，
+     * 否则后续 `getFolderName()` 会返回按旧书名算出的目录名，与落盘目录脱节。
+     */
+    fun invalidateFolderName() {
+        folderName = null
+    }
+
     fun toSearchBook() = SearchBook(
         name = name,
         author = author,

@@ -28,6 +28,12 @@ interface BookShortcutDao {
     @Query("SELECT * FROM book_shortcuts WHERE shortcutId = :shortcutId")
     fun get(shortcutId: Long): BookShortcut?
 
+    @Query("SELECT * FROM book_shortcuts WHERE bookUrl = :bookUrl")
+    fun getByBookUrl(bookUrl: String): List<BookShortcut>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM book_shortcuts WHERE bookUrl = :bookUrl)")
+    fun hasByBookUrl(bookUrl: String): Boolean
+
     @Query(
         "SELECT COALESCE(MAX(`order`), 0) FROM book_shortcuts " +
             "WHERE `group` = :groupId AND collectionId IS NULL"

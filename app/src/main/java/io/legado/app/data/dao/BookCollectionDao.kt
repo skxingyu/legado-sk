@@ -89,6 +89,9 @@ interface BookCollectionDao {
     @Query("DELETE FROM book_collection_items WHERE bookUrl IN (:bookUrls)")
     fun deleteItemsByBookUrls(bookUrls: List<String>)
 
+    @Query("SELECT * FROM book_collection_items WHERE bookUrl = :bookUrl")
+    fun getItemsByBookUrl(bookUrl: String): List<BookCollectionItem>
+
     @Query("DELETE FROM book_collection_children WHERE childCollectionId IN (:childCollectionIds)")
     fun deleteParentsByChildCollectionIds(childCollectionIds: List<Long>)
 

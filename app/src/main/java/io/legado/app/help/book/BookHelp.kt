@@ -43,7 +43,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import org.apache.commons.text.similarity.JaccardSimilarity
 import splitties.init.appCtx
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -53,9 +52,6 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 import java.util.zip.ZipFile
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 @Suppress("unused", "ConstPropertyName")
 object BookHelp {
@@ -595,104 +591,27 @@ object BookHelp {
             .trim { it <= ' ' }
     }
 
-    private val jaccardSimilarity by lazy {
-        JaccardSimilarity()
-    }
-
     /**
-     * 根据目录名获取当前章节
+     * 根据目录名获取当前章节。
+     * 实现已抽到纯 JVM 的 [ChapterLocator]（便于单测），此处保留同签名转发。
      */
     fun getDurChapter(
         oldDurChapterIndex: Int,
         oldDurChapterName: String?,
         newChapterList: List<BookChapter>,
         oldChapterListSize: Int = 0
-    ): Int {
-        if (oldDurChapterIndex <= 0) return 0
-        if (newChapterList.isEmpty()) return oldDurChapterIndex
-        val oldChapterNum = getChapterNum(oldDurChapterName)
-        val oldName = getPureChapterName(oldDurChapterName)
-        val newChapterSize = newChapterList.size
-        val durIndex =
-            if (oldChapterListSize == 0) oldDurChapterIndex
-            else oldDurChapterIndex * oldChapterListSize / newChapterSize
-        val min = max(0, min(oldDurChapterIndex, durIndex) - 10)
-        val max = min(newChapterSize - 1, max(oldDurChapterIndex, durIndex) + 10)
-        var nameSim = 0.0
-        var newIndex = 0
-        var newNum = 0
-        if (oldName.isNotEmpty()) {
-            for (i in min..max) {
-                val newName = getPureChapterName(newChapterList[i].title)
-                val temp = jaccardSimilarity.apply(oldName, newName)
-                if (temp > nameSim) {
-                    nameSim = temp
-                    newIndex = i
-                }
-            }
-        }
-        if (nameSim < 0.96 && oldChapterNum > 0) {
-            for (i in min..max) {
-                val temp = getChapterNum(newChapterList[i].title)
-                if (temp == oldChapterNum) {
-                    newNum = temp
-                    newIndex = i
-                    break
-                } else if (abs(temp - oldChapterNum) < abs(newNum - oldChapterNum)) {
-                    newNum = temp
-                    newIndex = i
-                }
-            }
-        }
-        return if (nameSim > 0.96 || abs(newNum - oldChapterNum) < 1) {
-            newIndex
-        } else {
-            min(max(0, newChapterList.size - 1), oldDurChapterIndex)
-        }
-    }
+    ): Int = ChapterLocator.findChapterIndex(
+        oldDurChapterIndex, oldDurChapterName, newChapterList, oldChapterListSize
+    )
 
     fun getDurChapter(
         oldBook: Book,
         newChapterList: List<BookChapter>
-    ): Int {
-        return oldBook.run {
-            getDurChapter(durChapterIndex, durChapterTitle, newChapterList, totalChapterNum)
-        }
-    }
-
-    private val regexA by lazy {
-        return@lazy "\\s".toRegex()
-    }
+    ): Int = ChapterLocator.findChapterIndex(oldBook, newChapterList)
 
     /**
-     * 解析章节名中的章节号（中文/阿拉伯数字，支持“第N章/回/集……”“N、标题”等形态）；
-     * 解析失败返回 -1。统一委托 [ChapterTitle]，与音频文本融合等场景共用同一解析口径。
+     * 解析章节名中的章节号；解析失败返回 -1。转发到 [ChapterLocator]。
      */
-    fun getChapterNum(chapterName: String?): Int = ChapterTitle.num(chapterName)
-
-    private val regexOther by lazy {
-        // 所有非字母数字中日韩文字 CJK区+扩展A-F区
-        @Suppress("RegExpDuplicateCharacterInClass")
-        return@lazy "[^\\w\\u4E00-\\u9FEF〇\\u3400-\\u4DBF\\u20000-\\u2A6DF\\u2A700-\\u2EBEF]".toRegex()
-    }
-
-    @Suppress("RegExpUnnecessaryNonCapturingGroup", "RegExpSimplifiable")
-    private val regexB by lazy {
-        //章节序号，排除处于结尾的状况，避免将章节名替换为空字串
-        return@lazy "^.*?第(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)[章节篇回集话](?!$)|^(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[,:、])*(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)(?:[,:、](?!$)|\\.(?=[^\\d]))".toRegex()
-    }
-
-    private val regexC by lazy {
-        //前后附加内容，整个章节名都在括号中时只剔除首尾括号，避免将章节名替换为空字串
-        return@lazy "(?!^)(?:[〖【《〔\\[{(][^〖【《〔\\[{()〕》】〗\\]}]+)?[)〕》】〗\\]}]$|^[〖【《〔\\[{(](?:[^〖【《〔\\[{()〕》】〗\\]}]+[〕》】〗\\]})])?(?!$)".toRegex()
-    }
-
-    private fun getPureChapterName(chapterName: String?): String {
-        return if (chapterName == null) "" else StringUtils.fullToHalf(chapterName)
-            .replace(regexA, "")
-            .replace(regexB, "")
-            .replace(regexC, "")
-            .replace(regexOther, "")
-    }
+    fun getChapterNum(chapterName: String?): Int = ChapterLocator.chapterNum(chapterName)
 
 }
