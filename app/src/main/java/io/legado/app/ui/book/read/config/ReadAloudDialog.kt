@@ -529,12 +529,13 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
     private fun upVolumeGainText(value: Int) {
         val percent = value * GAIN_STEP
         binding.tvTtsVolumeGainValue.text = VolumeGain.labelFor(percent)
-        val hintRes = when (VolumeGain.qualityCostFor(percent)) {
-            VolumeGain.QualityCost.NONE -> 0
-            VolumeGain.QualityCost.MILD -> R.string.read_aloud_volume_gain_mild
-            VolumeGain.QualityCost.DISTORTION -> R.string.read_aloud_volume_gain_strong
+        // ⚠️ 无提示档必须赋 CharSequence 空串：TextView.setText(Int) 走的是**字符串资源 id**，
+        // 传 0 会抛 Resources$NotFoundException: String resource ID #0x0（已实机崩溃过一次）。
+        binding.tvVolumeGainHint.text = when (VolumeGain.qualityCostFor(percent)) {
+            VolumeGain.QualityCost.NONE -> ""
+            VolumeGain.QualityCost.MILD -> getString(R.string.read_aloud_volume_gain_mild)
+            VolumeGain.QualityCost.DISTORTION -> getString(R.string.read_aloud_volume_gain_strong)
         }
-        binding.tvVolumeGainHint.setText(hintRes)
     }
 
     private fun saveVolumeGain(value: Int) {
