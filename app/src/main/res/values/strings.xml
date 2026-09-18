@@ -687,7 +687,10 @@
     <string name="default_expand_first">Default expand the first Discovery.</string>
     <string name="threads_num">Current threads %s</string>
     <string name="read_aloud_speed">Speech rate</string>
-    <string name="read_aloud_volume_gain">Volume boost</string>
+    <string name="read_aloud_volume_gain">Volume boost (affects sound quality)</string>
+    <string name="read_aloud_volume_gain_hint">Volume boost works by amplifying the decoded audio. It raises loudness but affects sound quality, and may distort at high levels.</string>
+    <string name="read_aloud_volume_gain_mild">Louder, with some loss of sound quality</string>
+    <string name="read_aloud_volume_gain_strong">Too high, may distort</string>
     <string name="auto_next_page">Auto scroll</string>
     <string name="auto_next_page_stop">Stop Auto scroll</string>
     <string name="auto_next_page_speed">Auto scroll speed</string>

@@ -20,6 +20,7 @@ import io.legado.app.help.exoplayer.VolumeGain
 import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.TtsCacheParams
 import io.legado.app.help.tts.TtsEngineStore
+import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.bottomBackground
@@ -176,6 +177,8 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
             tvTtsVolumeGainValue.setTextColor(textColor)
             ivVolumeGainReduce.setColorFilter(textColor)
             ivVolumeGainAdd.setColorFilter(textColor)
+            ivVolumeGainHelp.setColorFilter(palette.secondaryTextColor)
+            tvVolumeGainHint.setTextColor(palette.secondaryTextColor)
             ivCatalog.setColorFilter(textColor)
             tvCatalog.setTextColor(textColor)
             tvCatalogValue.setTextColor(textColor)
@@ -302,6 +305,12 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
         ivVolumeGainAdd.setOnClickListener {
             seekVolumeGain.progress += 1
             saveVolumeGain(seekVolumeGain.progress)
+        }
+        ivVolumeGainHelp.setOnClickListener {
+            context?.alert(
+                R.string.read_aloud_volume_gain,
+                R.string.read_aloud_volume_gain_hint
+            )
         }
         seekVolumeGain.setOnSeekBarChangeListener(object : SeekBarChangeListener {
 
@@ -518,7 +527,14 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
 
     @SuppressLint("SetTextI18n")
     private fun upVolumeGainText(value: Int) {
-        binding.tvTtsVolumeGainValue.text = VolumeGain.labelFor(value * GAIN_STEP)
+        val percent = value * GAIN_STEP
+        binding.tvTtsVolumeGainValue.text = VolumeGain.labelFor(percent)
+        val hintRes = when (VolumeGain.qualityCostFor(percent)) {
+            VolumeGain.QualityCost.NONE -> 0
+            VolumeGain.QualityCost.MILD -> R.string.read_aloud_volume_gain_mild
+            VolumeGain.QualityCost.DISTORTION -> R.string.read_aloud_volume_gain_strong
+        }
+        binding.tvVolumeGainHint.setText(hintRes)
     }
 
     private fun saveVolumeGain(value: Int) {

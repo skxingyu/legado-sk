@@ -50,6 +50,23 @@ class VolumeGainTest {
         VolumeGain.refresh(0)
     }
 
+    @Test
+    fun qualityCost_appearsOnlyWhenThereIsACost() {
+        // 不增强不提示音质代价，避免默认位给用户"已经在牺牲音质"的错觉
+        assertEquals(VolumeGain.QualityCost.NONE, VolumeGain.qualityCostFor(0))
+        // 削波区（>2x）与普通增强区必须分属不同等级，用户要能区分"变大"和"失真"
+        assertEquals(VolumeGain.QualityCost.MILD, VolumeGain.qualityCostFor(100))
+        assertEquals(VolumeGain.QualityCost.DISTORTION, VolumeGain.qualityCostFor(300))
+        // 边界：恰好 2x 仍属普通增强，超过才升级为失真
+        assertEquals(VolumeGain.QualityCost.MILD, VolumeGain.qualityCostFor(100))
+        assertEquals(VolumeGain.QualityCost.DISTORTION, VolumeGain.qualityCostFor(101))
+        // 越界值走同一收敛逻辑，不得出现第 4 种等级
+        assertEquals(
+            VolumeGain.QualityCost.DISTORTION,
+            VolumeGain.qualityCostFor(Int.MAX_VALUE)
+        )
+    }
+
     private companion object {
         /** 与 AppConfig.defaultVolumeGain 保持一致；单测无法读 SharedPreferences。 */
         const val AppConfigDefaultVolume = 0

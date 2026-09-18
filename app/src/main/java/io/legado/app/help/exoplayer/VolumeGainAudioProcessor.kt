@@ -112,6 +112,28 @@ object VolumeGain {
         return if (factor == 1f) "不增强" else "%.1fX".format(factor)
     }
 
+    /** 超过该倍数后大声处开始削波，听感上就是失真。 */
+    const val DISTORTION_FACTOR = 2f
+
+    /**
+     * 当前档位的音质代价等级。
+     *
+     * 数字增益的代价是物理性的：把解码后的 PCM 乘大，超过采样上限的样本只能夹到边界，
+     * 表现为大声处失真（破音），音源本身越接近满刻度越明显。这不是缺陷，
+     * 因此不隐藏代价，而是按档位如实说明——具体文案由 UI 层决定。
+     */
+    enum class QualityCost { NONE, MILD, DISTORTION }
+
+    /** 由增益值判定音质代价等级；[QualityCost.NONE] 表示该档位无需提示。 */
+    fun qualityCostFor(percent: Int): QualityCost {
+        val factor = factorFor(percent)
+        return when {
+            factor == 1f -> QualityCost.NONE
+            factor > DISTORTION_FACTOR -> QualityCost.DISTORTION
+            else -> QualityCost.MILD
+        }
+    }
+
     /**
      * 播放线程使用的缓存增益系数。
      *

@@ -315,12 +315,35 @@
                 android:text="@string/read_aloud_volume_gain"
                 android:textSize="14sp" />
 
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_volume_gain_help"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/read_aloud_volume_gain_hint"
+                android:padding="15dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_help"
+                android:tint="@color/primaryText"
+                android:tooltipText="@string/read_aloud_volume_gain_hint"
+                tools:ignore="UnusedAttribute" />
+
             <TextView
                 android:id="@+id/tv_tts_volume_gain_value"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingHorizontal="3dp"
                 android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tv_volume_gain_hint"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="end"
+                android:maxLines="1"
+                android:textSize="12sp" />
 
         </LinearLayout>
 
