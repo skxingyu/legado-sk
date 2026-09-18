@@ -638,6 +638,13 @@
     <string name="copy_complete">已拷贝</string>
     <string name="copy_too_large">内容过大，剪贴板仅复制前 %1$d KB；完整内容请使用导出。</string>
     <string name="bookshelf_management">书架管理</string>
+    <string name="merge_duplicates">合并重复书籍</string>
+    <string name="merge_duplicates_confirm_title">合并重复书籍</string>
+    <string name="merge_duplicates_confirm_message">发现 %1$d 组重复书籍，共 %2$d 本。书名、作者与媒体类型都相同的书会被视为同一本。每组只保留最近阅读的那本，其余并入：保留项的书名不变，书源与目录取较新的那份，各书的书架分组会合并。确定继续吗？</string>
+    <string name="merge_duplicates_none">没有发现重复的书籍</string>
+    <string name="merge_duplicates_running">正在合并重复书籍…</string>
+    <string name="merge_duplicates_done">合并完成：%1$d 组，%2$d 本</string>
+    <string name="merge_duplicates_failed">合并失败：%1$s</string>
     <string name="clear_bookshelf_s">这将会删除所有书籍，请谨慎操作</string>
     <string name="search_book_source">搜索书源</string>
     <string name="search_rss_source">搜索订阅源</string>

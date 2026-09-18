@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 去重：两条来源汇入同一条，另有一条被移除（右侧空槽） -->
+    <path
+        android:fillColor="#595757"
+        android:pathData="M7,3 C4.79,3 3,4.79 3,7 C3,9.21 4.79,11 7,11 C8.74,11 10.21,9.9 10.76,8.37 L13.5,8.37 L13.5,6.37 L10.76,6.37 C10.21,4.84 8.74,3 7,3 Z M7,5 C8.1,5 9,5.9 9,7 C9,8.1 8.1,9 7,9 C5.9,9 5,8.1 5,7 C5,5.9 5.9,5 7,5 Z" />
+    <path
+        android:fillColor="#595757"
+        android:pathData="M7,13 C4.79,13 3,14.79 3,17 C3,19.21 4.79,21 7,21 C8.74,21 10.21,19.9 10.76,18.37 L13.5,18.37 L13.5,16.37 L10.76,16.37 C10.21,14.84 8.74,13 7,13 Z M7,15 C8.1,15 9,15.9 9,17 C9,18.1 8.1,19 7,19 C5.9,19 5,18.1 5,17 C5,15.9 5.9,15 7,15 Z" />
+    <path
+        android:fillColor="#595757"
+        android:pathData="M15,10 L22,10 L22,12 L15,12 Z" />
+    <path
+        android:fillColor="#595757"
+        android:pathData="M15.6,11 L13.5,11 L13.5,13 L15.6,13 C17.8,13 17.8,11 15.6,11 Z" />
+
+</vector>

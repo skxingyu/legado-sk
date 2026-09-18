@@ -10,6 +10,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.LiveData
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -90,6 +91,19 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
     }
 
+    /**
+     * 合并重复书籍的进度框。
+     * ⚠️ 刻意独立于 [waitDialog]：后者被「通过 URL 添加书籍」占用，
+     * 共用一个实例会让两条流程互相覆盖文案、互相提前 dismiss。
+     */
+    private val mergeWaitDialog by lazy {
+        WaitDialog(requireContext()).apply {
+            setOnCancelListener {
+                viewModel.mergeDuplicatesJob?.cancel()
+            }
+        }
+    }
+
     abstract fun gotoTop()
 
     open fun back(): Boolean = false
@@ -138,6 +152,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 putExtra("groupId", groupId)
             }
 
+            R.id.menu_merge_duplicates -> mergeDuplicates()
             R.id.menu_download -> startActivity<CacheActivity> {
                 putExtra("groupId", groupId)
             }
@@ -179,6 +194,20 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 waitDialog.setText("添加中... ($count)")
             }
         }
+        // 合并重复书籍：显隐只由 this（State）控制，收尾只信 onFinally ——
+        // Coroutine 的注释明确「如果协程太快完成，回调会不执行」，
+        // 因此不能用 onStart/onSuccess 做唯一的 show/dismiss 依据。
+        viewModel.mergeDuplicatesState.observe(this) { running ->
+            if (running) {
+                mergeWaitDialog.setText(R.string.merge_duplicates_running)
+                mergeWaitDialog.show()
+            } else {
+                mergeWaitDialog.dismiss()
+            }
+        }
+        viewModel.mergeDuplicatesProgress.observe(this) { text ->
+            mergeWaitDialog.setText(text)
+        }
     }
 
     @SuppressLint("InflateParams")
@@ -196,6 +225,53 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 }
             }
             cancelButton()
+        }
+    }
+
+    /**
+     * 「合并重复书籍」：把同书不同源的重复记录收敛成一条。
+     *
+     * 交互顺序刻意是「先扫描 → 再确认 → 后执行」：
+     * 没有重复时直接提示返回，不弹确认框、不显示进度框。
+     * 进度框用独立实例（[mergeWaitDialog]），不复用 [waitDialog] —— 后者已被
+     * 「通过 URL 添加书籍」占用，复用会让两个流程互相覆盖文案与提前关闭。
+     */
+    private fun mergeDuplicates() {
+        viewModel.mergeDuplicatesJob?.cancel()
+        val job = viewModel.execute {
+            viewModel.findDuplicateGroups()
+        }
+        job.onSuccess { groups ->
+            if (groups.isEmpty()) {
+                toastOnUi(R.string.merge_duplicates_none)
+                return@onSuccess
+            }
+            val groupCount = groups.size
+            val bookCount = groups.sumOf { group -> group.size }
+            alert(
+                title = getString(R.string.merge_duplicates_confirm_title),
+                message = getString(
+                    R.string.merge_duplicates_confirm_message,
+                    groupCount,
+                    bookCount
+                )
+            ) {
+                okButton {
+                    viewModel.mergeDuplicates(groups) { mergedGroups, mergedBooks ->
+                        toastOnUi(
+                            getString(
+                                R.string.merge_duplicates_done,
+                                mergedGroups,
+                                mergedBooks
+                            )
+                        )
+                    }
+                }
+                noButton()
+            }
+        }.onError {
+            AppLog.put("扫描重复书籍出错\n${it.localizedMessage}", it)
+            toastOnUi(it.localizedMessage ?: "ERROR")
         }
     }
 

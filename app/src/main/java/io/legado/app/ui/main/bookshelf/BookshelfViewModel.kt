@@ -11,6 +11,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.book.BookMergeRules
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.decompressed
@@ -27,8 +29,10 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
@@ -203,5 +207,80 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
             context.toastOnUi(R.string.success)
         }
     }
+
+    // ---- 书架「去重」：把同书不同源的重复记录合并为一条 ------------------------
+
+    val mergeDuplicatesState = MutableLiveData<Boolean>()
+    val mergeDuplicatesProgress = MutableLiveData<String>()
+    var mergeDuplicatesJob: Coroutine<*>? = null
+
+    /**
+     * 扫描全库，找出可以合并的重复组。
+     *
+     * 判据与合并规则见 [BookMergeRules]（书名 + 作者 + 媒体类型；本地书/未入架书不参与）。
+     * 扫描是只读的，供交互第一步「先扫描再确认」使用 —— 没有重复时不弹确认框。
+     */
+    suspend fun findDuplicateGroups(): List<List<Book>> = withContext(Dispatchers.IO) {
+        BookMergeRules.duplicateGroups(appDb.bookDao.all)
+    }
+
+    /**
+     * 执行合并：每组保留一本，其余并入。
+     *
+     * 保留项按「最近打开阅读」判定（`readRecentBooks.lastRead`），
+     * 无阅读记录时回退 `durChapterTime` —— 见 [BookMergeRules.pickKeeper]。
+     */
+    fun mergeDuplicates(
+        groups: List<List<Book>>,
+        onDone: (mergedGroupCount: Int, mergedBookCount: Int) -> Unit
+    ) {
+        if (groups.isEmpty()) return
+        mergeDuplicatesJob?.cancel()
+        mergeDuplicatesJob = execute {
+            var mergedGroups = 0
+            var mergedBooks = 0
+            groups.forEachIndexed { index, group ->
+                mergeDuplicatesProgress.postValue("${index + 1} / ${groups.size}")
+                // 每轮重查：本组可能已被前一组处理掉（组间不会重叠，但重查是幂等的保险）。
+                val alive = group.mapNotNull { appDb.bookDao.getBook(it.bookUrl) }
+                    .filter { BookMergeRules.identityKeyOf(it) != null }
+                if (alive.size < 2) return@forEachIndexed
+
+                // 保留项：最近阅读的那本（无阅读记录时回退 durChapterTime）。
+                val keeper = BookMergeRules.pickKeeper(alive, ::lastReadOf)
+                // 章节取「最全的那份」：重复记录往往一本有目录、另一本目录为空或不完整，
+                // 若一律用被并方的目录，会把保留项已有的完整目录覆盖成残缺的。
+                val bestToc = alive
+                    .map { appDb.bookChapterDao.getChapterList(it.bookUrl) }
+                    .maxByOrNull { it.size }
+                    .orEmpty()
+
+                // 被并方以「除保留项外的最新一本」为准：把它的书源身份写进保留项。
+                // 这样合并后保留项拿到的是新书源，而不是随便挑一本旧源的。
+                val donor = alive.filter { it.bookUrl != keeper.bookUrl }
+                    .maxByOrNull { it.durChapterTime } ?: return@forEachIndexed
+
+                BookUpsert.upsertByIdentity(
+                    incoming = donor,
+                    toc = bestToc,
+                    migrateFrom = keeper
+                )
+                mergedBooks += alive.size - 1
+                mergedGroups++
+            }
+            mergedGroups to mergedBooks
+        }.onSuccess { (groupCount, bookCount) ->
+            onDone(groupCount, bookCount)
+        }.onError {
+            AppLog.put("合并重复书籍出错\n${it.localizedMessage}", it)
+            context.toastOnUi(context.getString(R.string.merge_duplicates_failed, it.localizedMessage))
+        }.onFinally {
+            mergeDuplicatesState.postValue(false)
+        }
+        mergeDuplicatesState.postValue(true)
+    }
+
+    private fun lastReadOf(bookUrl: String): Long? =
+        appDb.readRecentBookDao.getByBookUrl(bookUrl)?.lastRead
 
 }

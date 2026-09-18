@@ -297,4 +297,39 @@ class BookMergeRulesTest {
         assertEquals(3, merged.durChapterIndex)
         assertEquals(9, merged.durChapterPos)
     }
+
+    // ---- 手动「去重」时选「书源提供方」与「目录」的口径 -------------------------
+
+    /**
+     * 去重时被并的重复项可能不止一条，必须挑一本作为「新书源身份」的来源。
+     * 口径与保留项**互不相关**：保留项看阅读记录，书源来源看 durChapterTime
+     * （最新刷新的那份目录），否则可能把保留项的书源换成一本过期记录。
+     */
+    @Test
+    fun `merge donor should be the newest duplicate not the keeper`() {
+        val keeper = book("keeper", durChapterTime = 1_000L)
+        val staleDup = book("dup-old", durChapterTime = 2_000L)
+        val freshDup = book("dup-new", durChapterTime = 9_000L)
+        // 书源来源：最近刷新的那份
+        assertEquals("dup-new", listOf(staleDup, freshDup).maxByOrNull { it.durChapterTime }?.bookUrl)
+        // 保留项：有阅读记录时只认阅读记录，与 durChapterTime 无关
+        val lastRead = mapOf("keeper" to 5_000L, "dup-old" to 10L, "dup-new" to 20L)
+        assertEquals(
+            "keeper",
+            BookMergeRules.pickKeeper(listOf(keeper, staleDup, freshDup)) { lastRead[it] }.bookUrl
+        )
+    }
+
+    /**
+     * 重复记录的目录常有一边是空的。取「最全的那份」，
+     * 否则会把保留项已有的完整目录覆盖成残缺目录。
+     */
+    @Test
+    fun `best toc is the longest one among duplicates`() {
+        val empty: List<BookChapter> = emptyList()
+        val partial = listOf(chapter(0), chapter(1))
+        val full = listOf(chapter(0), chapter(1), chapter(2), chapter(3))
+        val best = listOf(empty, partial, full).maxByOrNull { it.size }
+        assertEquals(4, best?.size)
+    }
 }
