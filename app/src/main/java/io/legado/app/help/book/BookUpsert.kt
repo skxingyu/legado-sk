@@ -141,7 +141,13 @@ object BookUpsert {
             book
         }
         appDb.runInTransaction {
-            appDb.bookDao.insert(target)
+            // 已存在同 bookUrl 时必须 update：bookDao.insert 是 OnConflictStrategy.REPLACE，
+            // 冲突时的隐式 DELETE 旧行会触发子表 CASCADE，级联清空章节/快捷入口/合集/配图。
+            if (appDb.bookDao.has(target.bookUrl)) {
+                appDb.bookDao.update(target)
+            } else {
+                appDb.bookDao.insert(target)
+            }
             if (toc.isNotEmpty()) {
                 appDb.bookChapterDao.delByBook(target.bookUrl)
                 appDb.bookChapterDao.insert(
