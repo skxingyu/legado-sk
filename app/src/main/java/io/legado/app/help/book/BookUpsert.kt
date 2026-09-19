@@ -71,9 +71,14 @@ object BookUpsert {
     /**
      * 把 [src] 合并进 [keep]，保留 `keep.bookUrl`。
      *
+     * 与 [upsertByIdentity] 的区别：keep 由调用方**显式指定**，不重查重选——
+     * `upsertByIdentity` 内部按「最近阅读」重查 keep，在多条记录无阅读记录
+     * （lastRead 全为空）时平局会受表内行序影响而换人，导致合并落空；
+     * 手动合并入口已由用户确认保留项，必须走本入口。
+     *
      * 执行顺序是**不可调换**的（每一步都有实证理由，见行内注释）。
      */
-    private fun merge(
+    internal fun merge(
         keep: Book,
         src: Book,
         toc: List<BookChapter>,

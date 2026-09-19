@@ -247,7 +247,10 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                 if (alive.size < 2) return@forEachIndexed
 
                 // 保留项：最近阅读的那本（无阅读记录时回退 durChapterTime）。
-                val keeper = BookMergeRules.pickKeeper(alive, ::lastReadOf)
+                // ⚠️ 后续每轮 merge 用的是上一轮的返回值：mergeInto 以内存对象为
+                // 基底做字段裁决，链式传递才能让 group 并集、进度与身份逐轮累积，
+                // 否则第二轮会拿原始 keeper 把第一轮的并集静默丢掉。
+                var keeper = BookMergeRules.pickKeeper(alive, ::lastReadOf)
                 // 章节取「最全的那份」：重复记录往往一本有目录、另一本目录为空或不完整，
                 // 若一律用被并方的目录，会把保留项已有的完整目录覆盖成残缺的。
                 val bestToc = alive
@@ -255,17 +258,21 @@ class BookshelfViewModel(application: Application) : BaseViewModel(application) 
                     .maxByOrNull { it.size }
                     .orEmpty()
 
-                // 被并方以「除保留项外的最新一本」为准：把它的书源身份写进保留项。
-                // 这样合并后保留项拿到的是新书源，而不是随便挑一本旧源的。
-                val donor = alive.filter { it.bookUrl != keeper.bookUrl }
-                    .maxByOrNull { it.durChapterTime } ?: return@forEachIndexed
-
-                BookUpsert.upsertByIdentity(
-                    incoming = donor,
-                    toc = bestToc,
-                    migrateFrom = keeper
-                )
-                mergedBooks += alive.size - 1
+                // 被并方全部并入：按 durChapterTime 升序逐本走显式 merge（keep 固定为
+                // keeper，不重查重选）——最新动的书源最后写入，保留项最终拿到的是
+                // 新书源；全部并完后实际并掉数量才与确认框口径一致。
+                val donors = alive
+                    .filter { it.bookUrl != keeper.bookUrl }
+                    .sortedBy { it.durChapterTime }
+                donors.forEach { donor ->
+                    keeper = BookUpsert.merge(
+                        keep = keeper,
+                        src = donor,
+                        toc = bestToc,
+                        migrateFrom = keeper
+                    )
+                }
+                mergedBooks += donors.size
                 mergedGroups++
             }
             mergedGroups to mergedBooks
