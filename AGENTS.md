@@ -319,7 +319,17 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10055（`3.26.091956c`）已发布 Pre-release `v3.26.091956-10055`（2026-09-19）——当前交付（修日夜间切换黑白混杂）**：
+- ✅ **10058（`3.26.091959c`）已发布 Pre-release `v3.26.091959-10058`（2026-09-19）——当前交付（全项目审查修复合集 + 阅读页设置白字真修）**：
+  - **性质**：审查修复版（无新功能、无 DB 迁移）。分支 `fix/review-r2`（自 10055 源码基线 `def356d3` 拉出、修复完成并验证后由作者指示合并发布）合入 main。改动链：`bac324fc`（P0）→ `cc220d4f`（P2-1 初版，已被取代）→ `dde3d687`/`a12895f4`/`c48d183f`/`f4444a2d`（P2-2~5）→ `cac80a7a`（P3）→ `6a119fc5`（白字返工）→ `ced0baad`（白字真因）。10056/10057 为分支中间构建，**无 Release**。逐项细节以 `companion/发布版更新记录.md` 10058 条目为准。
+  - **P0（数据安全）**：`BookUpsert.savePlain` 与 `BookInfoViewModel.loadChapter` 对已存在 `bookUrl` 的行做 REPLACE/裸 insert，在 `foreign_keys=ON` 下隐式 DELETE 触发 `chapters` 等关联表 **CASCADE 清空**（离线已缓存书不可读）。改 `has() ? update : insert` 分流。→ 红线已入 §0（发布版更新记录）与本文件 §4 功能红线同源理解；回归锁 `BookUpsertWritePathTest`。
+  - **P2/P3**：`ReadBookActivity` 声明 `uiMode` configChanges + `onConfigurationChanged` 补发 `UP_CONFIG [1,2,5]`（弹窗切日夜就地重绘）；合并重复书籍多 donor 一轮清干净+计数对齐；主页加架走 `upsertByIdentity`；换源 `SOURCE_CHANGED` 载荷=最终落库 bookUrl + migrateFrom 搬运收口；页脚朗读 `check` 崩溃改「日志+重展面板」；音源朗读语速 `coerceIn(0.5,3.0)`；朗读启动令牌复查；`shareConfig` 兜底 `getConfig(0)`；AI 头标记时机（**headers.isBlank() 分支刻意不置位**，防锁死 10039 播种）；预设 JSON 去 `transparentNavBar:false`；`applyConfig` 过滤 `@asset:` 残留；`VolumeGain.labelFor` 移 UI 层；删 `join_qq_channel`/`gzGzh` 死代码。
+  - **白字真修（用户报告；10056/10057 两版未解）**：阅读页「更多设置」亮色白底白字。**真因**：`isBottomBackground` 行文字亮度按原始 `ThemeStore.bottomBackground` 判定，当前主题存 `#B6B6B6`（亮度 **0.468**<0.5）→ 误判深色背景发白字，而行卡片实际绘制 `UiCorner.surfaceColor(themeSurfaceCardColor)` 为浅色。修复：`Preference.bindView`/`NameListPreference` 统一按 `PreferenceItemStyle.itemSurfaceColor`（与绘制同源）。⚠️ **取证经过**：真机 dumpsys + `app_themes.xml` 实值 + AppCompat `updateAppConfiguration` 字节码排除 uiMode 方向（首版 `6a119fc5` 为误诊，保留但其目标改为"弹窗重建"）。回归锁 `PreferenceRowTextColorSourceTest`（双向证伪）。⚠️ **同理改法（登记）**：DetailSeekBar/SelectActionBar/ToastUtils 等按 `bottomBackground` 判文字是**自洽的**（画的就是它自己），不要顺手改。
+  - **验证**：全量单测 **186 项 / 10 失败**（既有已知失败）；模拟器 10057→10058 覆盖安装，同一主题同一亮色模式实测「更多设置」文字全部清晰、暗色不受影响（截图 `test-records/theme-bug/verify-10058-*`）；真机复验由作者完成。
+  - **产物** `release/legado_sk_3.26.091959c_10058_arm64-v8a.apk`（36,196,703 字节，sha256 `b1d72611386e0f74a9ef68f6a641c9dccd3a46209163675c4161e6b7a3801cc2`），aapt（io.legado.app.c / 10058 / 3.26.091959c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner（exit 0，证书 SHA-256 `79fef578…`）通过。发布说明 `companion/发布说明-10058.md`。**已发布 Pre-release `v3.26.091959-10058`（作者指示发布；按 §5 默认 Pre）**，tag 指向发布时远端 main HEAD（docs 提交）。
+  - ⚠️ **同日作者要求删除 10055 的 Release 与 tag**（见下条）。
+  - **下一次交付 versionCode 从 `10059` 递增。**
+
+- ✅ **10055（`3.26.091956c`）曾发布 Pre-release `v3.26.091956-10055`（2026-09-19；**Release+tag 已按作者要求整套删除**，代码保留 main、修复内容并入 10058）——修日夜间切换黑白混杂**：
   - **性质**：修回归缺陷（**上游继承**，作者要求修复）。修复提交 `ed640fde`，仅改 `ThemeConfig.kt` 的 `syncSystemNightMode`（+15/−10）。
   - **症状**：「我的」页（及所有依赖 `values-night` 资源的界面）切换日/夜后黑白混杂且**永不恢复**——卡片背景与部分文字变对了、另一部分文字/搜索条停在旧配色，滚动会让更多卡片背景变对但文字依旧错乱。模拟器 10049（Android 14）实机复现并留存截图（`test-records/theme-bug/`）。
   - **根因（上游 `0f42491b`「统一系统启动画面并修复夜间首帧」引入，随 10036 新基底进入）**：API 31+ 把夜间模式改为 `UiModeManager.setApplicationNightMode`（**系统异步应用**），但 `applyDayNight` 的 `postEvent(RECREATE)` → `recreate()` 仍**同步立即执行**——重建抢在系统覆盖落地之前完成，新 Activity 按旧 uiMode 配置解析全部 `values-night` 资源（卡片 `background_card`、文字 `primaryText`/`tv_text_summary`、搜索条 `bg_searchview` 拿到日间值，而 ThemeStore 驱动的根背景已是夜间）。覆盖随后落地时，MainActivity 在 manifest 声明了 `uiMode` configChanges → 只走 `onConfigurationChanged`（`BaseActivity` 仅刷系统栏），**没有任何重载视图的机会** → 混色永久停留。上游 legadoC 同版本同样存在此缺陷。
@@ -327,7 +337,7 @@ uiautomator2 / ADB
   - ⚠️ **AUTO 语义**：`AppConfig.isNightTheme` 在 AUTO 下取 `Resources.getSystem().configuration`（**系统全局配置，不含应用级覆盖**）＝`setApplicationNightMode(AUTO)` 清除覆盖后的系统真实模式，故 `setDefaultNightMode` 的快照不会用错旧覆盖的残留值。`versionNameSortKey` 对 MMddHH 是**纯数值比较**（`UpdateManager.kt:162`），10054 的 `091955`（HH=55 非法小时）封住了当天合法小时值，本版取 `091956` 保持数值单调；versionCode 仍是主判定键。
   - **验证**：模拟器覆盖安装（10049→10055）后作者简单测试通过；平板 TB-9707F 覆盖安装（10054→10055）成功（`versionCode=10055` 校验一致），真机复验由作者完成。**已发布 Pre-release `v3.26.091956-10055`（作者要求发布；按 §5 默认 Pre）**：tag 指向 `dae461c4`（= 发布时远端 main HEAD），发布说明 `companion/发布说明-10055.md`，远端资产 sha256 `1427dec6…` 与本地 APK 逐字节一致，`isPrerelease=true` / `isDraft=false`。
   - **产物** `release/legado_sk_3.26.091956c_10055_arm64-v8a.apk`（36,196,582 字节，sha256 `1427dec6b12271d12f681f2e361bb7387c65212bd8c4eacb8695d149c3049121`），aapt（io.legado.app.c / 10055 / 3.26.091956c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner（exit 0，证书 SHA-256 `79fef578…`）通过。⚠️ 本版 Gradle 输出名**无 `_arm64-v8a` 后缀**（同 10045），收进 `release/` 时按约定补后缀。
-  - **下一次交付 versionCode 从 `10056` 递增。**
+  - ~~**下一次交付 versionCode 从 `10056` 递增。**~~（已被 10056~10058 覆盖，当前从 10059 递增。）
 
 - ✅ **10054（`3.26.091955c`）已发布 Pre-release `v3.26.091955-10054`（2026-09-18）——书架同书去重 + 内置三套预设主题/排版**：
   - **性质**：功能版（两项独立功能）。改动链：`9655ee5e`（统一入库入口，按书名+作者+媒体类型收敛）→ `0aa0e21e`（换源与入库路径收口到统一入口）→ `5008b91a`（书架手动「合并重复书籍」入口）→ `c219e259`（内置墨墟/琴女主题与娑娜排版三套预设）→ `88666e18`（修正娑娜排版页眉内边距与提示位）。
