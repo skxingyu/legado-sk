@@ -242,11 +242,12 @@ object ThemeConfig {
 
     fun applyDayNightNoRecreate(context: Context) {
         applyTheme(context)
-        // 局部刷新链（recreate = false）不能同步 AppCompat 夜间覆盖：setDefaultNightMode
-        // 会立即 recreate 未声明 uiMode configChanges 的宿主（如阅读页），把存活的
-        // 排版弹窗连带销毁，与 recreate = false 的设计意图矛盾；界面着色由调用方的
-        // upView() 局部刷新完成，覆盖会在下一次 applyDayNight（切主题/系统翻转）时补齐。
-        syncSystemNightMode(context, syncAppCompat = false)
+        // AppCompat 覆盖在此链同样必须同步：ReadBookActivity 已声明 uiMode
+        // configChanges，setDefaultNightMode 对它是就地资源配置（不 recreate），
+        // 排版弹窗不会被销毁。若不同步，覆盖会与实际主题脱节，之后 inflate 的
+        // 界面（如更多设置 Sheet 的 primaryText 文字）按旧 uiMode 解析，
+        // 出现亮色下白底白字（10056 实测）。
+        syncSystemNightMode(context)
         BookCover.upDefaultCover()
     }
 
@@ -271,22 +272,19 @@ object ThemeConfig {
         return config.copy(primaryColor = DEFAULT_DAY_PRIMARY_HEX)
     }
 
-    internal fun syncSystemNightMode(context: Context, syncAppCompat: Boolean = true) {
+    internal fun syncSystemNightMode(context: Context) {
         // AppCompat 本地夜间覆盖必须同步写入：应用级夜间模式（setApplicationNightMode）
         // 由系统异步应用，而 applyDayNight 的 RECREATE → recreate() 是立即执行的，
         // 重建会赶在系统生效之前、按旧 uiMode 配置解析 values-night 资源（卡片、文字、
         // 搜索条等黑白混杂的根因）。AppCompat 覆盖在 Activity attach 时即生效，
         // 保证重建出来的界面就是目标模式。AUTO 下 isNightTheme 取 Resources.getSystem
         // 的全局配置，不含应用级覆盖，等价于覆盖清除后的系统真实模式。
-        // 仅 applyDayNightNoRecreate（局部刷新链）传 syncAppCompat = false 跳过此处。
-        if (syncAppCompat) {
-            val targetMode = if (AppConfig.isNightTheme) {
-                AppCompatDelegate.MODE_NIGHT_YES
-            } else {
-                AppCompatDelegate.MODE_NIGHT_NO
-            }
-            AppCompatDelegate.setDefaultNightMode(targetMode)
+        val targetMode = if (AppConfig.isNightTheme) {
+            AppCompatDelegate.MODE_NIGHT_YES
+        } else {
+            AppCompatDelegate.MODE_NIGHT_NO
         }
+        AppCompatDelegate.setDefaultNightMode(targetMode)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Application night mode is persisted and available when the next system splash is built.
