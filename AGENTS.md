@@ -320,7 +320,7 @@ uiautomator2 / ADB
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
 - ✅ **10055（`3.26.091956c`）已构建并覆盖安装模拟器+平板（2026-09-19）——当前交付（修日夜间切换黑白混杂）**：
-  - **性质**：修回归缺陷（**上游继承**，作者要求修复）。修复提交 `9884e231`，仅改 `ThemeConfig.kt` 的 `syncSystemNightMode`（+15/−10）。
+  - **性质**：修回归缺陷（**上游继承**，作者要求修复）。修复提交 `ed640fde`，仅改 `ThemeConfig.kt` 的 `syncSystemNightMode`（+15/−10）。
   - **症状**：「我的」页（及所有依赖 `values-night` 资源的界面）切换日/夜后黑白混杂且**永不恢复**——卡片背景与部分文字变对了、另一部分文字/搜索条停在旧配色，滚动会让更多卡片背景变对但文字依旧错乱。模拟器 10049（Android 14）实机复现并留存截图（`test-records/theme-bug/`）。
   - **根因（上游 `0f42491b`「统一系统启动画面并修复夜间首帧」引入，随 10036 新基底进入）**：API 31+ 把夜间模式改为 `UiModeManager.setApplicationNightMode`（**系统异步应用**），但 `applyDayNight` 的 `postEvent(RECREATE)` → `recreate()` 仍**同步立即执行**——重建抢在系统覆盖落地之前完成，新 Activity 按旧 uiMode 配置解析全部 `values-night` 资源（卡片 `background_card`、文字 `primaryText`/`tv_text_summary`、搜索条 `bg_searchview` 拿到日间值，而 ThemeStore 驱动的根背景已是夜间）。覆盖随后落地时，MainActivity 在 manifest 声明了 `uiMode` configChanges → 只走 `onConfigurationChanged`（`BaseActivity` 仅刷系统栏），**没有任何重载视图的机会** → 混色永久停留。上游 legadoC 同版本同样存在此缺陷。
   - **修法**：`syncSystemNightMode` **恢复同步写入 AppCompat 本地夜间覆盖**（`AppCompatDelegate.setDefaultNightMode(YES/NO)`），再叠加 `setApplicationNightMode`（保留其启动画面收益）。AppCompat 1.7.1 语义（字节码核实 `updateAppConfiguration`）：对声明 `uiMode` configChanges 的 Activity **就地更新 Resources 配置不重建**（`Resources.updateConfiguration`+flush），未声明的（阅读页等）**立即 recreate**；无论哪种，之后 RECREATE 驱动的 `recreate()` 重建的 Activity 在 attach 时即按目标模式解析资源 → 重建结果必然正确。ⓘ 重建后再触发 `setDefaultNightMode` 对配置已一致的界面是 no-op，无双重建。
