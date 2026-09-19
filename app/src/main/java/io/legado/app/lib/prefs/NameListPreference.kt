@@ -6,7 +6,6 @@ import android.widget.TextView
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceViewHolder
 import io.legado.app.R
-import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.utils.ColorUtils
@@ -33,8 +32,11 @@ class NameListPreference(context: Context, attrs: AttributeSet) : ListPreference
             v.typeface = context.uiTypeface()
             v.text = entry
             if (isBottomBackground) {
-                val bgColor = context.bottomBackground
-                val pTextColor = context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+                // chip 背景是卡片色上叠半透明 tint，文字判定必须与卡片表面色同源，
+                // 不按原始 bottomBackground 存值（亮度<0.5 的中灰会误判出白字）。
+                val isLight =
+                    ColorUtils.isColorLight(PreferenceItemStyle.itemSurfaceColor(context))
+                val pTextColor = context.getPrimaryTextColor(isLight)
                 v.setTextColor(pTextColor)
             }
         }
