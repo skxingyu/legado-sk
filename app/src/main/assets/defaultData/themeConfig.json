@@ -42,8 +42,7 @@
     "isNightTheme": false,
     "panelBackgroundScaleType": "crop",
     "primaryColor": "#3A2A1A",
-    "themeName": "MD3·墨墟",
-    "transparentNavBar": false
+    "themeName": "MD3·墨墟"
   },
   {
     "accentColor": "#000000",
@@ -54,8 +53,7 @@
     "isNightTheme": true,
     "panelBackgroundScaleType": "crop",
     "primaryColor": "#C4B8A0",
-    "themeName": "MD3·墨墟",
-    "transparentNavBar": false
+    "themeName": "MD3·墨墟"
   },
   {
     "accentColor": "#FFFF7400",
@@ -86,7 +84,6 @@
     "isNightTheme": true,
     "panelBackgroundScaleType": "crop",
     "primaryColor": "#8C8680",
-    "themeName": "MD3·琴女",
-    "transparentNavBar": false
+    "themeName": "MD3·琴女"
   }
 ]

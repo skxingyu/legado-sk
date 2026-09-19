@@ -177,7 +177,10 @@ object ReadBookConfig {
             } catch (e: Exception) {
             }
         }
-        shareConfig = c ?: getConfig(5).copy()
+        // 兜底必须显式锚定首项内置样式（猫咪），不能用硬编码下标 5：
+        // 10054 在内置样式末尾追加预设后，下标 5 已从「第一个自定义槽位」变为「娑娜」，
+        // 全新安装的默认共享排版会跟着预设清单漂移。
+        shareConfig = c ?: getConfig(0).copy()
         if (needSaveConfigList || needSaveSanitizedConfig) {
             needSaveConfigList = false
             needSaveSanitizedConfig = false

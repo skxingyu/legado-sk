@@ -16,7 +16,6 @@ class VolumeGainTest {
         // 滑条最小位 = 不增强，绝不能变成衰减
         assertEquals(1f, VolumeGain.factorFor(0))
         assertEquals(1f, VolumeGain.factorFor(AppConfigDefaultVolume))
-        assertEquals("不增强", VolumeGain.labelFor(0))
     }
 
     @Test

@@ -218,8 +218,15 @@ class HttpReadAloudService : BaseReadAloudService(),
      */
     private fun httpTtsSupportsServerSpeed(httpTts: HttpTTS?): Boolean {
         val url = httpTts?.url?.orEmpty() ?: return false
-        return url.contains("speakSpeed") || url.contains("speak_speed") ||
+        // SK 定制（审查修复）：子串启发式存在误报（URL 恰好含这些词但并非占位符），
+        // 误报时语速静默无效，输出判定结果便于用户反馈时定位。
+        val supports = url.contains("speakSpeed") || url.contains("speak_speed") ||
             url.contains("speechRate")
+        AppLog.putDebug(
+            "服务端变速判定：$supports url=${url.take(120)}",
+            module = LogModule.READ_ALOUD
+        )
+        return supports
     }
 
     /**

@@ -106,12 +106,6 @@ object VolumeGain {
         return 1f + percent.coerceAtMost(MAX_PERCENT) / 100f
     }
 
-    /** 增益系数对应的展示文案，例如 `2.5X` 或 `不增强`。 */
-    fun labelFor(percent: Int): String {
-        val factor = factorFor(percent)
-        return if (factor == 1f) "不增强" else "%.1fX".format(factor)
-    }
-
     /** 超过该倍数后大声处开始削波，听感上就是失真。 */
     const val DISTORTION_FACTOR = 2f
 

@@ -604,7 +604,11 @@ object ThemeConfig {
             val background = config.backgroundColor.toColorInt()
             val bBackground = config.bottomBackground.toColorInt()
             val isNightTheme = config.isNightTheme
+            // @asset: 前缀只应存在于 configList 的解析阶段（resolvePresetBackgrounds），
+            // 资产解压失败时会残留到此处；把裸前缀串写进 bgImage 偏好会让该主题静默无背景，
+            // 故按「未配置背景」处理（空串），下次成功解压后重新应用即恢复。
             val backgroundPath = config.backgroundImgPath
+                ?.takeUnless { it.startsWith(PRESET_ASSET_PREFIX) }
             val backgroundCrop = normalizeBackgroundCrop(config.backgroundImgCrop)
             val bookInfoBackgroundPath = config.bookInfoBackgroundImgPath
             val bookInfoBackgroundBlur = config.bookInfoBackgroundBlur().coerceIn(0, 25)

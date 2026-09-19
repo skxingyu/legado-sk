@@ -1097,6 +1097,9 @@ abstract class BaseReadAloudService : BaseService(),
                     cancelReadAloudStart(request)
                     return@execute
                 }
+                // SK 定制（审查修复）：prepare 期间可能被新请求（N2）打断——IO 协程
+                // 无挂起点仍可被线程抢占。写回前复查令牌，避免过期请求压掉 N2 的状态。
+                if (request != readAloudStartRequest) return@execute
                 preparedReadAloudStartRequest = request
                 publishPreparedAloudPosition()
                 launch(Main) {
@@ -1117,6 +1120,8 @@ abstract class BaseReadAloudService : BaseService(),
                     return@execute
                 }
             }
+            // SK 定制（审查修复）：同上，prepare 完成后写回前复查令牌。
+            if (request != readAloudStartRequest) return@execute
             preparedReadAloudStartRequest = request
             publishPreparedAloudPosition()
             launch(Main) {

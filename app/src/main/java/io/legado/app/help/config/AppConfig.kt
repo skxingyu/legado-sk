@@ -799,6 +799,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     private fun fillOpenCodeSessionHeadersIfNeeded() {
         if (appCtx.getPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled)) return
         val headers = AiBuiltinDefaults.llmHeaders()
+        // ⚠️ headers.isBlank() 不置位：app flavor 下若本函数先于 AppPlugins 注册执行，
+        // llmHeaders() 暂为空串，此刻置位会把存量补齐永久锁死（10039 修复失效）。
+        // oss flavor 的重复解析是可接受的纯性能开销（刻意空实现，勿补齐）。
         if (headers.isBlank()) return
         val providers = GSON.fromJsonArray<AiProviderConfig>(
             appCtx.getPrefString(PreferKey.aiProviderList)
@@ -806,7 +809,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         val target = providers.firstOrNull {
             it.name == DEFAULT_AI_PROVIDER_NAME &&
                 it.headers.orEmpty().contains("X-Session-Id", ignoreCase = true).not()
-        } ?: return
+        } ?: run {
+            // 出厂头非空时走到这里，说明内置供应商不存在或已带会话头：
+            // 重建路径（ensureDefaultAiConfigIfNeeded）仍会补回缺头的供应商，故为终态。
+            appCtx.putPrefBoolean(PreferKey.aiOpenCodeSessionHeadersFilled, true)
+            return
+        }
         persistAiProviders(
             providers.map {
                 if (it.id == target.id) {

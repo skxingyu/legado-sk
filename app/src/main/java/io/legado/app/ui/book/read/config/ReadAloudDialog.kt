@@ -528,7 +528,11 @@ class ReadAloudDialog : BaseReaderSheetDialogFragment(R.layout.dialog_read_aloud
     @SuppressLint("SetTextI18n")
     private fun upVolumeGainText(value: Int) {
         val percent = value * GAIN_STEP
-        binding.tvTtsVolumeGainValue.text = VolumeGain.labelFor(percent)
+        // 文案映射留在 UI 层：help/exoplayer 包不依赖 R，也不承载展示文案。
+        binding.tvTtsVolumeGainValue.text = when {
+            VolumeGain.factorFor(percent) == 1f -> getString(R.string.read_aloud_volume_gain_none)
+            else -> "%.1fX".format(VolumeGain.factorFor(percent))
+        }
         // ⚠️ 无提示档必须赋 CharSequence 空串：TextView.setText(Int) 走的是**字符串资源 id**，
         // 传 0 会抛 Resources$NotFoundException: String resource ID #0x0（已实机崩溃过一次）。
         binding.tvVolumeGainHint.text = when (VolumeGain.qualityCostFor(percent)) {
