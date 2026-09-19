@@ -2161,8 +2161,17 @@ class ReadBookActivity : BaseReadBookActivity(),
         mode: ReadAloudUiState.ReaderPanelMode,
         action: () -> Unit,
     ) {
-        check(currentReadAloudPanelMode() == mode) {
-            "Read-aloud footer action no longer matches the current panel mode"
+        val current = currentReadAloudPanelMode()
+        if (current != mode) {
+            // SK 定制（审查修复）：页脚回调捕获的 mode 与点击时现算的面板模式可能短暂
+            // 不一致（暂停态翻页/跨章后位置事件被忽略、footer 未刷新）。此处由点击事件
+            // 触发，check 会直接崩溃进程，与 M1 同款处理：日志 + 刷新面板回调 + 放弃。
+            AppLog.put(
+                "[朗读] 页脚动作模式不匹配：按钮=$mode 当前=$current，放弃执行",
+                module = LogModule.READ_ALOUD
+            )
+            updateReadAloudPanels()
+            return
         }
         expandReadAloudPanel(mode)
         action()
