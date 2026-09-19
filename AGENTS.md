@@ -319,7 +319,17 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10054（`3.26.091955c`）已发布 Pre-release `v3.26.091955-10054`（2026-09-18）——当前交付（书架同书去重 + 内置三套预设主题/排版）**：
+- ✅ **10055（`3.26.091956c`）已构建并覆盖安装模拟器+平板（2026-09-19）——当前交付（修日夜间切换黑白混杂）**：
+  - **性质**：修回归缺陷（**上游继承**，作者要求修复）。修复提交 `9884e231`，仅改 `ThemeConfig.kt` 的 `syncSystemNightMode`（+15/−10）。
+  - **症状**：「我的」页（及所有依赖 `values-night` 资源的界面）切换日/夜后黑白混杂且**永不恢复**——卡片背景与部分文字变对了、另一部分文字/搜索条停在旧配色，滚动会让更多卡片背景变对但文字依旧错乱。模拟器 10049（Android 14）实机复现并留存截图（`test-records/theme-bug/`）。
+  - **根因（上游 `0f42491b`「统一系统启动画面并修复夜间首帧」引入，随 10036 新基底进入）**：API 31+ 把夜间模式改为 `UiModeManager.setApplicationNightMode`（**系统异步应用**），但 `applyDayNight` 的 `postEvent(RECREATE)` → `recreate()` 仍**同步立即执行**——重建抢在系统覆盖落地之前完成，新 Activity 按旧 uiMode 配置解析全部 `values-night` 资源（卡片 `background_card`、文字 `primaryText`/`tv_text_summary`、搜索条 `bg_searchview` 拿到日间值，而 ThemeStore 驱动的根背景已是夜间）。覆盖随后落地时，MainActivity 在 manifest 声明了 `uiMode` configChanges → 只走 `onConfigurationChanged`（`BaseActivity` 仅刷系统栏），**没有任何重载视图的机会** → 混色永久停留。上游 legadoC 同版本同样存在此缺陷。
+  - **修法**：`syncSystemNightMode` **恢复同步写入 AppCompat 本地夜间覆盖**（`AppCompatDelegate.setDefaultNightMode(YES/NO)`），再叠加 `setApplicationNightMode`（保留其启动画面收益）。AppCompat 1.7.1 语义（字节码核实 `updateAppConfiguration`）：对声明 `uiMode` configChanges 的 Activity **就地更新 Resources 配置不重建**（`Resources.updateConfiguration`+flush），未声明的（阅读页等）**立即 recreate**；无论哪种，之后 RECREATE 驱动的 `recreate()` 重建的 Activity 在 attach 时即按目标模式解析资源 → 重建结果必然正确。ⓘ 重建后再触发 `setDefaultNightMode` 对配置已一致的界面是 no-op，无双重建。
+  - ⚠️ **AUTO 语义**：`AppConfig.isNightTheme` 在 AUTO 下取 `Resources.getSystem().configuration`（**系统全局配置，不含应用级覆盖**）＝`setApplicationNightMode(AUTO)` 清除覆盖后的系统真实模式，故 `setDefaultNightMode` 的快照不会用错旧覆盖的残留值。`versionNameSortKey` 对 MMddHH 是**纯数值比较**（`UpdateManager.kt:162`），10054 的 `091955`（HH=55 非法小时）封住了当天合法小时值，本版取 `091956` 保持数值单调；versionCode 仍是主判定键。
+  - **验证**：模拟器覆盖安装（10049→10055）后作者简单测试通过；平板 TB-9707F 覆盖安装（10054→10055）成功（`versionCode=10055` 校验一致），真机复验由作者完成。未做 GitHub Release（作者未要求）。
+  - **产物** `release/legado_sk_3.26.091956c_10055_arm64-v8a.apk`（36,196,582 字节，sha256 `1427dec6b12271d12f681f2e361bb7387c65212bd8c4eacb8695d149c3049121`），aapt（io.legado.app.c / 10055 / 3.26.091956c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner（exit 0，证书 SHA-256 `79fef578…`）通过。⚠️ 本版 Gradle 输出名**无 `_arm64-v8a` 后缀**（同 10045），收进 `release/` 时按约定补后缀。
+  - **下一次交付 versionCode 从 `10056` 递增。**
+
+- ✅ **10054（`3.26.091955c`）已发布 Pre-release `v3.26.091955-10054`（2026-09-18）——书架同书去重 + 内置三套预设主题/排版**：
   - **性质**：功能版（两项独立功能）。改动链：`9655ee5e`（统一入库入口，按书名+作者+媒体类型收敛）→ `0aa0e21e`（换源与入库路径收口到统一入口）→ `5008b91a`（书架手动「合并重复书籍」入口）→ `c219e259`（内置墨墟/琴女主题与娑娜排版三套预设）→ `88666e18`（修正娑娜排版页眉内边距与提示位）。
   - ⚠️ **10052 / 10053 无独立交付**：10052 是去重开发的中间版（无 Release 记录），10053 是预设的首个构建（被 10054 取代）。查去重改动从 `9655ee5e` 起看。
   - **功能一：书架同书去重**。背景：同一本书（书名、作者一致）换个书源加入会被当成两本不同书并存。
@@ -447,7 +457,6 @@ uiautomator2 / ADB
 - 10037（`3.26.090900c`，2026-09-09）为补齐 10036 重植遗漏的 SK 定制版：**听书时点屏呼出普通主菜单**（`99669ee0`，长按「朗读」才进听书面板）；朗读路径断言改诊断提示（`3976f3be`）；服务侧悬浮窗 bounds/越界容错；换书竞态 F1/F2（`63132a6e`）、切书清朗读位置、目录加载失败保留旧目录（`f118ea9b`）、书源地址变更迁移书籍（`3d36b603`）、书签搜索 SQL 括号；数据安全：备份加密失败中止、恢复 DB 段事务化（`b2ce2f5b`）、迁移 `DROP INDEX IF EXISTS`、MobiFile fd 关闭；MD3 主题包导入（`c75e669e`）、无头标题复合迁移（`154d84dd`）、漫画章末图片自然高度。产物 30,934,923 字节，aapt + apksigner 通过。
 - 10036（`3.26.090812c`，2026-09-08）为全新上游基底（legadoC v3.26.090809 `e3ee7b81`）重植首版，重植清单有遗漏，已由 10037 补齐。
 - 10035（`3.26.090801c`，2026-09-08）为旧基底最后一交付（朗读引擎网络导入 `0bb36aac`），已在 git 历史重建中被新 main 取代；其改动已并入 10036 重植。
-- 下一次交付 versionCode 从 `10052` 递增。
 
 > ⚠️ **语言裁剪边界（2026-09-10 修正）**：`resConfigs "zh"` **会裁掉同语言 region 变体**（不只是其他语言）。产物实测 `aapt dump badging` → `locales: '--_--' 'zh'`，`unzip -l` 中 `zh-rHK|zh-rTW` 计数为 **0**。故 `values-zh-rHK` / `values-zh-rTW`（含 `app/src/{main,c,oss}` 共 6 个目录，约 2986 行）**完全不进 APK**，已于 10038 删除。**此前"缺失 HK/TW 字符串会回退到简体/英文"的说法不成立**——该 locale 整体不存在，`resConfigs` 会裁 region 变体。`companion/移植方案-v3.26.090809.md` 中相反表述已同步修正（commit `4de04287` 提交信息所称「含 HK/TW 修正」实为无效工作）。
 
