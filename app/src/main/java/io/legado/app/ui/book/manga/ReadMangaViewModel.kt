@@ -246,19 +246,22 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
      */
     fun changeTo(book: Book, toc: List<BookChapter>) {
         changeSourceCoroutine?.cancel()
+        // 事件载荷必须是最终落库身份：合并发生时传入 book 的 bookUrl 已不在库。
+        var settledUrl = book.bookUrl
         changeSourceCoroutine = execute {
             //换源中
             val oldBook = ReadManga.book
             oldBook?.migrateTo(book, toc)
             book.removeType(BookType.updateError)
             val settled = BookUpsert.upsertByIdentity(book, toc, migrateFrom = oldBook)
+            settledUrl = settled.bookUrl
             CacheManifestHelper.refreshAsync(settled, toc)
             ReadManga.resetData(settled)
             ReadManga.loadContent()
         }.onError {
             AppLog.put("换源失败\n$it", it, true)
         }.onFinally {
-            postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)
+            postEvent(EventBus.SOURCE_CHANGED, settledUrl)
         }
     }
 

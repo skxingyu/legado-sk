@@ -62,7 +62,9 @@ object BookUpsert {
                 ?.takeIf { it.bookUrl == keep.bookUrl }
                 ?.let { BookMergeRules.mergeInto(keep, incoming, toc) }
                 ?: incoming
-            return savePlain(merged, toc, migrateFrom = null)
+            // migrateFrom 原样透传：与 keep 同身份时 savePlain 的 stray 判据不成立
+            // （不搬运不删除）；是另一条记录时由 savePlain 统一并入并删除。
+            return savePlain(merged, toc, migrateFrom = migrateFrom)
         }
 
         return merge(keep, incoming, toc, migrateFrom)
@@ -85,7 +87,13 @@ object BookUpsert {
         migrateFrom: Book?
     ): Book {
         // 换源场景下「用户状态与进度」的来源：优先正在读的那本，其次 keep 自身。
-        val carrier = migrateFrom?.takeIf { it.bookUrl == keep.bookUrl } ?: keep
+        // migrateFrom 与 keep、src 的 bookUrl 都不同时（keep 重查平局换人的罕见边界），
+        // 仍以 migrateFrom 为准 —— 它才是用户实际在读的记录，其进度不能丢。
+        val carrier = when {
+            migrateFrom == null -> keep
+            migrateFrom.bookUrl == src.bookUrl -> keep
+            else -> migrateFrom
+        }
         val merged = BookMergeRules.mergeInto(carrier, src, toc).let {
             // mergeInto 返回的是 carrier 的副本，身份必须回到 keep。
             it.bookUrl = keep.bookUrl
@@ -122,6 +130,18 @@ object BookUpsert {
             // ⑥ 清理无外键的孤儿记录（源已失效，留着只是垃圾）。
             AiChapterPurifyService.dropBookRecords(src)
             appDb.readRecentBookDao.delete(src.bookUrl)
+
+            // ⑦ migrateFrom 是独立于 keep/src 的第三条记录时（keep 平局换人的罕见边界），
+            //    其用户状态已随 carrier 并入，关联数据搬进 keep 后删除，不留孤儿。
+            migrateFrom
+                ?.takeIf { it.bookUrl != keep.bookUrl && it.bookUrl != src.bookUrl }
+                ?.let { stray ->
+                    moveShortcuts(stray, keep)
+                    moveCollectionItems(stray, keep)
+                    moveRecentRead(keep, stray)
+                    AiChapterPurifyService.dropBookRecords(stray)
+                    appDb.bookDao.delete(stray)
+                }
         }
 
         // 阅读引擎状态重定向：src 被删了，但当前在读的可能正是 src。
@@ -145,7 +165,15 @@ object BookUpsert {
         } else {
             book
         }
+        // migrateFrom 是一条独立的旧记录（bookUrl 与落库对象不同）时，它不再落库：
+        // 按上游 changeTo「删旧插新」的原语义删除，并先搬走会被 CASCADE 连带清掉的
+        // 关联数据，否则旧记录残留书架形成重复。
+        val stray = migrateFrom?.takeIf { it.bookUrl != target.bookUrl }
         appDb.runInTransaction {
+            if (stray != null) {
+                moveShortcuts(stray, target)
+                moveCollectionItems(stray, target)
+            }
             // 已存在同 bookUrl 时必须 update：bookDao.insert 是 OnConflictStrategy.REPLACE，
             // 冲突时的隐式 DELETE 旧行会触发子表 CASCADE，级联清空章节/快捷入口/合集/配图。
             if (appDb.bookDao.has(target.bookUrl)) {
@@ -158,6 +186,11 @@ object BookUpsert {
                 appDb.bookChapterDao.insert(
                     *toc.map { it.copy(bookUrl = target.bookUrl) }.toTypedArray()
                 )
+            }
+            if (stray != null) {
+                moveRecentRead(target, stray)
+                AiChapterPurifyService.dropBookRecords(stray)
+                appDb.bookDao.delete(stray)
             }
         }
         return target
