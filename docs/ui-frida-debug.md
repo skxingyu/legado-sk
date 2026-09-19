@@ -1,11 +1,19 @@
-# Frida UI 调试窗口速查（雷电模拟器 / legadoC）
+# Frida UI 调试窗口速查（雷电模拟器 / 阅读SK）
 
 > 用途：给模拟器里运行的 App 注入带悬浮窗的可调节调试面板（如"背景板下移 offset"）。
-> 环境：frida 17.17.0（venv：`.android-dev-venv`，Java 桥来自 `frida_tools\bridges\java.js`，见 `tools/android-dev/frida_probe.py` 的加载方式，用 `const Java = bridge;` 绑定）。frida-server 必须与客户端同版本。模拟器上常驻 17.17.0 server（`/data/local/tmp/legadoc-frida-server`，监听 127.0.0.1:27044，root 启动，`-D` 守护）。驱动 `ui_drop_ball_inject.py` 用 `.android-dev-venv` python 并自动 `adb forward tcp:27042 tcp:27044`。
+> ⚠️ **本机工具链当前未就绪**，以下为就绪后的用法；事实基准以 `tools/android-dev/` 源码为准。
+>
+> **环境（与仓库现存脚本一致）**：
+> - frida 客户端版本以 `frida_probe.py` 实际运行的 `frida.__version__` 为准（打印在输出 JSON 的 `frida` 字段）。
+> - frida-server 由 `run-frida-probe.ps1` 自动 push 到模拟器 `/data/local/tmp/legadoc-frida-server`，以 **root** 启动（`su -c`、`nohup ... -D`），**监听 27042**。
+> - 传输：`run-frida-probe.ps1` 负责 `adb connect` + 推 server + 端口占用校验，然后调 `frida_probe.py`；后者执行 `adb forward tcp:<port> tcp:27042`（**目标端固定 27042**，`--port` 默认同为 27042）。
+> - Java 桥来自 `frida_tools\bridges\java.js`（见 `frida_probe.py` 的加载方式），用 `const Java = bridge;` 绑定。
+> - 依赖 `.android-dev-venv\Scripts\python.exe` 与 `tools/android-dev/bin/frida-server-17.17.0-android-x86_64`（模拟器内核须为 `x86_64`）。**这两项在本机当前检出中均不存在**（`bin/` 被 `.gitignore` 忽略），需先重建。
+> - ⚠️ 历史文档曾引用驱动脚本 `ui_drop_ball_inject.py` 与 `.android-dev-venv`，**前者在仓库及全部 git 历史中均不存在**，勿再按该名称查找。
 
 ## 注入脚本要点
 
-1. **Java wrapper 陷阱（本机 frida 16.7.19 实测）**
+1. **Java wrapper 陷阱（实测）**
    - 实例方法/字段的属性访问返回 `undefined` → 一律 `Java.use(Cls).method.call(instance, ...)`。
    - 静态成员（`Color.WHITE`、`FrameLayout.LayoutParams.MATCH_PARENT`、`ActivityThread.currentActivityThread()`）全不可用 → 常量硬编码：`MATCH_PARENT=-1`、`WRAP_CONTENT=-2`、`Gravity.CENTER=0x11`、颜色转 signed int（`#D920262E → -652204498`）；拿 Activity 用 `Java.choose` 而非静态方法。
    - JS string 传 String 参数（中文）失败 → 包 `JString.$new(txt)`；字号用 `setTextSize(0, px)`（COMPLEX_UNIT_PX），否则 14sp 会被密度放大 3.5×。
@@ -28,7 +36,7 @@
    - 症状：注入后一切正常（悬浮窗已上屏），一旦 hook 触发（如拖动开始）立即 **SIGABRT 闪退**。logcat 报：
      `JNI DETECTED ERROR IN APPLICATION: JNI ERROR (app bug): jobject is an invalid JNI transition frame reference: 0x... (use of invalid jobject)` + `CallObjectMethod` / CheckJNI 栈。
    - 根因：LDPlayer 是 userdebug 构建（`ro.debuggable=1`），**CheckJNI 强制开启**；frida 桥把**跨 JNI 调用帧持有的 jobject**（hook 的 `this`、Java.choose 找的实例、一个回调里 new/查出的 View 存到 JS 全局变量、再在另一个回调/定时器里调用方法）喂给 ART，CheckJNI 直接 abort——JS 侧 catch 不到，进程当场死。
-   - 判定：**与 frida 版本无关**（16.7.19 与 17.17.0 都会崩），桥每次从 JS 进 Java 都是一个独立 JNI frame；对象跨 frame 复用的正确姿势是 **`Java.retain(obj)` 后存 JS 全局**。
+   - 判定：**与 frida 版本无关**（16.7.19 与 17.17.0 均复现过），桥每次从 JS 进 Java 都是一个独立 JNI frame；对象跨 frame 复用的正确姿势是 **`Java.retain(obj)` 后存 JS 全局**。
    - 规避清单：
      - hook 里要把 `this` 留下来稍后用 → `stored = Java.retain(this)`。
      - `Java.choose` 要留实例 → `firstMatch = Java.retain(instance)`（frida_probe.py 已这么做）。
