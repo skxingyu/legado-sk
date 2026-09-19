@@ -17,6 +17,7 @@ import io.legado.app.domain.model.CustomSetItem
 import io.legado.app.domain.model.HomepageModuleType
 import io.legado.app.domain.model.ModuleDef
 import io.legado.app.domain.model.ModuleItem
+import io.legado.app.help.book.BookUpsert
 import io.legado.app.help.book.BookshelfMatcher
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
@@ -860,7 +861,9 @@ class HomepageViewModel(application: Application) : BaseViewModel(application) {
             val b = book.toBook()
             b.removeType(BookType.notShelf)
             if (b.order == 0) b.order = appDb.bookDao.minOrder - 1
-            appDb.bookDao.insert(b)
+            // 统一走身份收敛入口：同书（书名+作者+媒体类型）已在架时合入既有记录，
+            // 裸 insert 会为同书不同源的书插出第二条书架记录。
+            BookUpsert.upsertByIdentity(b)
         }
     }
 
