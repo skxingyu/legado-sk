@@ -122,6 +122,22 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
+        // 共存版：与交付版（app flavor + release，包名 io.legado.app.c）同签名、同版本号，
+        // 仅包名不同，可与阅读C / 正式版同时安装。编译命令：
+        //   gradlew :app:assembleAppSk2 -Pabi=arm64-v8a -PVERSION_CODE=... -PVERSION_NAME=...
+        // ⚠️ 必须清空 versionNameSuffix —— initWith debug 会继承 debug 的 'debug' 后缀，
+        // 否则 versionName 变成 3.26.091959cdebug，与正式版不一致且污染更新检查的版本比较。
+        sk2 {
+            initWith debug
+            signingConfig signingConfigs.debug
+            manifestPlaceholders.put("app_name", "@string/app_name")
+
+            applicationIdSuffix '.sk2'
+            versionNameSuffix ''
+            matchingFallbacks = ['debug']
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+        }
     }
     //noinspection GrDeprecatedAPIUsage
     flavorDimensions = ['mode']
