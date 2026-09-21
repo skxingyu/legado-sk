@@ -94,4 +94,17 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
             putBoolean("appCrash", value)
         }
 
+    /**
+     * 内置主题预设是否已播种为本地主题包（一次性语义）。
+     *
+     * ⚠️ 用「一次性标记」而不是「检查目录是否存在」作判据：后者会在用户**主动删除**
+     * 某条内置预设后把它重新塞回来，等于用户删不掉。标记位只保证「补种一次」——
+     * 存量设备首次运行到主题页时标记位不存在 → 补种一次；此后用户删任意预设都不复活。
+     */
+    var builtinThemePresetSeeded: Boolean
+        get() = getBoolean("builtinThemePresetSeeded")
+        set(value) {
+            putBoolean("builtinThemePresetSeeded", value)
+        }
+
 }

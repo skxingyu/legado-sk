@@ -104,6 +104,45 @@ class BuiltinPresetAssetTest {
         assertEquals("defaultData/pre_theme_moxu_day.jpg", ref.removePrefix(prefix))
     }
 
+    /**
+     * 播种（ThemePackageManager.seedBuiltinPresetsOnce）按 themeName + isNightTheme
+     * 落到 themePackages/{day,night}/<normalizeFileName(themeName)>，与既有落包链路同址。
+     * 这里锁定播种能覆盖到每一条预设、且落点不冲突 —— 若两条预设归一到同一目录名，
+     * 后一条会覆盖前一条，表现为「主题管理页少了一项」，且**不会报任何错**。
+     */
+    @Test
+    fun everyPresetSeedsToDistinctDir() {
+        val keys = presetArray("themeConfig.json").map { it.asJsonObject }.map { config ->
+            val name = config.get("themeName").asString.trim()
+            assertTrue("预设主题名不能为空（播种会跳过空名）", name.isNotBlank())
+            val tab = if (config.get("isNightTheme").asBoolean) "night" else "day"
+            // normalizeFileName 只替换 [\\/:*?"<>|]，不折叠 CJK；此处用同一字符类模拟。
+            val dirName = name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            "$tab/$dirName"
+        }
+        assertEquals(
+            "预设落点不得重复，否则播种会互相覆盖",
+            keys.size,
+            keys.toSet().size
+        )
+    }
+
+    /**
+     * 播种要求 backgroundImgPath 是「裸 @asset: 引用」或「已是绝对路径」二选一：
+     * 前者由 resolvePresetBackgrounds 解压回填，后者直接拷贝。
+     * 若出现第三种形态（相对路径、content:// 等），copyAssetsIntoPackage 会静默
+     * 写坏 theme.json，主题包背景丢失。故在此锁死取值范围。
+     */
+    @Test
+    fun presetBackgroundPathsAreResolvable() {
+        presetArray("themeConfig.json").map { it.asJsonObject }.forEach { config ->
+            val name = config.get("themeName").asString
+            val path = config.get("backgroundImgPath")?.asString ?: return@forEach
+            val ok = path.startsWith("@asset:") || File(path).isAbsolute
+            assertTrue("$name 的 backgroundImgPath 形态无法被播种解析: $path", ok)
+        }
+    }
+
     private companion object {
         val READ_PRESET_HEAD = listOf("猫咪", "秋", "春", "黄", "黑猫")
     }

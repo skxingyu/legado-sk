@@ -8,8 +8,11 @@ import androidx.documentfile.provider.DocumentFile
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.DefaultData
+import io.legado.app.help.config.ThemeConfig.resolvePresetBackgrounds
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
@@ -198,6 +201,36 @@ object ThemePackageManager {
             }
             saveConfig(config.copy(isNightTheme = isNightTheme))
         }
+
+    /**
+     * 把内置主题预设（`DefaultData.themeConfigs`）播种成普通本地主题包，只做一次。
+     *
+     * 背景：主题管理页列的是 `themePackages/{day,night}/` 下的**目录**（[loadLocal]），
+     * 而内置预设只存在于 [ThemeConfig.configList] / `themeConfig.json` 里当资产来源，
+     * **从未被物化成目录** → 在主题管理页完全不可见、无法应用。本方法补上这一步。
+     *
+     * 复用既有落包链路（[saveConfig] → 拷资产 → 写 theme.json → `addConfig`），
+     * 因此产出的就是普通主题包：可应用、可编辑、可删除，无需任何新增 UI。
+     *
+     * ⚠️ 落包前必须先 `resolvePresetBackgrounds` 把 `@asset:` 引用换成可读绝对路径，
+     * 否则 [copyAssetsIntoPackage] 会把裸前缀串写进 theme.json（见该方法注释）。
+     * ⚠️ 同名已存在（用户自建或先前播种）则跳过，不覆盖用户数据。
+     */
+    suspend fun seedBuiltinPresetsOnce(context: Context) = withContext(IO) {
+        if (LocalConfig.builtinThemePresetSeeded) return@withContext
+        DefaultData.themeConfigs.forEach { preset ->
+            val name = preset.themeName.trim()
+            if (name.isBlank()) return@forEach
+            val dir = localDir(preset.isNightTheme, name.normalizeFileName())
+            if (readPackage(dir) != null) return@forEach
+            runCatching {
+                saveConfig(preset.copy(themeName = name).resolvePresetBackgrounds(context))
+            }.onFailure {
+                AppLog.put("播种内置主题预设失败：$name\n${it.localizedMessage}", it)
+            }
+        }
+        LocalConfig.builtinThemePresetSeeded = true
+    }
 
     private fun reapplyRestoredAppliedTheme(context: Context, isNightTheme: Boolean) {
         val themeName = context.getPrefString(

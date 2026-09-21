@@ -167,8 +167,12 @@ object ThemeConfig {
      * 前缀声明引用；此处按文件名解压到 filesDir/defaultData 后回填绝对路径，
      * 与 [installDefaultBackgrounds] 落盘位置一致，两者共用同一份文件。
      * 非引用值（用户自选路径、http、已解压的绝对路径）原样返回。
+     *
+     * ⚠️ 主题预设播种（[ThemePackageManager.seedBuiltinPresetsOnce]）落包前必须调用本方法：
+     * [ThemePackageManager.saveConfig] 经 `copyAssetsIntoPackage` 拷图时要求
+     * `backgroundImgPath` 是**可读绝对路径**，裸 `@asset:` 串会被原样写进 theme.json。
      */
-    private fun Config.resolvePresetBackgrounds(context: Context): Config {
+    internal fun Config.resolvePresetBackgrounds(context: Context): Config {
         val path = backgroundImgPath?.takeIf { it.startsWith(PRESET_ASSET_PREFIX) } ?: return this
         val asset = path.removePrefix(PRESET_ASSET_PREFIX)
         val target = File(File(context.filesDir, "defaultData"), FileUtils.getName(asset))

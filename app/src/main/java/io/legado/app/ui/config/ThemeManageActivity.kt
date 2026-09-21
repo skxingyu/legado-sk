@@ -158,6 +158,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         initView()
         lifecycleScope.launch {
             kotlin.runCatching {
+                // 首次进入本页时把内置主题预设播种成普通主题包（一次性），
+                // 否则预设只作为资产来源存在、在本页完全不可见（见 seedBuiltinPresetsOnce）。
+                ThemePackageManager.seedBuiltinPresetsOnce(this@ThemeManageActivity)
                 ThemePackageManager.ensureLocalAppliedTheme(this@ThemeManageActivity, false)
                 ThemePackageManager.ensureLocalAppliedTheme(this@ThemeManageActivity, true)
             }
