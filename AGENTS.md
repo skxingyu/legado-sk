@@ -269,6 +269,8 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
 - **内置书源与其授权守卫：10059 起永久移除，不要恢复**（2026-09-21 作者指示）。不得再引入 `defaultData/bookSources.json`、`DefaultData.builtinBookSources` / `seedBuiltinBookSourcesOnce()`、`LocalConfig.builtinBookSourceSeeded`、`JsExtensions.matchApp()` / `getAppName()` / `getAppPackageName()`、`AppInfo.packageName` / `appName`。回归锁 `BuiltinSourceRemovedTest`（已双向证伪）会在恢复时失败。⚠️ 通用接口 `getAppVersionName()` / `getAppVersionCode()` / `getAppVariant()` 与平台 API `appCtx.packageName` **不受影响，勿顺手删**。存量装机已播种的那条书源**保留不动**（无法区分系统播种与用户自建，主动删会误删用户数据）。
+- **内置主题预设的可见性（10060 起播种）**：主题管理页列的是 `themePackages/{day,night}/` 下的**目录**（`loadLocal()` 的 `listFiles()`），**不读 `ThemeConfig.configList`**。10054 的 `MD3·墨墟`/`MD3·琴女` 预设原本只作为 `configList` 的**资产来源**存在、从未物化成目录，故 10060 之前**没有任何入口能选到**；10060 起由 `ThemePackageManager.seedBuiltinPresetsOnce()` 在**首次进入主题管理页**时落成普通主题包（可应用/可编辑/可删除）。⚠️ 三个不可改回的点：① 判据必须是 `LocalConfig.builtinThemePresetSeeded` **一次性标记**，改成「目录是否存在」会让用户删掉的预设复活；② 落包前必须 `resolvePresetBackgrounds` 解掉 `@asset:` 前缀，否则背景静默丢失；③ 播种时机是**进主题页**而非 App 启动。⚠️ **不要相信「`themeConfig.json` 存在会遮蔽主题预设」**——该遮蔽只影响读 `configList` 的资产合并，与主题管理页无关（唯一消费者 `ThemeListDialog` 是死代码）；2026-09-21 曾据此误判「共存版开过主题页导致预设消失」，**已证伪**。
+- **阅读排版预设按数组下标寻址**：`DefaultData.readConfigs` 由 `ReadBookConfig.getConfig(index)` 直接取用，`readStyleSelect` 是 **Int**。**只允许在数组末尾追加**，改名安全但要同步 `BuiltinPresetAssetTest.READ_PRESET_HEAD`；插入/重排会让存量用户当前排版整体位移。唯一比较预设**名字**的地方是 `ReadBookConfig.kt` 的 `isOldFormatConfigList`（旧格式迁移），改名经实跑验证不影响其布尔结果（下标 0 先命中 `||` 短路）。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
 - **备份打包清单的两类路径（10044 确立、10045 补强，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法：先让创建者建好目录并补齐内容，**再按"目录里实际有什么"判定**（`coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。⚠️ **判据必须锚定"最终要被打包的那个对象的状态"，不能锚定"本次流程做了什么动作"**——`prepareCustomCoverBackup()` 对**已在该目录内**的封面会跳过拷贝，用"本次拷了几个"判定会把最常见的场景误判为空（10045 首版实现即犯此错，被实机回归抓到）。
 - **⚠️ 已知继承缺陷（2026-09-15 审查登记，作者决定不修，后续审查勿重复上报）**：以下两项是**上游自带**缺陷（上游 `v3.26.091403` 仍未修），**刻意与上游保持一致**以降低同步成本：
@@ -336,7 +338,20 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10059（`3.26.092108c`）已构建并通过模拟器验证（2026-09-21）——当前交付（移除内置书源与其作者授权守卫）**：
+- ✅ **10060（`3.26.092114c`）已构建并通过模拟器验证（2026-09-21）——当前交付（内置主题预设播种 + 排版预设「猫黄」更名）**：
+  - **性质**：功能版（补一个**从未接通**的入口）+ 改名。**无 DB 迁移**。
+  - **改动一：内置主题预设播种**。修的是一项**自 10054 起就存在的入口缺失**（不是回归）：主题管理页列的是 `themePackages/{day,night}/` 下的**目录**，而 10054 的 `MD3·墨墟`/`MD3·琴女` 预设只作为 `configList` 的**资产来源**存在、**从未物化成目录** → 4 套预设**在任何界面都不可见、无法应用**；唯一读 `configList` 的 `ThemeListDialog` 是**死代码**。
+    - **修法**：新增 `ThemePackageManager.seedBuiltinPresetsOnce(context)`，在 `ThemeManageActivity.onActivityCreated` 中 `ensureLocalAppliedTheme` **之前**调用，把 `DefaultData.themeConfigs` 逐条**复用既有落包链路**（`saveConfig` → 拷资产 → 写 `theme.json` → `addConfig`）落成普通主题包 → **可应用、可编辑、可删除，零新增 UI**。
+    - **配套**：`ThemeConfig.Config.resolvePresetBackgrounds` 由 `private` 提为 `internal`（`@asset:` → 可读绝对路径，`copyAssetsIntoPackage` 的前提）；`LocalConfig.builtinThemePresetSeeded` 一次性标记。
+    - **验证**：清数据全新装 → 主题页日/夜各 **3 张卡**；「应用」生效（`durThemeNameNight=MD3·琴女`）；「编辑」打开编辑器且值预填（主色调 `#706B66`）；「删除本地」后**重进页面不复活**；`logcat -b crash` 0 条。**存量升级**：装 10059 进主题页只有 1 条 → 覆盖装 10060 → 自动补种为 3 条。**冷启动进主页不播种**（`themePackages/` 不存在），只有进主题页才落包。
+    - **回归锁**：`BuiltinPresetAssetTest` 新增 `everyPresetSeedsToDistinctDir`（落点重复会**静默少一项**）与 `presetBackgroundPathsAreResolvable`（`backgroundImgPath` 只能是 `@asset:` 或绝对路径），两项均**已双向证伪**（注入同名冲突→前者失败 `expected:<6> but was:<5>`；注入相对路径→后者失败）。
+  - **改动二：排版预设「猫黄」更名「黄」**（独立提交 `3617673f`）：仅改 `readConfig.json` 下标 3 的 `name`，**数组顺序不动**（下标寻址，`readStyleSelect` 是 Int）；同步 `BuiltinPresetAssetTest.READ_PRESET_HEAD`。唯一的名字比较点 `ReadBookConfig.isOldFormatConfigList` 已**实跑验证**改名不影响其布尔结果。
+  - **⚠️ 更正 10054 的一条历史结论**：旧记「`themeConfig.json` 存在会完全遮蔽预设、导致看不到」**与主题管理页无关**（该页不读 `configList`）。2026-09-21 排查一度据此误判「共存版因开过主题页而遮蔽预设」，**已证伪**——正式版与共存版表现完全一致，预设是从来就没有入口。
+  - **验证**：全量单测 **182 项 / 10 失败**（10 项＝既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`，**无新增失败**）。
+  - **产物** 两条（同版本号、同签名、仅包名不同）：正式版 `release/legado_sk_3.26.092114c_10060_arm64-v8a.apk`（36,164,681 字节）＋共存版 `release/legado_sk_3.26.092114c_10060_arm64-v8a_sk2.apk`（44,521,721 字节）；aapt 均为 `10060` / `3.26.092114c` / 阅读SK / arm64-v8a / locales `'zh'`。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10060 正式版。
+  - **未发布 Release**（作者未指示；按 §5 若发布则默认 Pre）。**下一次交付 versionCode 从 `10061` 递增。**
+
+- ✅ **10059（`3.26.092108c`）已构建并通过模拟器验证（2026-09-21）——历史交付（移除内置书源与其作者授权守卫）**：
   - **性质**：删除型改动（无新功能、无 DB 迁移、无需升级迁移）。作者指示：内置书源用的人变多，**不再内置**；同时移除「只有包名 `io.legado.app.c` + 应用名 `阅读SK` 才放行正文」的授权判定。
   - **改动范围（全为删除，`app/build.gradle` 仅随此前 sk2 改动，与本次无关）**：
     - 删除资产 `app/src/main/assets/defaultData/bookSources.json`（番茄书源 115,027 字节，含 `fqAuthOk` 守卫与 `FQ_AUTH_DENIED` 文案）。
@@ -404,7 +419,7 @@ uiautomator2 / ADB
     - **预设匹配键 = `themeName` + `isNightTheme`**（`addConfig`/`addConfigs` 一致）；MD3 包会按同一 `themeName` 拆成日/夜两条。
     - **素材取自真机导入产物**（非手算），保证预设与手动导入结果一致。例：墨墟日间 `accentColor #E6FFFF`、夜间 `#000000`（源里带 alpha 0，`md3ColorToHex` 会丢 alpha）；`backgroundImgBlur` 被 `coerceIn(0,25)` 从 97 钳到 25。
     - 命名：MD3 manifest 无 `name`，会退化成通用名 `MD3主题`，故重命名为 `MD3·墨墟`。
-    - ⚠️ **预设可见性依赖仓库原有机制**：`ThemeConfig.configList = getConfigs() ?: DefaultData.themeConfigs` —— **用户一旦有 `filesDir/themeConfig.json` 就完全遮蔽预设**。该文件只由 `ThemeConfig.save()`（`delConfig` 删除 / `upConfig` 恢复）写入，**导入主题不会触发保存**。故"导入过主题但没删过"的设备仍能看到预设；**自定义过主题/排版则看不到**。这是 10051 之前就有的行为（旧的 `黑猫慢生活`/`黯夜` 同样规则），本次**未改动**。
+    - ⚠️ **预设可见性（10060 已更正）**：`ThemeConfig.configList = getConfigs() ?: DefaultData.themeConfigs` —— 有 `filesDir/themeConfig.json` 时预设**不进 `configList`**。⚠️ 但该遮蔽**只影响读 `configList` 的资产合并**（`getDayTheme`/`getNightTheme`），**主题管理页从不读 `configList`**（它列 `themePackages/` 目录），故**与「预设能否被选到」无关**。10060 之前预设**没有任何入口**，10060 起由 `seedBuiltinPresetsOnce()` 播种落包使其可见。
     - **不覆盖**：导航图标与封面相册按设计忽略；预设**不改变当前已应用的主题/排版**，只追加到列表末尾。
   - **验证**：`BuiltinPresetAssetTest` 6/6 通过（`--rerun-tasks` 实跑）。⚠️ **资产类测试必须 `--rerun-tasks`**——曾出现 Gradle 报 BUILD SUCCESSFUL 却未真正执行（注入的错误仍在）的**假绿**。回归锁已双向证伪：改坏主题预设图片名 → `themePresetAssetRefsExist` 失败（第 47 行）；移动 `娑娜` 到 index 0 → `readPresetIsAppendedAtEnd` 失败（第 69 行）。全量单测 **181 项 / 10 失败**（10 项＝既有已知失败：`CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）。
   - **实机回归（作者手动完成）**：换源不重复建书、书架「合并重复书籍」正常；三套预设显示效果确认；**娑娜排版修正后的效果已实测通过**。10054 已覆盖安装到手机与平板（TB-9707F），版本号校验一致。
