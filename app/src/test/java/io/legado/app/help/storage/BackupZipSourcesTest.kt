@@ -109,7 +109,7 @@ class BackupZipSourcesTest {
      * 打包清单构建期间的存在性判定提前跳过（此时目录尚未创建）→ 封面漏备份。
      *
      * 用读源码文本的方式校验：触碰 `Backup` object 会初始化 `appCtx`（JVM 单测不可用），
-     * 与 `DefaultData.builtinBookSources` 同类问题。Gradle 单测 CWD 为模块目录 `app/`。
+     * 与 `DefaultData.themeConfigs` 同类问题。Gradle 单测 CWD 为模块目录 `app/`。
      */
     @Test
     fun coversIsNotInBackgroundAssetDirNames() {
