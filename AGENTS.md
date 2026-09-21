@@ -344,23 +344,22 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10063（`3.26.092111c`）已构建并通过模拟器验证（2026-09-21）——当前交付（内置预设改名 + 重复条目修复）**：
-  - **性质**：修缺陷（10061/10062 引入的重复主题条目）+ 预设改名。**无 DB 迁移**。⚠️ **未发布 Release**（作者要求先自行测试）。
+- ✅ **10063 / 10064 / 10065（`3.26.092111c` / `3.26.092112c` / `3.26.092117c`）已构建并验证（2026-09-21）——当前交付（内置预设改名 + 重复条目修复 + 升级保数据实证）**：
+  - **三者代码完全相同**（10064/10065 仅为造出"版本号变大"的升级场景而重编）。**无 DB 迁移**。⚠️ **均未发布 Release**（作者要求先自行测试）。**下一次 versionCode 从 `10066` 递增。**
   - **改动一：日/夜默认预设更名为「白」/「黑」**（`themeConfig.json` index 0/1，原「黑猫慢生活」/「黯夜」）。
   - **改动二：统一「内置预设是否已物化」判据**。主题管理页列的是 `themePackages/{day,night}/` 下的**目录**且**不去重**，而旧名目录已由 `ensureLocalAppliedTheme` 落在存量设备上 → 落包入口不认旧名就会同主题并列两条。
     - ⚠️ **10062 的失败教训（必读）**：旧名 guard 只加在 `seedBuiltinPresetsOnce`，**漏了真正落刀的 `ensureLocalAppliedTheme`**。后者取 `getThemeConfig` 的默认兜底名「白」去查目录，存量设备上只有旧名「黑猫慢生活」→ `readPackage` 落空 → 落出 `day/白` **空壳**（配色取自 pref 默认值而非预设资产），与旧名目录并列。实测日间 4 条、夜间 4 条。
     - **修法**：抽出唯一判据 `findMaterializedPreset(isNightTheme, name): Entry?`（连同旧名一起查，**命中即返回该条目**），`seedBuiltinPresetsOnce` 与 `ensureLocalAppliedTheme` **共用**；后者命中时直接返回既有包，不再落新壳。
     - ⚠️ **两个不可改回的点**：① 判据必须唯一，**任何新增的落包入口都必须复用 `findMaterializedPreset`**；② 日后**再改预设名时必须把旧名补进 `presetLegacyDirNames`**，否则重复条目重现。
     - **作者选择：方案 A「不动存量」**——旧名目录存在即跳过，**既不新建也不改名**；存量设备继续显示旧名，只有全新安装才显示「白」/「黑」。
-  - **验证（雷电模拟器 emulator-5554，`io.legado.app.sk2`，受控实验）**：
-    - **存量路径**：手工构造「只有旧名目录（`黑猫慢生活`/`黯夜`）+ 播种标记缺失」的纯净前置态 → 进主题管理页后**只多出 `MD3·墨墟`/`MD3·琴女`**，**`白`/`黑` 一个都没产生**；日/夜各 **3 张卡**，两次进出**条目数稳定**。
-    - **全新安装路径**：`pm clear` 后进主题页 → 日 `MD3·琴女`/`MD3·墨墟`/`白`、夜 `…/黑`，各 **3 张卡**。`白`/`黑` 的 `primaryColor` 为预设真值（`#ffecebe9`/`#ff333333`），**不是** pref 默认值的空壳。
-    - ⚠️ 注：`白`/`黑` 预设的 `backgroundImgPath` **本来就是 `None`**（纯色预设），`bg=None` 属正常，不是缺陷判据；区分"空壳"要看 `primaryColor` 是否等于预设值。真正带背景的是 `MD3·墨墟`/`MD3·琴女`（`background.jpg`）。
-    - `logcat -b crash` 0 条；`io.legado.app.c` / `io.legado.app.sk2` / 阅读C（`io.legado.app.yuedu.a.release`）**三者并存**、`dataDir` 各自独立。
-  - **回归锁**：`BuiltinPresetAssetTest.everyMaterializationEntryPointSharesLegacyAwarePredicate`（两个落包入口都必须引用共享判据）+ `materializedPredicateActuallyChecksLegacyDir`（判据必须真查旧名）。**已双向证伪**：摘掉 `ensureLocalAppliedTheme` 的 guard 即失败 `everyMaterializationEntryPointSharesLegacyAwarePredicate`。⚠️ 此前那版只断言「映射存在」的测试**拦不住这个 bug**，这正是它逃过 10062 验证的原因。
+  - **验证一：主题路径（`sk2`，受控实验）**：存量态（只有旧名目录 + 播种标记缺失）→ 进主题页**只多出 `MD3·墨墟`/`MD3·琴女`**，**`白`/`黑` 一个都没产生**，日/夜各 **3 张卡**、两次进出稳定；全新装（`pm clear`）→ 日 `MD3·琴女`/`MD3·墨墟`/`白`、夜 `…/黑`，各 3 张卡，`primaryColor` 为预设真值。⚠️ `白`/`黑` 预设 `backgroundImgPath` **本来就是 `None`**（纯色预设），`bg=None` **不是**空壳判据，要看 `primaryColor`。`logcat -b crash` 0 条；三包（`io.legado.app.c` / `io.legado.app.sk2` / 阅读C）并存且 `dataDir` 独立。
+  - **验证二：升级保数据实证（作者要求，两轮覆盖安装）**：`10063 → 10064 → 10065`，两包各升两轮，逐轮比对 —— `book_sources` **1 条不变**（`番茄小说 | https://fanqienovel.com/`）、`searchBooks` 15、`book_groups` 4、`shared_prefs` 4 个文件，**零变化**；冷启动均正常、`logcat -b crash` 0 条。功能面：搜「wenzhang」出 15 条真实书单 → 书籍详情「来源：番茄小说」77 章 → 章节目录 → **阅读页正文真实渲染**（截图 `test-records/upgrade-test/`）。
+    - ⚠️ **升级不丢数据的原因**：书源在 `/data/data/<pkg>/databases/legado.db`（**私有目录**），`install -r` 只换 APK 不动 `dataDir`。会丢数据的只有 `pm clear` 或卸载重装（后者因换签名）。
+    - ⚠️ **代码面复核（确认无覆盖路径）**：`AppDatabase.kt:97` 的 `fallbackToDestructiveMigrationFrom(false, 1..9)` 是**破坏性回退**，但仅覆盖版本 **1–9**；迁移链 `10→117` 完整（`migrations` 数组）。⚠️ **版本 43–89 无迁移且不在破坏性白名单内**——这是**上游继承**的断档（Room 此时抛异常而非清库），SK 自 10036 新基底的 DB 版本 ≥90，**存量用户不可达**；若日后有人拿 DB 43–89 的老包升级，会直接失败而非静默丢数据。`DefaultData.upVersion()` 里的 `importDefault*` 全部只 `deleteDefault()`（如 `delete from httpTTS where id < 0`），**不碰 `book_sources`**；`AiCreationConfig.nukeOnAppVersionChange()` 确实是**每次版本号变化都执行**的破坏性钩子，但只清 **AI 配置类 pref**（`aiProviderList`/`aiModelConfigList` 等），**不含书源**。
+    - ⚠️ **导入书源的权限前提**：走 `MANAGE_EXTERNAL_STORAGE`，`pm grant` 授不了。用 `adb shell appops set <pkg> MANAGE_EXTERNAL_STORAGE allow` 可绕过设置页（已验证有效）；否则会静默不落库。
+  - **回归锁**：`BuiltinPresetAssetTest.everyMaterializationEntryPointSharesLegacyAwarePredicate`（两个落包入口都必须引用共享判据）+ `materializedPredicateActuallyChecksLegacyDir`（判据必须真查旧名）。**已双向证伪**：摘掉 `ensureLocalAppliedTheme` 的 guard 即失败。⚠️ 此前那版只断言「映射存在」的测试**拦不住这个 bug**，这正是它逃过 10062 验证的原因。
   - **验证**：全量单测 **186 项 / 10 失败**（10 项＝既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`，**无新增失败**）。
-  - **产物** 两条（同版本号、同签名、仅包名不同）：正式版 `release/legado_sk_3.26.092111c_10063_arm64-v8a.apk`（36,165,002 字节）＋共存版 `release/legado_sk_3.26.092111c_10063_arm64-v8a_sk2.apk`（44,522,126 字节）；aapt 均为 `10063` / `3.26.092111c` / 阅读SK / arm64-v8a / locales `'zh'`，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10063 正式版。**已装机验证**。
-  - **下一次交付 versionCode 从 `10064` 递增。**
+  - **产物**（每版两条，同版本号、同签名、仅包名不同）：10063 正式版 36,165,002 / 共存版 44,522,126；10064 正式版 36,165,017 / 共存版 44,522,149；10065 正式版 36,165,027 / 共存版 44,522,152 字节。aapt 均为 `阅读SK` / arm64-v8a / locales `'zh'`，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10065 正式版。**均已装机验证**。
 
 - ✅ **10060（`3.26.092114c`）已构建并通过模拟器验证（2026-09-21）——历史交付（内置主题预设播种 + 排版预设「猫黄」更名）**：
   - **性质**：功能版（补一个**从未接通**的入口）+ 改名。**无 DB 迁移**。
