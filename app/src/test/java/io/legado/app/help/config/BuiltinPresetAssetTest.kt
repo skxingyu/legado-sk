@@ -105,6 +105,6 @@ class BuiltinPresetAssetTest {
     }
 
     private companion object {
-        val READ_PRESET_HEAD = listOf("猫咪", "秋", "春", "猫黄", "黑猫")
+        val READ_PRESET_HEAD = listOf("猫咪", "秋", "春", "黄", "黑猫")
     }
 }
