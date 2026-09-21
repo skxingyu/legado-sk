@@ -357,6 +357,12 @@ uiautomator2 / ADB
     - 共存版 `release/legado_sk_3.26.092108c_10059_arm64-v8a_sk2.apk`（44,520,545 字节，sha256 `6ca9b30726c8665011662172a9da118d53cbe46dcf0f9ac0e1ced025f7a33edf`），aapt：`io.legado.app.sk2` / 10059 / `3.26.092108c` / 阅读SK / arm64-v8a / locales `'zh'`。
     - 两者 apksigner 均 exit 0，证书 SHA-256 同为 `79fef578…`。`release/legado-sk-arm64-v8a.apk`（固定名「当前交付 APK」）已更新为 10059 正式版。
   - **未发布 Release**（作者未指示；按 §5 若发布则默认 Pre）。**下一次交付 versionCode 从 `10060` 递增。**
+  - 🧪 **去守卫版书源（供共存版做基础测试用）**：`test-records/fanqie_noguard.json`（114,162 字节，gitignore 内）。
+    - **来源与生成**：从 `test-records/bookSources.json.10058.bak`（10058 原版内置书源备份）机械剥离授权守卫——`ruleContent.content` 去掉 `if (!fqAuthOk.call(this)) { FQ_AUTH_DENIED; } else {` 外壳（保留首位 `@js:`，正文逐字未动），`jsLib` 去掉 `// ===== 作者授权校验` 起的整段（`FQ_SK_PKG`/`FQ_SK_NAME`/`FQ_SK_GITHUB`/`fqAuthOk`/`FQ_AUTH_DENIED`，424 字符）。备注与分组同步改写。
+    - **校验**：JSON 合法；6 条 `@js` 规则（`jsLib`/`ruleContent.content`/`ruleSearch.bookList`/`ruleExplore.bookList`/`ruleToc.chapterList`/`searchUrl`）全部通过 node `new Function()` 语法校验；`fqAuthOk`/`FQ_AUTH_DENIED`/`matchApp`/`io.legado.app.c` 残留计数均为 **0**。
+    - **导入结论（雷电模拟器 emulator-5554，2026-09-21）**：导入 `io.legado.app.sk2` 成功（DB `book_sources` 计数 1）；搜索「wenzhang」返回真实书单（含封面/作者/标签）；进书籍详情正常；**进阅读页正文正常渲染**（第 1 章真实正文，**不是**未授权引导文案）→ **守卫已确实失效，正文逻辑完整可用**；`logcat -b crash` 0 条、无 FATAL。
+    - ⚠️ **导入前置条件（踩坑）**：书源「本地导入」走的是 `MANAGE_EXTERNAL_STORAGE`（所有文件访问权限）判定（`Permissions.kt` / `Request.kt:109` 判 `Environment.isExternalStorageManager()`），**`pm grant` 授不了该权限**，必须在设置页手动开「授予管理所有文件的权限」；只授 `READ/WRITE_EXTERNAL_STORAGE` 仍会弹「阅读需要访问存储卡权限」。
+    - ⚠️ **该文件不随包分发、不提交**（在 gitignore 的 `test-records/`）。正式版与共存版的**新版仍不含任何内置书源**——这份只是手工导入到模拟器做测试用的。
 
 - ✅ **10058（`3.26.091959c`）已发布 Pre-release `v3.26.091959-10058`（2026-09-19）——历史交付（全项目审查修复合集 + 阅读页设置白字真修）**：
   - **性质**：审查修复版（无新功能、无 DB 迁移）。分支 `fix/review-r2`（自 10055 源码基线 `def356d3` 拉出、修复完成并验证后由作者指示合并发布）合入 main。改动链：`bac324fc`（P0）→ `cc220d4f`（P2-1 初版，已被取代）→ `dde3d687`/`a12895f4`/`c48d183f`/`f4444a2d`（P2-2~5）→ `cac80a7a`（P3）→ `6a119fc5`（白字返工）→ `ced0baad`（白字真因）。10056/10057 为分支中间构建，**无 Release**。逐项细节以 `companion/发布版更新记录.md` 10058 条目为准。
