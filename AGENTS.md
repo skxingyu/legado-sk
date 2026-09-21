@@ -355,7 +355,7 @@ uiautomator2 / ADB
     - ⚠️ **两个不可改回的点**：① 判据必须唯一，**任何新增的落包入口都必须复用 `findMaterializedPreset`**；② 日后**再改预设名时必须把旧名补进 `presetLegacyDirNames`**，否则重复条目重现。
     - **作者选择：方案 A「不动存量」**——旧名目录存在即跳过，**既不新建也不改名**；存量设备继续显示旧名，只有全新安装才显示「白」/「黑」。
   - **验证一：主题路径（`sk2`，受控实验）**：存量态（只有旧名目录 + 播种标记缺失）→ 进主题页**只多出 `MD3·墨墟`/`MD3·琴女`**，**`白`/`黑` 一个都没产生**，日/夜各 **3 张卡**、两次进出稳定；全新装（`pm clear`）→ 日 `MD3·琴女`/`MD3·墨墟`/`白`、夜 `…/黑`，各 3 张卡，`primaryColor` 为预设真值。⚠️ `白`/`黑` 预设 `backgroundImgPath` **本来就是 `None`**（纯色预设），`bg=None` **不是**空壳判据，要看 `primaryColor`。`logcat -b crash` 0 条；三包（`io.legado.app.c` / `io.legado.app.sk2` / 阅读C）并存且 `dataDir` 独立。
-  - **验证二：升级保数据实证（作者要求，两轮覆盖安装）**：`10063 → 10064 → 10065`，两包各升两轮，逐轮比对 —— `book_sources` **1 条不变**（`番茄小说 | https://fanqienovel.com/`）、`searchBooks` 15、`book_groups` 4、`shared_prefs` 4 个文件，**零变化**；冷启动均正常、`logcat -b crash` 0 条。功能面：搜「wenzhang」出 15 条真实书单 → 书籍详情「来源：番茄小说」77 章 → 章节目录 → **阅读页正文真实渲染**（截图 `test-records/upgrade-test/`）。
+  - **验证二：升级保数据实证（作者要求，两轮覆盖安装）**：`10063 → 10064 → 10065`，两包各升两轮，逐轮比对 —— `book_sources` **1 条不变**（`番茄小说 | https://fanqienovel.com/`）、`searchBooks` 15、`book_groups` 4、`shared_prefs` 4 个文件，**零变化**；冷启动均正常、`logcat -b crash` 0 条。功能面：搜「wenzhang」出 15 条真实书单 → 书籍详情「来源：番茄小说」77 章 → 章节目录 → **阅读页正文真实渲染**（现场截图，属一次性过程产物，已清理）。
     - ⚠️ **升级不丢数据的原因**：书源在 `/data/data/<pkg>/databases/legado.db`（**私有目录**），`install -r` 只换 APK 不动 `dataDir`。会丢数据的只有 `pm clear` 或卸载重装（后者因换签名）。
     - ⚠️ **代码面复核（确认无覆盖路径）**：`AppDatabase.kt:97` 的 `fallbackToDestructiveMigrationFrom(false, 1..9)` 是**破坏性回退**，但仅覆盖版本 **1–9**；迁移链 `10→117` 完整（`migrations` 数组）。⚠️ **版本 43–89 无迁移且不在破坏性白名单内**——这是**上游继承**的断档（Room 此时抛异常而非清库），SK 自 10036 新基底的 DB 版本 ≥90，**存量用户不可达**；若日后有人拿 DB 43–89 的老包升级，会直接失败而非静默丢数据。`DefaultData.upVersion()` 里的 `importDefault*` 全部只 `deleteDefault()`（如 `delete from httpTTS where id < 0`），**不碰 `book_sources`**；`AiCreationConfig.nukeOnAppVersionChange()` 确实是**每次版本号变化都执行**的破坏性钩子，但只清 **AI 配置类 pref**（`aiProviderList`/`aiModelConfigList` 等），**不含书源**。
     - ⚠️ **导入书源的权限前提**：走 `MANAGE_EXTERNAL_STORAGE`，`pm grant` 授不了。用 `adb shell appops set <pkg> MANAGE_EXTERNAL_STORAGE allow` 可绕过设置页（已验证有效）；否则会静默不落库。
@@ -374,7 +374,7 @@ uiautomator2 / ADB
   - **⚠️ 更正 10054 的一条历史结论**：旧记「`themeConfig.json` 存在会完全遮蔽预设、导致看不到」**与主题管理页无关**（该页不读 `configList`）。2026-09-21 排查一度据此误判「共存版因开过主题页而遮蔽预设」，**已证伪**——正式版与共存版表现完全一致，预设是从来就没有入口。
   - **验证**：全量单测 **182 项 / 10 失败**（10 项＝既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`，**无新增失败**）。
   - **产物** 两条（同版本号、同签名、仅包名不同）：正式版 `release/legado_sk_3.26.092114c_10060_arm64-v8a.apk`（36,164,681 字节）＋共存版 `release/legado_sk_3.26.092114c_10060_arm64-v8a_sk2.apk`（44,521,721 字节）；aapt 均为 `10060` / `3.26.092114c` / 阅读SK / arm64-v8a / locales `'zh'`。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10060 正式版。
-  - **未发布 Release**（作者未指示；按 §5 若发布则默认 Pre）。**下一次交付 versionCode 从 `10061` 递增。**
+  - **未发布 Release**（被 10065 取代，两者均无 Release）。
 
 - ✅ **10059（`3.26.092108c`）已构建并通过模拟器验证（2026-09-21）——历史交付（移除内置书源与其作者授权守卫）**：
   - **性质**：删除型改动（无新功能、无 DB 迁移、无需升级迁移）。作者指示：内置书源用的人变多，**不再内置**；同时移除「只有包名 `io.legado.app.c` + 应用名 `阅读SK` 才放行正文」的授权判定。
