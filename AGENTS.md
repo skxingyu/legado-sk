@@ -270,6 +270,12 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
 - **内置书源与其授权守卫：10059 起永久移除，不要恢复**（2026-09-21 作者指示）。不得再引入 `defaultData/bookSources.json`、`DefaultData.builtinBookSources` / `seedBuiltinBookSourcesOnce()`、`LocalConfig.builtinBookSourceSeeded`、`JsExtensions.matchApp()` / `getAppName()` / `getAppPackageName()`、`AppInfo.packageName` / `appName`。回归锁 `BuiltinSourceRemovedTest`（已双向证伪）会在恢复时失败。⚠️ 通用接口 `getAppVersionName()` / `getAppVersionCode()` / `getAppVariant()` 与平台 API `appCtx.packageName` **不受影响，勿顺手删**。存量装机已播种的那条书源**保留不动**（无法区分系统播种与用户自建，主动删会误删用户数据）。
 - **内置主题预设的可见性（10060 起播种）**：主题管理页列的是 `themePackages/{day,night}/` 下的**目录**（`loadLocal()` 的 `listFiles()`），**不读 `ThemeConfig.configList`**。10054 的 `MD3·墨墟`/`MD3·琴女` 预设原本只作为 `configList` 的**资产来源**存在、从未物化成目录，故 10060 之前**没有任何入口能选到**；10060 起由 `ThemePackageManager.seedBuiltinPresetsOnce()` 在**首次进入主题管理页**时落成普通主题包（可应用/可编辑/可删除）。⚠️ 三个不可改回的点：① 判据必须是 `LocalConfig.builtinThemePresetSeeded` **一次性标记**，改成「目录是否存在」会让用户删掉的预设复活；② 落包前必须 `resolvePresetBackgrounds` 解掉 `@asset:` 前缀，否则背景静默丢失；③ 播种时机是**进主题页**而非 App 启动。⚠️ **不要相信「`themeConfig.json` 存在会遮蔽主题预设」**——该遮蔽只影响读 `configList` 的资产合并，与主题管理页无关（唯一消费者 `ThemeListDialog` 是死代码）；2026-09-21 曾据此误判「共存版开过主题页导致预设消失」，**已证伪**。
+- **内置主题预设改名后必须统一「已物化」判据（10063 确立；10062 因此翻车）**：落包入口有**两个**——`seedBuiltinPresetsOnce` 与 `ensureLocalAppliedTheme`——而主题管理页**纯目录扫描、不去重**。预设改名后旧名目录仍留在存量设备上，**只堵一个入口就会同主题并列两条**（10062 只堵了播种：`ensureLocalAppliedTheme` 用默认兜底名「白」查不到旧名目录「黑猫慢生活」→ 落出 `day/白` 空壳，日/夜各 4 条）。
+  - ⚠️ **判据必须唯一**：`ThemePackageManager.findMaterializedPreset(isNightTheme, name)`——**连同旧名一起查，命中即返回该条目**；**任何新增落包入口都必须复用它**，不允许各自内联「只查新名」的目录检查。回归锁 `everyMaterializationEntryPointSharesLegacyAwarePredicate` 会失败。
+  - ⚠️ **日后再改预设名时，必须把旧名补进 `presetLegacyDirNames`**，否则重复条目重现。
+  - **作者选择方案 A「不动存量」**：旧名目录存在即跳过，**既不新建也不改名**；存量设备继续显示旧名，只有全新安装才显示新名。
+  - ⚠️ **`白`/`黑` 预设 `backgroundImgPath` 本来就是 `None`（纯色预设），`bg=None` 不是空壳判据**；判别空壳要看 `primaryColor` 是否为预设真值（`#ffecebe9`/`#ff333333`），带背景的是 `MD3·墨墟`/`MD3·琴女`（`background.jpg`）。
+
 - **阅读排版预设按数组下标寻址**：`DefaultData.readConfigs` 由 `ReadBookConfig.getConfig(index)` 直接取用，`readStyleSelect` 是 **Int**。**只允许在数组末尾追加**，改名安全但要同步 `BuiltinPresetAssetTest.READ_PRESET_HEAD`；插入/重排会让存量用户当前排版整体位移。唯一比较预设**名字**的地方是 `ReadBookConfig.kt` 的 `isOldFormatConfigList`（旧格式迁移），改名经实跑验证不影响其布尔结果（下标 0 先命中 `||` 短路）。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
 - **备份打包清单的两类路径（10044 确立、10045 补强，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法：先让创建者建好目录并补齐内容，**再按"目录里实际有什么"判定**（`coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。⚠️ **判据必须锚定"最终要被打包的那个对象的状态"，不能锚定"本次流程做了什么动作"**——`prepareCustomCoverBackup()` 对**已在该目录内**的封面会跳过拷贝，用"本次拷了几个"判定会把最常见的场景误判为空（10045 首版实现即犯此错，被实机回归抓到）。
@@ -338,7 +344,25 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10060（`3.26.092114c`）已构建并通过模拟器验证（2026-09-21）——当前交付（内置主题预设播种 + 排版预设「猫黄」更名）**：
+- ✅ **10063（`3.26.092111c`）已构建并通过模拟器验证（2026-09-21）——当前交付（内置预设改名 + 重复条目修复）**：
+  - **性质**：修缺陷（10061/10062 引入的重复主题条目）+ 预设改名。**无 DB 迁移**。⚠️ **未发布 Release**（作者要求先自行测试）。
+  - **改动一：日/夜默认预设更名为「白」/「黑」**（`themeConfig.json` index 0/1，原「黑猫慢生活」/「黯夜」）。
+  - **改动二：统一「内置预设是否已物化」判据**。主题管理页列的是 `themePackages/{day,night}/` 下的**目录**且**不去重**，而旧名目录已由 `ensureLocalAppliedTheme` 落在存量设备上 → 落包入口不认旧名就会同主题并列两条。
+    - ⚠️ **10062 的失败教训（必读）**：旧名 guard 只加在 `seedBuiltinPresetsOnce`，**漏了真正落刀的 `ensureLocalAppliedTheme`**。后者取 `getThemeConfig` 的默认兜底名「白」去查目录，存量设备上只有旧名「黑猫慢生活」→ `readPackage` 落空 → 落出 `day/白` **空壳**（配色取自 pref 默认值而非预设资产），与旧名目录并列。实测日间 4 条、夜间 4 条。
+    - **修法**：抽出唯一判据 `findMaterializedPreset(isNightTheme, name): Entry?`（连同旧名一起查，**命中即返回该条目**），`seedBuiltinPresetsOnce` 与 `ensureLocalAppliedTheme` **共用**；后者命中时直接返回既有包，不再落新壳。
+    - ⚠️ **两个不可改回的点**：① 判据必须唯一，**任何新增的落包入口都必须复用 `findMaterializedPreset`**；② 日后**再改预设名时必须把旧名补进 `presetLegacyDirNames`**，否则重复条目重现。
+    - **作者选择：方案 A「不动存量」**——旧名目录存在即跳过，**既不新建也不改名**；存量设备继续显示旧名，只有全新安装才显示「白」/「黑」。
+  - **验证（雷电模拟器 emulator-5554，`io.legado.app.sk2`，受控实验）**：
+    - **存量路径**：手工构造「只有旧名目录（`黑猫慢生活`/`黯夜`）+ 播种标记缺失」的纯净前置态 → 进主题管理页后**只多出 `MD3·墨墟`/`MD3·琴女`**，**`白`/`黑` 一个都没产生**；日/夜各 **3 张卡**，两次进出**条目数稳定**。
+    - **全新安装路径**：`pm clear` 后进主题页 → 日 `MD3·琴女`/`MD3·墨墟`/`白`、夜 `…/黑`，各 **3 张卡**。`白`/`黑` 的 `primaryColor` 为预设真值（`#ffecebe9`/`#ff333333`），**不是** pref 默认值的空壳。
+    - ⚠️ 注：`白`/`黑` 预设的 `backgroundImgPath` **本来就是 `None`**（纯色预设），`bg=None` 属正常，不是缺陷判据；区分"空壳"要看 `primaryColor` 是否等于预设值。真正带背景的是 `MD3·墨墟`/`MD3·琴女`（`background.jpg`）。
+    - `logcat -b crash` 0 条；`io.legado.app.c` / `io.legado.app.sk2` / 阅读C（`io.legado.app.yuedu.a.release`）**三者并存**、`dataDir` 各自独立。
+  - **回归锁**：`BuiltinPresetAssetTest.everyMaterializationEntryPointSharesLegacyAwarePredicate`（两个落包入口都必须引用共享判据）+ `materializedPredicateActuallyChecksLegacyDir`（判据必须真查旧名）。**已双向证伪**：摘掉 `ensureLocalAppliedTheme` 的 guard 即失败 `everyMaterializationEntryPointSharesLegacyAwarePredicate`。⚠️ 此前那版只断言「映射存在」的测试**拦不住这个 bug**，这正是它逃过 10062 验证的原因。
+  - **验证**：全量单测 **186 项 / 10 失败**（10 项＝既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`，**无新增失败**）。
+  - **产物** 两条（同版本号、同签名、仅包名不同）：正式版 `release/legado_sk_3.26.092111c_10063_arm64-v8a.apk`（36,165,002 字节）＋共存版 `release/legado_sk_3.26.092111c_10063_arm64-v8a_sk2.apk`（44,522,126 字节）；aapt 均为 `10063` / `3.26.092111c` / 阅读SK / arm64-v8a / locales `'zh'`，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10063 正式版。**已装机验证**。
+  - **下一次交付 versionCode 从 `10064` 递增。**
+
+- ✅ **10060（`3.26.092114c`）已构建并通过模拟器验证（2026-09-21）——历史交付（内置主题预设播种 + 排版预设「猫黄」更名）**：
   - **性质**：功能版（补一个**从未接通**的入口）+ 改名。**无 DB 迁移**。
   - **改动一：内置主题预设播种**。修的是一项**自 10054 起就存在的入口缺失**（不是回归）：主题管理页列的是 `themePackages/{day,night}/` 下的**目录**，而 10054 的 `MD3·墨墟`/`MD3·琴女` 预设只作为 `configList` 的**资产来源**存在、**从未物化成目录** → 4 套预设**在任何界面都不可见、无法应用**；唯一读 `configList` 的 `ThemeListDialog` 是**死代码**。
     - **修法**：新增 `ThemePackageManager.seedBuiltinPresetsOnce(context)`，在 `ThemeManageActivity.onActivityCreated` 中 `ensureLocalAppliedTheme` **之前**调用，把 `DefaultData.themeConfigs` 逐条**复用既有落包链路**（`saveConfig` → 拷资产 → 写 `theme.json` → `addConfig`）落成普通主题包 → **可应用、可编辑、可删除，零新增 UI**。
