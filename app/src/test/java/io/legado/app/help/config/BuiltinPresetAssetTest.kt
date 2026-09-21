@@ -143,7 +143,134 @@ class BuiltinPresetAssetTest {
         }
     }
 
+    /**
+     * 全新安装时 `durThemeName` / `durThemeNameNight` 未写入，`getDayTheme`/`getNightTheme`
+     * 用 [ThemeConfig.DEFAULT_DAY_THEME_NAME] / [ThemeConfig.DEFAULT_NIGHT_THEME_NAME] 兜底，并以此名
+     * 在 `configList` 中 `firstOrNull { it.themeName == name }` 命中预设，从而取得该预设的
+     * **背景图**等资产（见 mergeStoredThemeAssets）。
+     *
+     * 一旦兜底名与预设里的 `themeName` 不一致，命中失败 → 新装用户拿到的是**没有背景图的
+     * 裸 pref 默认配色**，且**不报任何错**。故把这两处的耦合锁死。
+     */
+    @Test
+    fun defaultThemeNamesMatchFallback() {
+        val presets = presetArray("themeConfig.json").map { it.asJsonObject }
+        val dayNames = presets.filter { !it.get("isNightTheme").asBoolean }
+            .map { it.get("themeName").asString }
+        val nightNames = presets.filter { it.get("isNightTheme").asBoolean }
+            .map { it.get("themeName").asString }
+        // 日间/夜间首条即兜底主题（themeConfig.json 约定：index 0 = 日间默认，index 1 = 夜间默认）
+        assertEquals(
+            "日间默认主题名必须与 ThemeConfig.DEFAULT_DAY_THEME_NAME 一致",
+            ThemeConfig.DEFAULT_DAY_THEME_NAME,
+            dayNames.first()
+        )
+        assertEquals(
+            "夜间默认主题名必须与 ThemeConfig.DEFAULT_NIGHT_THEME_NAME 一致",
+            ThemeConfig.DEFAULT_NIGHT_THEME_NAME,
+            nightNames.first()
+        )
+    }
+
+    /**
+     * 预设改名后，`ThemePackageManager.presetLegacyDirNames` 必须覆盖到「改名前的旧目录名」。
+     *
+     * 起因（10061 实测缺陷）：日/夜默认预设由「黑猫慢生活」/「黯夜」更名为「白」/「黑」，
+     * 存量设备上旧名目录已被 `ensureLocalAppliedTheme` 落过盘，而主题管理页是**纯目录扫描**
+     * 不做去重 → 播种不认旧名就会新建新名目录，同一主题并列两条（实测日间 5 条）。
+     *
+     * 这里锁定：默认预设一旦改名，旧名映射必须存在且不得与当前预设名相同
+     * （映射到自身等于没映射，重复条目会重现）。
+     */
+    @Test
+    fun renamedDefaultsMustHaveLegacyDirMapping() {
+        val presets = presetArray("themeConfig.json").map { it.asJsonObject }
+        val dayName = presets.first { !it.get("isNightTheme").asBoolean }
+            .get("themeName").asString
+        val nightName = presets.first { it.get("isNightTheme").asBoolean }
+            .get("themeName").asString
+
+        listOf(dayName, nightName).forEach { current ->
+            val legacy = ThemePackageManager.legacyDirNameOf(current)
+            assertNotNull("改名后的默认预设「$current」必须登记旧目录名映射，否则存量设备会重复", legacy)
+            assertTrue(
+                "「$current」的旧名映射不得指向自身（等于没映射）: $legacy",
+                legacy != current
+            )
+        }
+    }
+
+    /**
+     * ⚠️ **旧名映射必须被每一个落包入口查询，只挡住播种入口是不够的。**
+     *
+     * 10062 实测缺陷：guard 只加在 `seedBuiltinPresetsOnce`，而真正造出重复目录的是
+     * `ensureLocalAppliedTheme`（它拿 `getThemeConfig` 的默认兜底名「白」去查目录，
+     * 存量设备上只有旧名「黑猫慢生活」→ 落出 `day/白` 空壳：`backgroundImgPath=None`、
+     * `fontScale=11`，配色取自 pref 默认值而非预设资产）。结果是同一主题并列两条，
+     * 且其中一条背景丢失。单测只断言"映射存在"**拦不住这个**，故改为锁定结构。
+     *
+     * 判据：两个落包入口都必须在自身源码里引用同一个共享判据方法，
+     * 不允许各自内联一套"只查新名"的目录检查。
+     */
+    @Test
+    fun everyMaterializationEntryPointSharesLegacyAwarePredicate() {
+        val source = sourceOf("ThemePackageManager.kt")
+        listOf("ensureLocalAppliedTheme", "seedBuiltinPresetsOnce").forEach { entryPoint ->
+            val body = functionBody(source, entryPoint)
+            assertNotNull("未找到落包入口 $entryPoint（改名后请同步本测试）", body)
+            assertTrue(
+                "$entryPoint 必须在落包前查询共享判据 $MATERIALIZED_PREDICATE（含旧名），" +
+                    "否则存量升级会重复出主题条目",
+                body!!.contains(MATERIALIZED_PREDICATE)
+            )
+        }
+    }
+
+    /**
+     * 共享判据自身必须真的查旧名 —— 防止把它改成"只读映射却不用它查目录"这种假修复。
+     */
+    @Test
+    fun materializedPredicateActuallyChecksLegacyDir() {
+        val body = functionBody(sourceOf("ThemePackageManager.kt"), MATERIALIZED_PREDICATE)
+        assertNotNull("未找到共享判据 $MATERIALIZED_PREDICATE", body)
+        assertTrue(
+            "$MATERIALIZED_PREDICATE 必须把旧名纳入待查目录名集合",
+            body!!.contains("presetLegacyDirNames")
+        )
+        assertTrue(
+            "$MATERIALIZED_PREDICATE 必须按候选目录名逐个读取主题包",
+            body.contains("readPackage")
+        )
+    }
+
+    /**
+     * 截取 `fun <name>(...)` 起、到下一个同缩进 `fun ` / 类结束为止的函数体文本。
+     * 仅用于本测试的结构断言，不解析 Kotlin。
+     */
+    private fun functionBody(source: String, functionName: String): String? {
+        val header = Regex("""(?m)^\s*(?:private |internal |public )?(?:suspend )?fun $functionName\b""")
+            .find(source) ?: return null
+        val rest = source.substring(header.range.last)
+        val end = Regex("""(?m)^    (?:private |internal |public )?(?:suspend )?fun """)
+            .find(rest, 1)?.range?.first ?: rest.length
+        return rest.substring(0, end)
+    }
+
+    /** 读取主源集下的 Kotlin 源文件；CWD 兼容模块目录与仓库根。 */
+    private fun sourceOf(relativePath: String): String {
+        val candidates = listOf(
+            File("src/main/java/io/legado/app/help/config/$relativePath"),
+            File("app/src/main/java/io/legado/app/help/config/$relativePath"),
+        )
+        val file = candidates.firstOrNull { it.isFile }
+            ?: error("未找到源文件 $relativePath（候选：$candidates）")
+        return file.readText(Charsets.UTF_8)
+    }
+
     private companion object {
         val READ_PRESET_HEAD = listOf("猫咪", "秋", "春", "黄", "黑猫")
+
+        /** 见 ThemePackageManager：唯一的内置预设物化判据。 */
+        const val MATERIALIZED_PREDICATE = "findMaterializedPreset"
     }
 }

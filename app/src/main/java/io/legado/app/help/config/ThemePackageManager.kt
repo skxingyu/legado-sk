@@ -42,6 +42,25 @@ object ThemePackageManager {
     private const val defaultDayPrimary = "#F1F2F6"
     private const val legacyDefaultDayPrimary = 0xFF795548.toInt()
 
+    /**
+     * 内置主题预设改名前的**目录名**（新名 → 旧名）。
+     *
+     * 10061 把日/夜默认预设由「黑猫慢生活」/「黯夜」更名为「白」/「黑」。存量设备上
+     * 旧名目录可能已被 [ensureLocalAppliedTheme] 落过盘，而主题管理页是**纯目录扫描**
+     * （[loadLocal] 的 `listFiles()`，不做任何去重）——不认旧名就会同主题并列两条。
+     *
+     * ⚠️ 与作者选择的「不动存量」配套：旧名目录存在即跳过播种，**既不新建也不改名**，
+     * 存量设备继续显示旧名，条目数保持不变。
+     * ⚠️ 日后**再改预设名时，必须把当时的旧名补进本表**，否则会重现重复条目。
+     */
+    private val presetLegacyDirNames = mapOf(
+        "白" to "黑猫慢生活",
+        "黑" to "黯夜",
+    )
+
+    /** 仅供回归锁读取的只读视图，见 [presetLegacyDirNames]。 */
+    internal fun legacyDirNameOf(presetName: String): String? = presetLegacyDirNames[presetName]
+
     val rootDir: File
         get() = appCtx.externalFiles.getFile("themePackages")
 
@@ -186,6 +205,15 @@ object ThemePackageManager {
         return resolveConfigPaths(entry.packageInfo, dir)
     }
 
+    /**
+     * 保证当前生效主题在本地有一个主题包目录，没有就落一个。
+     *
+     * ⚠️ **落包前必须查旧名**（[findMaterializedPreset]）。当前生效主题名可能来自
+     * [ThemeConfig.getThemeConfig] 的默认值兜底（`DefaultData.themeConfigs` 首条），
+     * 而存量设备上该预设施加时用的还是旧名（[presetLegacyDirNames]）——只按新名查目录
+     * 会认为"不存在"→ 落出一个新名空壳包，与旧名目录**同一主题并列两条**，且空壳取自
+     * pref 默认值而非预设资产（背景丢失）。与 [seedBuiltinPresetsOnce] 共用同一判据。
+     */
     suspend fun ensureLocalAppliedTheme(context: Context, isNightTheme: Boolean): Entry =
         withContext(IO) {
             val currentConfig = ThemeConfig.getThemeConfig(context, isNightTheme)
@@ -198,6 +226,9 @@ object ThemePackageManager {
             val dir = localDir(isNightTheme, dirName)
             readPackage(dir)?.let { pkg ->
                 return@withContext Entry(pkg, Source.LOCAL, localDir = dir)
+            }
+            findMaterializedPreset(isNightTheme, config.themeName)?.let { entry ->
+                return@withContext entry
             }
             saveConfig(config.copy(isNightTheme = isNightTheme))
         }
@@ -215,14 +246,14 @@ object ThemePackageManager {
      * ⚠️ 落包前必须先 `resolvePresetBackgrounds` 把 `@asset:` 引用换成可读绝对路径，
      * 否则 [copyAssetsIntoPackage] 会把裸前缀串写进 theme.json（见该方法注释）。
      * ⚠️ 同名已存在（用户自建或先前播种）则跳过，不覆盖用户数据。
+     * ⚠️ **旧名目录存在时也跳过**，见 [presetLegacyDirNames]。
      */
     suspend fun seedBuiltinPresetsOnce(context: Context) = withContext(IO) {
         if (LocalConfig.builtinThemePresetSeeded) return@withContext
         DefaultData.themeConfigs.forEach { preset ->
             val name = preset.themeName.trim()
             if (name.isBlank()) return@forEach
-            val dir = localDir(preset.isNightTheme, name.normalizeFileName())
-            if (readPackage(dir) != null) return@forEach
+            if (findMaterializedPreset(preset.isNightTheme, name) != null) return@forEach
             runCatching {
                 saveConfig(preset.copy(themeName = name).resolvePresetBackgrounds(context))
             }.onFailure {
@@ -230,6 +261,26 @@ object ThemePackageManager {
             }
         }
         LocalConfig.builtinThemePresetSeeded = true
+    }
+
+    /**
+     * 该预设是否已在 `themePackages/` 下落过盘（按 `themeName` + 日夜定位目录），是则返回该条目。
+     *
+     * ⚠️ **必须连同旧名一起查**：预设曾用旧名（见 [presetLegacyDirNames]）落过盘，
+     * 存量设备升级后若只查新名，会认为"没落过"→ 再落一个新名目录，而旧名目录仍在，
+     * 主题管理页就会**同一主题显示两条**（页面是纯目录扫描，不做去重）。
+     * 按作者选择「不动存量」：旧名目录存在即视为已存在，**跳过**，不新建也不改名。
+     *
+     * ⚠️ **这是「内置预设是否已物化」的唯一判据**，[seedBuiltinPresetsOnce] 与
+     * [ensureLocalAppliedTheme] 都必须走它——任一入口漏查旧名都会重建重复条目。
+     */
+    private fun findMaterializedPreset(isNightTheme: Boolean, name: String): Entry? {
+        val names = listOfNotNull(name, presetLegacyDirNames[name])
+        for (candidate in names) {
+            val dir = localDir(isNightTheme, candidate.normalizeFileName())
+            readPackage(dir)?.let { pkg -> return Entry(pkg, Source.LOCAL, localDir = dir) }
+        }
+        return null
     }
 
     private fun reapplyRestoredAppliedTheme(context: Context, isNightTheme: Boolean) {

@@ -85,6 +85,21 @@ object ThemeConfig {
     private const val DEFAULT_NIGHT_PRIMARY = 0xFF252528.toInt()
     private const val DEFAULT_DAY_PRIMARY_HEX = "#F1F2F6"
     private const val LEGACY_DEFAULT_DAY_PRIMARY = 0xFF795548.toInt()
+    /**
+     * `durThemeName` / `durThemeNameNight` 未写入时的兜底主题名。
+     *
+     * ⚠️ 这两个值不是单纯的显示文案，而是 [getDayTheme] / [getNightTheme] 里
+     * `configList.firstOrNull { it.themeName == name }` 的**查找键**——全新安装时
+     * pref 为空，靠它命中 `DefaultData.themeConfigs` 的对应预设，从而经
+     * [mergeStoredThemeAssets] 取得该预设的背景图/圆角等资产。
+     *
+     * ⚠️ **必须与 `assets/defaultData/themeConfig.json` 里日间/夜间首条预设的
+     * `themeName` 逐字一致**，否则新装用户拿到的是无背景的裸 pref 默认配色。
+     * 改一处必须同时改另一处；`BuiltinPresetAssetTest.defaultThemeNamesMatchFallback`
+     * 锁定该一致性。
+     */
+    const val DEFAULT_DAY_THEME_NAME = "白"
+    const val DEFAULT_NIGHT_THEME_NAME = "黑"
     const val DEFAULT_BOOK_INFO_BACKGROUND_BLUR = 12
     const val PANEL_BG_CROP = "crop"
     const val PANEL_BG_FIT = "fit"
@@ -766,9 +781,9 @@ object ThemeConfig {
     fun getDurConfig(context: Context): Config {
         val isNight = AppConfig.isNightTheme
         val name = if (isNight) {
-            context.getPrefString(PreferKey.dNThemeName) ?: "黯夜"
+            context.getPrefString(PreferKey.dNThemeName) ?: DEFAULT_NIGHT_THEME_NAME
         } else {
-            context.getPrefString(PreferKey.dThemeName) ?: "黑猫慢生活"
+            context.getPrefString(PreferKey.dThemeName) ?: DEFAULT_DAY_THEME_NAME
         }
         return if (isNight) {
             getNightTheme(context, name)
@@ -779,9 +794,9 @@ object ThemeConfig {
 
     fun getThemeConfig(context: Context, isNightTheme: Boolean): Config {
         val name = if (isNightTheme) {
-            context.getPrefString(PreferKey.dNThemeName) ?: "黯夜"
+            context.getPrefString(PreferKey.dNThemeName) ?: DEFAULT_NIGHT_THEME_NAME
         } else {
-            context.getPrefString(PreferKey.dThemeName) ?: "黑猫慢生活"
+            context.getPrefString(PreferKey.dThemeName) ?: DEFAULT_DAY_THEME_NAME
         }
         return if (isNightTheme) {
             getNightTheme(context, name)
