@@ -142,11 +142,27 @@ Set-Location 'C:\code\ai-code\legado-sk'   # 编译必须在仓库根执行
 $versionCode = <new-version-code>
 $versionName = '3.26.<MMddHH>c'            # 完整版本名（含 c 后缀）
 .\gradlew.bat ':app:assembleAppRelease' "-Pabi=arm64-v8a" "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
+# 共存版（与正式版 / 阅读C 同时安装）：与正式版同一次编译一并产出，除任务名外参数完全相同
+.\gradlew.bat ':app:assembleAppSk2' "-Pabi=arm64-v8a" "-PVERSION_CODE=$versionCode" "-PVERSION_NAME=$versionName" --console=plain --warning-mode=summary
 ```
+
+#### 共存版 `sk2`（2026-09-21 起恢复，与正式版并行交付）
+
+> 历史：10004–10006 曾以 `sk2` 共存版随正式版双发，10007 起停发并写明「不再提供 sk2」。**2026-09-21 作者决定恢复**，本日起每次正式编译都**必须同时**产出共存版，文档口径已同步更正。
+
+- 变体 = `app` flavor + `sk2` buildType（**buildType，不是新 flavor**），包名 **`io.legado.app.sk2`**，应用名同「阅读SK」；与正式版 `io.legado.app.c`（`app`+`release`）、阅读C 三者可同时安装。
+- 产物在 `app\build\outputs\apk\app\sk2`；⚠️ **注意 `sk2` 是 `debug` 系 buildType（`initWith debug`，继承 debug 源集），产物目录就是 `app\sk2` 本身**（debug 的 `debug` 源集只被 `debug` 变体使用，不影响此路径）。
+- Gradle 输出名同正式版（`legado_sk_<versionName>_<versionCode>.apk`，无 `_arm64-v8a` 后缀），**收进 `release/` 时按约定补后缀并加 `_sk2`**。
+- ⚠️ **共存版与正式版共用同一 `VERSION_CODE` / `VERSION_NAME`，不另加版本后缀**（`sk2` 刻意**没有** `versionNameSuffix`）。两条产物的版本事实必须逐字一致，便于回溯「同一个 10058」。
+- ⚠️ **两者同用 SDK debug 签名**：改的是包名不是签名，因此**不能互相覆盖安装**（这正是共存的前提）；也**不能覆盖安装阅读C**（签名不同，需走 §2 的数据迁移流程）。
+- ⚠️ **共存版是独立应用、独立数据**：包名不同 → `filesDir` / `getExternalFilesDir(null)`（缓存、书籍、主题、pref、DB）全部隔离，**不共享书架与进度**。它是"并行再装一份"，不是"共用数据"；要同步数据走应用内备份导出/导入（WebDAV 或本地 zip）。私有目录之外的**用户可见路径共用**（如 `/sdcard/Download/yuedu` 导出目录、WebDAV 目录名），互导时注意覆盖。
+- ⚠️ **无需为共存改任何源码**：隔离由 Android 平台按 `applicationId` 保证（不同包名 → 不同 uid / 数据沙箱 / `FileProvider` authority；manifest 中 `authorities` 全部是 `${applicationId}` 占位，`AppConst.authority` 取 `BuildConfig.APPLICATION_ID`）。共存版与正式版除包名外**无任何行为差异**（10059 起内置书源与其授权守卫已整体移除，见 §6）。
+- 共存版**不发布 GitHub Release 资产、不参与更新检查**，只作为本地交付物收进 `release/`。
 
 编译成功后必须把新 APK 收进仓库根已忽略的交付目录：
 1. 覆盖 `C:\code\ai-code\legado-sk\release\legado-sk-arm64-v8a.apk`（「当前交付 APK」，固定名；`/release` 已被 .gitignore 忽略）。
 2. 按版本命名同存于 `C:\code\ai-code\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a.apk`。
+3. 共存版同存于 `C:\code\ai-code\legado-sk\release\`：`legado_sk_<versionName>c_<versionCode>_arm64-v8a_sk2.apk`。
 
 ### 长命令和构建失败
 
@@ -252,6 +268,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
+- **内置书源与其授权守卫：10059 起永久移除，不要恢复**（2026-09-21 作者指示）。不得再引入 `defaultData/bookSources.json`、`DefaultData.builtinBookSources` / `seedBuiltinBookSourcesOnce()`、`LocalConfig.builtinBookSourceSeeded`、`JsExtensions.matchApp()` / `getAppName()` / `getAppPackageName()`、`AppInfo.packageName` / `appName`。回归锁 `BuiltinSourceRemovedTest`（已双向证伪）会在恢复时失败。⚠️ 通用接口 `getAppVersionName()` / `getAppVersionCode()` / `getAppVariant()` 与平台 API `appCtx.packageName` **不受影响，勿顺手删**。存量装机已播种的那条书源**保留不动**（无法区分系统播种与用户自建，主动删会误删用户数据）。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
 - **备份打包清单的两类路径（10044 确立、10045 补强，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法：先让创建者建好目录并补齐内容，**再按"目录里实际有什么"判定**（`coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。⚠️ **判据必须锚定"最终要被打包的那个对象的状态"，不能锚定"本次流程做了什么动作"**——`prepareCustomCoverBackup()` 对**已在该目录内**的封面会跳过拷贝，用"本次拷了几个"判定会把最常见的场景误判为空（10045 首版实现即犯此错，被实机回归抓到）。
 - **⚠️ 已知继承缺陷（2026-09-15 审查登记，作者决定不修，后续审查勿重复上报）**：以下两项是**上游自带**缺陷（上游 `v3.26.091403` 仍未修），**刻意与上游保持一致**以降低同步成本：
@@ -319,7 +336,29 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10058（`3.26.091959c`）已发布 Pre-release `v3.26.091959-10058`（2026-09-19）——当前交付（全项目审查修复合集 + 阅读页设置白字真修）**：
+- ✅ **10059（`3.26.092108c`）已构建并通过模拟器验证（2026-09-21）——当前交付（移除内置书源与其作者授权守卫）**：
+  - **性质**：删除型改动（无新功能、无 DB 迁移、无需升级迁移）。作者指示：内置书源用的人变多，**不再内置**；同时移除「只有包名 `io.legado.app.c` + 应用名 `阅读SK` 才放行正文」的授权判定。
+  - **改动范围（全为删除，`app/build.gradle` 仅随此前 sk2 改动，与本次无关）**：
+    - 删除资产 `app/src/main/assets/defaultData/bookSources.json`（番茄书源 115,027 字节，含 `fqAuthOk` 守卫与 `FQ_AUTH_DENIED` 文案）。
+    - `DefaultData.kt`：删 `builtinBookSources` 读取点、`seedBuiltinBookSourcesOnce()`、`builtinBookSourcesToSeed()`，以及 `upVersion()` 里的播种调用；顺带删两个因此变成未使用的 import。
+    - `LocalConfig.kt`：删 `builtinBookSourceSeeded` 一次性标记（**该 pref 键残留在存量设备上无副作用**，不再被读写）。
+    - `JsExtensions.kt`：删 `matchApp()` / `getAppName()` / `getAppPackageName()`——**这三个 JS 接口只为该守卫而加，全库无其它调用点**；`getAppVersionName()` / `getAppVersionCode()` / `getAppVariant()` 是通用接口，**保留**。
+    - `AppConst.kt`：`AppInfo` 删 `packageName` / `appName` 字段及其赋值（同样只为守卫而加）。⚠️ `appCtx.packageName` 是平台 API，与本次无关，**不要一并删**。
+    - 测试：删 `BuiltinSourceGuardTest`（6 项）与 `DefaultDataSeedTest`（3 项）——它们锁定的契约已不存在；新增 `BuiltinSourceRemovedTest`（3 项）**反向锁定本次移除**，防止资产与播种链路被无意恢复。
+  - ⚠️ **存量装机已播种的那条书源刻意保留不动**（作者确认）：播种是一次性语义，升级后库里的「番茄小说 (SK特供)」不会自动消失，用户可自行长按删除。**不做主动清理**——因为无法区分「系统播种的」与「用户自己导入的同 URL 书源」，主动删会误删用户数据。
+  - **验证**：
+    - 单测全量 **180 项 / 10 失败**（10 项=既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`；10058 时为 186 项，差额 6+3−3 即删旧测试、加新测试）。`BuiltinSourceRemovedTest` 3/3 通过。
+    - ⚠️ **新回归锁已双向证伪**：把 `bookSources.json` 临时放回 → `builtinBookSourceAssetIsGone` **失败**（断言在第 35 行），确认它不是恒真测试。
+    - 产物级验证：两个 APK 内 `assets/defaultData/` 已无 `bookSources.json`（`unzip -l` 计数 0）；`classes*.dex` 内 `matchApp` / `fqAuthOk` / `FQ_AUTH_DENIED` / `SK特供` 字符串**全部为 0**。
+    - 模拟器（emulator-5554）：10058 → 10059 覆盖安装（`versionCode=10059` / `versionName=3.26.092108c`）成功；启动进 `MainActivity`、`logcat -b crash` **0 条**、无 FATAL；书架数据保留。
+    - ⚠️ **真·全新装机验证（关键证据，且踩过一次坑）**：必须用 `pm clear io.legado.app.sk2` **清空数据**后再启动，日志无任何「内置书源播种」行、DB 内 `book_sources` 计数 **0**。⚠️ 若只做覆盖安装就去看列表，会看到旧的「番茄小说 (SK特供)」而**误判为仍在播种**（首次验证即因此误判，实际是上次安装遗留的历史数据）。
+  - **产物** 两条（同版本号、同签名、仅包名不同）：
+    - 正式版 `release/legado_sk_3.26.092108c_10059_arm64-v8a.apk`（36,164,230 字节，sha256 `1f4815b7ce2a32ad7f7c8ce01a94ba4d42f7209ab8ccf07e048a5fea855c5813`），aapt：`io.legado.app.c` / 10059 / `3.26.092108c` / 阅读SK / arm64-v8a / locales `'zh'`。
+    - 共存版 `release/legado_sk_3.26.092108c_10059_arm64-v8a_sk2.apk`（44,520,545 字节，sha256 `6ca9b30726c8665011662172a9da118d53cbe46dcf0f9ac0e1ced025f7a33edf`），aapt：`io.legado.app.sk2` / 10059 / `3.26.092108c` / 阅读SK / arm64-v8a / locales `'zh'`。
+    - 两者 apksigner 均 exit 0，证书 SHA-256 同为 `79fef578…`。`release/legado-sk-arm64-v8a.apk`（固定名「当前交付 APK」）已更新为 10059 正式版。
+  - **未发布 Release**（作者未指示；按 §5 若发布则默认 Pre）。**下一次交付 versionCode 从 `10060` 递增。**
+
+- ✅ **10058（`3.26.091959c`）已发布 Pre-release `v3.26.091959-10058`（2026-09-19）——历史交付（全项目审查修复合集 + 阅读页设置白字真修）**：
   - **性质**：审查修复版（无新功能、无 DB 迁移）。分支 `fix/review-r2`（自 10055 源码基线 `def356d3` 拉出、修复完成并验证后由作者指示合并发布）合入 main。改动链：`bac324fc`（P0）→ `cc220d4f`（P2-1 初版，已被取代）→ `dde3d687`/`a12895f4`/`c48d183f`/`f4444a2d`（P2-2~5）→ `cac80a7a`（P3）→ `6a119fc5`（白字返工）→ `ced0baad`（白字真因）。10056/10057 为分支中间构建，**无 Release**。逐项细节以 `companion/发布版更新记录.md` 10058 条目为准。
   - **P0（数据安全）**：`BookUpsert.savePlain` 与 `BookInfoViewModel.loadChapter` 对已存在 `bookUrl` 的行做 REPLACE/裸 insert，在 `foreign_keys=ON` 下隐式 DELETE 触发 `chapters` 等关联表 **CASCADE 清空**（离线已缓存书不可读）。改 `has() ? update : insert` 分流。→ 红线已入 §0（发布版更新记录）与本文件 §4 功能红线同源理解；回归锁 `BookUpsertWritePathTest`。
   - **P2/P3**：`ReadBookActivity` 声明 `uiMode` configChanges + `onConfigurationChanged` 补发 `UP_CONFIG [1,2,5]`（弹窗切日夜就地重绘）；合并重复书籍多 donor 一轮清干净+计数对齐；主页加架走 `upsertByIdentity`；换源 `SOURCE_CHANGED` 载荷=最终落库 bookUrl + migrateFrom 搬运收口；页脚朗读 `check` 崩溃改「日志+重展面板」；音源朗读语速 `coerceIn(0.5,3.0)`；朗读启动令牌复查；`shareConfig` 兜底 `getConfig(0)`；AI 头标记时机（**headers.isBlank() 分支刻意不置位**，防锁死 10039 播种）；预设 JSON 去 `transparentNavBar:false`；`applyConfig` 过滤 `@asset:` 残留；`VolumeGain.labelFor` 移 UI 层；删 `join_qq_channel`/`gzGzh` 死代码。
@@ -327,6 +366,9 @@ uiautomator2 / ADB
   - **验证**：全量单测 **186 项 / 10 失败**（既有已知失败）；模拟器 10057→10058 覆盖安装，同一主题同一亮色模式实测「更多设置」文字全部清晰、暗色不受影响（截图 `test-records/theme-bug/verify-10058-*`）；真机复验由作者完成。
   - **产物** `release/legado_sk_3.26.091959c_10058_arm64-v8a.apk`（36,196,703 字节，sha256 `b1d72611386e0f74a9ef68f6a641c9dccd3a46209163675c4161e6b7a3801cc2`），aapt（io.legado.app.c / 10058 / 3.26.091959c / 阅读SK / arm64-v8a / locales `'zh'`）+ apksigner（exit 0，证书 SHA-256 `79fef578…`）通过。发布说明 `companion/发布说明-10058.md`。**已发布 Pre-release `v3.26.091959-10058`（作者指示发布；按 §5 默认 Pre）**，tag 指向发布时远端 main HEAD（docs 提交）。
   - ⚠️ **同日作者要求删除 10055 的 Release 与 tag**（见下条）。
+  - 🆕 **共存版 `sk2` 已恢复（2026-09-21 作者指示）**：`app/build.gradle` 新增 `sk2` buildType，并用 10058 的同一 `VERSION_CODE`/`VERSION_NAME` 补编了共存版 APK `release/legado_sk_3.26.091959c_10058_arm64-v8a_sk2.apk`（44,559,607 字节，sha256 `50898310de3c8700520ec2545acb2238b6f23ce13aa17b069d31336d96023d06`；aapt：`io.legado.app.sk2` / 10058 / `3.26.091959c` / 阅读SK / arm64-v8a / locales `'zh'`；apksigner exit 0，证书 SHA-256 `79fef578…`，与正式版同签名）。**这不是新版本、无 Release**，只是把「同一个 10058」补出共存变体；**本日起每次正式编译都要同时产出共存版**（见 §3「共存版 sk2」）。
+    - ⚠️ **实测踩坑（已修，勿改回）**：`sk2` 用 `initWith debug` 会**继承 debug 的 `versionNameSuffix 'debug'`**，首版编译得到的 `versionName` 是 `3.26.091959cdebug`（与正式版不一致、且污染更新检查的版本比较）。必须在 `sk2` 块内显式 `versionNameSuffix ''`。同类陷阱对任何 `initWith debug` 的新 buildType 都成立。
+    - **共存验证（雷电模拟器 emulator-5554，2026-09-21）**：`io.legado.app.c`（10058）与 `io.legado.app.sk2` **并存安装成功**（同机另有上游 `io.legado.app.yuedu.a.release`／阅读C，三者同时在场）；`dataDir` 分别为 `/data/user/0/io.legado.app.c` 与 `/data/user/0/io.legado.app.sk2`（数据隔离成立）；共存版冷启动进入 `MainActivity`、`logcat -b crash` **0 条**；随后正式版仍可正常启动。
   - **下一次交付 versionCode 从 `10059` 递增。**
 
 - ✅ **10055（`3.26.091956c`）曾发布 Pre-release `v3.26.091956-10055`（2026-09-19；**Release+tag 已按作者要求整套删除**，代码保留 main、修复内容并入 10058）——修日夜间切换黑白混杂**：
