@@ -260,6 +260,7 @@ object Restore {
         }
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         appCtx.toastOnUi(R.string.restore_success)
+        hintDuplicatesAfterRestore()
         withContext(Main) {
             delay(100)
             LauncherIconHelp.changeIcon(appCtx.getPrefString(PreferKey.launcherIcon))
@@ -342,6 +343,21 @@ object Restore {
                 AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
             }
         }
+    }
+
+    /**
+     * 恢复后提示书架存在重复书籍。
+     *
+     * 恢复只负责**收敛备份与本次入库**的同书，**不清理本机既有的重复记录** ——
+     * 用户在两台设备各选一个书源就会留下两条同书记录，这类历史残留属于
+     * 书架菜单「合并重复书籍」的职责（那里已有完整的扫描/确认/合并链路）。
+     *
+     * 此处**只在确有重复时**提示，不打扰无重复的恢复；也**不做合并**（不静默改库）。
+     */
+    private fun hintDuplicatesAfterRestore() {
+        val groups = BookMergeRules.duplicateGroups(appDb.bookDao.all)
+        if (groups.isEmpty()) return
+        appCtx.toastOnUi(R.string.restore_duplicates_hint)
     }
 
     /**

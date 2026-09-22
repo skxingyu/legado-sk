@@ -644,6 +644,7 @@
     <string name="merge_duplicates_none">没有发现重复的书籍</string>
     <string name="merge_duplicates_running">正在合并重复书籍…</string>
     <string name="merge_duplicates_done">合并完成：%1$d 组，%2$d 本</string>
+    <string name="restore_duplicates_hint">书架存在重复书籍，可在书架菜单「合并重复书籍」整理</string>
     <string name="merge_duplicates_failed">合并失败：%1$s</string>
     <string name="clear_bookshelf_s">这将会删除所有书籍，请谨慎操作</string>
     <string name="search_book_source">搜索书源</string>

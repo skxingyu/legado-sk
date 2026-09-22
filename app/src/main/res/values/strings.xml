@@ -647,6 +647,7 @@
     <string name="merge_duplicates_running">Merging duplicate books…</string>
     <string name="merge_duplicates_done">Merge finished: %1$d group(s), %2$d book(s) merged</string>
     <string name="merge_duplicates_failed">Merge failed: %1$s</string>
+    <string name="restore_duplicates_hint">Duplicate books found on the shelf; use "Merge duplicate books" in the bookshelf menu</string>
     <string name="clear_bookshelf_s">It will delete all books. Be careful,please.</string>
     <string name="search_book_source">Search book sources</string>
     <string name="search_rss_source">Search RSS sources</string>

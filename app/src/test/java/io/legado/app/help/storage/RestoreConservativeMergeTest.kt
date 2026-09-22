@@ -91,4 +91,36 @@ class RestoreConservativeMergeTest {
             body.contains("skipped")
         )
     }
+
+    /**
+     * 恢复**只提示、不自动合并**既存重复。
+     *
+     * 用户在两台设备各选一个书源就会留下两条同书记录；自动合并会调用 `BookUpsert.merge`，
+     * 那是换源语义（改写 origin/tocUrl 且清配图），在恢复路径上不可接受。
+     * 且删改用户书架数据必须由用户显式发起（书架菜单「合并重复书籍」）。
+     */
+    @Test
+    fun restoreMustOnlyHintDuplicatesInsteadOfAutoMerging() {
+        val body = restoreSource()
+            .substringAfter("private fun hintDuplicatesAfterRestore")
+            .substringBefore("private fun restoreShelfBooks")
+
+        assertTrue("未能定位 hintDuplicatesAfterRestore 方法体", body.isNotBlank())
+        assertTrue(
+            "提示必须基于共享判据 duplicateGroups",
+            body.contains("BookMergeRules.duplicateGroups")
+        )
+        // ⚠️ 只检查**可执行行**：`restoreShelfBooks` 的 KDoc 会（且应当）写明
+        // 「刻意不复用 upsertByIdentity」，对整段断言会把注释误判为违规。
+        val code = body.lineSequence()
+            .map { it.trim() }
+            .filterNot { it.startsWith("*") || it.startsWith("//") || it.startsWith("/*") }
+            .joinToString("\n")
+        listOf("merge(", "upsertByIdentity", "bookDao.delete").forEach { forbidden ->
+            assertTrue(
+                "恢复后提示不得自动合并/删除（$forbidden）：改库必须由用户显式发起",
+                !code.contains(forbidden)
+            )
+        }
+    }
 }
