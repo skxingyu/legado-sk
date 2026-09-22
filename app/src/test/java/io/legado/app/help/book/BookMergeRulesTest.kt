@@ -332,4 +332,174 @@ class BookMergeRulesTest {
         val best = listOf(empty, partial, full).maxByOrNull { it.size }
         assertEquals(4, best?.size)
     }
+
+    // ---- 恢复专用保守合并（mergeFromBackup） ---------------------------------
+
+    /**
+     * 决策：恢复命中同书时**保留本机书源身份**。备份的 origin/tocUrl/variable 一律不得写进本机。
+     */
+    @Test
+    fun `restore merge keeps local source identity`() {
+        val local = book("local-url").apply {
+            origin = "https://local-source"
+            originName = "本机源"
+            tocUrl = "https://local-source/toc"
+            variable = "local-variable"
+            order = 7
+            totalChapterNum = 100
+        }
+        val backup = book("backup-url").apply {
+            origin = "https://backup-source"
+            originName = "备份源"
+            tocUrl = "https://backup-source/toc"
+            variable = "backup-variable"
+            order = 99
+            totalChapterNum = 200
+        }
+
+        val merged = BookMergeRules.mergeFromBackup(local, backup, emptyList())
+
+        assertEquals("local-url", merged.bookUrl)
+        assertEquals("https://local-source", merged.origin)
+        assertEquals("本机源", merged.originName)
+        assertEquals("https://local-source/toc", merged.tocUrl)
+        assertEquals("local-variable", merged.variable)
+        assertEquals(7, merged.order)
+        assertEquals(100, merged.totalChapterNum)
+    }
+
+    /**
+     * ⚠️ 与本文件 `mergeInto` 的裁决**相反**：换源时 variable ← src，恢复时必须 ← 本机。
+     * 两者不可互相替代，此用例锁定这个差异。
+     */
+    @Test
+    fun `restore merge takes local variable while mergeInto takes source variable`() {
+        val local = book("local-url").apply { variable = "local-variable" }
+        val backup = book("backup-url").apply { variable = "backup-variable" }
+
+        assertEquals(
+            "恢复必须保留本机变量（origin 不动，变量须随本机源）",
+            "local-variable",
+            BookMergeRules.mergeFromBackup(local, backup, emptyList()).variable
+        )
+        assertEquals(
+            "换源语义应取新源变量（对照项）",
+            "backup-variable",
+            BookMergeRules.mergeInto(local, backup, emptyList()).variable
+        )
+    }
+
+    @Test
+    fun `restore merge unions group and takes later sync time`() {
+        val local = book("local-url", group = 0b10L).apply { syncTime = 100L }
+        val backup = book("backup-url", group = 0b100L).apply { syncTime = 500L }
+
+        val merged = BookMergeRules.mergeFromBackup(local, backup, emptyList())
+
+        assertEquals("分组是位掩码，必须取并集", 0b110L, merged.group)
+        assertEquals("syncTime 取较晚者", 500L, merged.syncTime)
+    }
+
+    @Test
+    fun `restore merge fills empty user fields from backup but never overwrites`() {
+        val local = book("local-url").apply {
+            customTag = "本机标签"
+            customIntro = null
+            customCoverUrl = null
+        }
+        val backup = book("backup-url").apply {
+            customTag = "备份标签"
+            customIntro = "备份简介"
+            customCoverUrl = "备份封面"
+        }
+
+        val merged = BookMergeRules.mergeFromBackup(local, backup, emptyList())
+
+        assertEquals("本机已填则不覆盖", "本机标签", merged.customTag)
+        assertEquals("本机为空则用备份补", "备份简介", merged.customIntro)
+        assertEquals("备份封面", merged.customCoverUrl)
+    }
+
+    /**
+     * 恢复场景**必须**用本机目录重定位备份进度：备份的 durChapterIndex 锚定在备份源目录上，
+     * 与本机目录不可比，直接搬用会跳到错误章节。
+     */
+    @Test
+    fun `restore merge relocates backup progress onto local toc by title`() {
+        val local = book("local-url").apply { durChapterIndex = 0 }
+        val backup = book("backup-url").apply {
+            durChapterIndex = 2
+            durChapterTitle = "第3章"
+            totalChapterNum = 3
+        }
+        val localToc = (0..9).map { chapter(it, "第${it + 1}章") }
+
+        val merged = BookMergeRules.mergeFromBackup(local, backup, localToc)
+
+        assertEquals("应重定位到本机目录里的同名章节", 2, merged.durChapterIndex)
+        assertEquals("第3章", merged.durChapterTitle)
+    }
+
+    /** 本机目录为空时无法定位，进度必须保持本机，不得搬用备份索引（可能越界）。 */
+    @Test
+    fun `restore merge keeps local progress when local toc is empty`() {
+        val local = book("local-url").apply {
+            durChapterIndex = 1
+            durChapterPos = 50
+        }
+        val backup = book("backup-url").apply {
+            durChapterIndex = 99
+            durChapterPos = 999
+        }
+
+        val merged = BookMergeRules.mergeFromBackup(local, backup, emptyList())
+
+        assertEquals("无本机目录时不得采纳备份索引", 1, merged.durChapterIndex)
+        assertEquals(50, merged.durChapterPos)
+    }
+
+    /** 备份进度靠后时采纳；本机靠后时不得倒退。 */
+    @Test
+    fun `restore merge never rewinds local progress`() {
+        val localToc = (0..9).map { chapter(it, "第${it + 1}章") }
+
+        val localAhead = book("local-url").apply {
+            durChapterIndex = 5
+            durChapterTitle = "第6章"
+            durChapterPos = 500
+        }
+        val backupBehind = book("backup-url").apply {
+            durChapterIndex = 1
+            durChapterTitle = "第2章"
+            totalChapterNum = 10
+        }
+        val merged = BookMergeRules.mergeFromBackup(localAhead, backupBehind, localToc)
+        assertEquals("本机读得更远时不得倒退", 5, merged.durChapterIndex)
+        assertEquals(500, merged.durChapterPos)
+
+        val localBehind = book("local-url").apply {
+            durChapterIndex = 1
+            durChapterTitle = "第2章"
+            durChapterPos = 100
+        }
+        val backupAhead = book("backup-url").apply {
+            durChapterIndex = 5
+            durChapterTitle = "第6章"
+            totalChapterNum = 10
+        }
+        val forward = BookMergeRules.mergeFromBackup(localBehind, backupAhead, localToc)
+        assertEquals("备份读得更远时应采纳", 5, forward.durChapterIndex)
+    }
+
+    /** 不修改入参：调用方仍持有原对象驱动 UI。 */
+    @Test
+    fun `restore merge does not mutate its arguments`() {
+        val local = book("local-url").apply { group = 0b10L }
+        val backup = book("backup-url").apply { group = 0b100L }
+
+        BookMergeRules.mergeFromBackup(local, backup, emptyList())
+
+        assertEquals(0b10L, local.group)
+        assertEquals(0b100L, backup.group)
+    }
 }

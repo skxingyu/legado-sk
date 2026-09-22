@@ -95,6 +95,65 @@ object BookMergeRules {
      * - **分组取并集**：`group` 是位掩码，取 keep 会静默丢掉被并书所在的分组
      * - **阅读进度**：按新目录重算（章节号在换源后会漂移），时间戳取较大者
      */
+    /**
+     * **恢复专用**的保守合并：把备份里的书 [backup] 并入本机记录 [local]，返回应写库的对象。
+     *
+     * 与 [mergeInto] 的区别（**两者不可互相替代**，恢复场景不适用换源语义）：
+     * - **身份一律取本机**：`bookUrl`/`origin`/`originName`/`tocUrl`/`variable` 全部保持 [local]。
+     *   ⚠️ 特别是 `variable` —— [mergeInto] 取 src（换源后新源的脚本状态），但恢复不动 `origin`，
+     *   本机源脚本的变量必须随本机，否则书源脚本状态与 `origin` 错配。
+     * - **不使用备份的目录索引**：备份的 `durChapterIndex` 锚定在**备份源的目录**上，
+     *   与本机目录**不可比**，直接搬用会跳到错误章节。此处按 [toc]（本机目录）重定位。
+     * - **绝不删除任何本机数据**（调用方据此可安全地不清配图、不删记录）。
+     *
+     * @param toc 本机该书当前的目录；为空表示无法定位，此时进度**一律保持本机**
+     */
+    fun mergeFromBackup(local: Book, backup: Book, toc: List<BookChapter>): Book {
+        val merged = local.copy()
+
+        // ---- 用户可编辑内容：本机为空时用备份补（不覆盖用户在本机的填写） ----
+        merged.customTag = local.customTag ?: backup.customTag
+        merged.customIntro = local.customIntro ?: backup.customIntro
+        merged.customCoverUrl = local.customCoverUrl ?: backup.customCoverUrl
+        if (local.readConfig == null) merged.readConfig = backup.readConfig
+        if (!local.canUpdate) merged.canUpdate = backup.canUpdate
+
+        // ---- 分组：位掩码取并集，否则被并书所在的分组会被静默丢弃 ----
+        merged.group = local.group or backup.group
+
+        // ---- 同步时钟：取较晚者。syncTime 参与 WebDAV 进度同步判定，
+        //      取小值会让本机新状态被误判为「无更新」而跳过同步 ----
+        merged.syncTime = maxOf(local.syncTime, backup.syncTime)
+
+        // ---- 阅读进度：只有能锚定到本机目录时才采纳备份进度 ----
+        if (toc.isNotEmpty()) {
+            val index = ChapterLocator.findChapterIndex(
+                backup.durChapterIndex,
+                backup.durChapterTitle,
+                toc,
+                backup.totalChapterNum
+            ).coerceIn(0, toc.size - 1)
+            // 仅当备份确实读得更靠后时才采纳，避免把本机进度倒退回去
+            val localIndex = local.durChapterIndex.coerceIn(0, toc.size - 1)
+            if (index > localIndex) {
+                merged.durChapterIndex = index
+                merged.durChapterTitle = toc[index].title
+                val (volumeIndex, inVolumeIndex) = volumePositionOf(toc, index)
+                merged.durVolumeIndex = volumeIndex
+                merged.chapterInVolumeIndex = inVolumeIndex
+                merged.durChapterPos = backup.durChapterPos
+            } else if (index == localIndex) {
+                // 同一章：位置取较靠后者
+                merged.durChapterPos = maxOf(local.durChapterPos, backup.durChapterPos)
+            }
+        }
+        merged.durChapterTime = maxOf(local.durChapterTime, backup.durChapterTime)
+
+        // 其余字段（书源身份、元数据、order、totalChapterNum、进度索引等）一律保持 local，
+        // 故 merged 由 local.copy() 直接带出，此处不逐字段覆盖即为正确。
+        return merged
+    }
+
     fun mergeInto(keep: Book, src: Book, toc: List<BookChapter>): Book {
         val merged = keep.copy()
 
