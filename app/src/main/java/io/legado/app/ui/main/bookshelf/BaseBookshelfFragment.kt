@@ -4,6 +4,11 @@ import android.annotation.SuppressLint
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.widget.AppCompatCheckBox
 import androidx.core.view.indices
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -35,6 +40,7 @@ import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.menu.SurfacePopupMenu
 import io.legado.app.utils.checkByIndex
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCheckedIndex
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.observeEvent
@@ -53,8 +59,18 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
     val activityViewModel by activityViewModels<MainViewModel>()
     override val viewModel by viewModels<BookshelfViewModel>()
 
-    private val importBookshelf = registerForActivityResult(HandleFileContract()) {
-        kotlin.runCatching {
+    /**
+     * 「按备份清理本机书籍」选中的备份 zip。
+     * 独立注册（不复用 [importBookshelf]）：后者只接受 txt/json 且语义是导书。
+     */
+    private val backupForCleanup = registerForActivityResult(HandleFileContract()) {
+        val uri = it.uri ?: return@registerForActivityResult
+        viewModel.cleanupByBackup(uri) { candidates, excludedCount ->
+            showCleanupDialog(candidates, excludedCount)
+        }
+    }
+
+    private val importBookshelf = registerForActivityResult(HandleFileContract()) {        kotlin.runCatching {
             it.uri?.readText(requireContext())?.let { text ->
                 viewModel.importBookshelf(text, groupId)
             }
@@ -153,6 +169,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             }
 
             R.id.menu_merge_duplicates -> mergeDuplicates()
+            R.id.menu_cleanup_by_backup -> cleanupByBackup()
             R.id.menu_download -> startActivity<CacheActivity> {
                 putExtra("groupId", groupId)
             }
@@ -392,6 +409,145 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                     allowExtensions = arrayOf("txt", "json")
                 }
             }
+        }
+    }
+
+    // ---- 按备份清理本机书籍（bug 2） -----------------------------------------
+
+    /**
+     * 入口：提示说明后让用户选一份备份 zip，扫描出「本机有、该备份没有」的书籍。
+     *
+     * 放在书架菜单而非恢复流程内是刻意的：删除不可逆，而 `RestoreJournal` 的快照
+     * **从不登记 `legado.db`**（既有继承缺陷），把删除塞进恢复流程会与回滚机制纠缠不清。
+     */
+    private fun cleanupByBackup() {
+        alert(title = getString(R.string.cleanup_by_backup)) {
+            setMessage(R.string.cleanup_by_backup_message)
+            okButton {
+                backupForCleanup.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("zip")
+                }
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showCleanupDialog(candidates: List<Book>, excludedCount: Int) {
+        if (candidates.isEmpty()) {
+            toastOnUi(R.string.cleanup_by_backup_none)
+            return
+        }
+        // ⚠️ 默认全不勾：勾选=删除，默认勾选等于把不可逆操作变成一次误触即生效。
+        val checked = BooleanArray(candidates.size) { false }
+        val excludedNote = if (excludedCount > 0) {
+            getString(R.string.cleanup_by_backup_excluded_note, excludedCount)
+        } else {
+            ""
+        }
+        alert(title = getString(R.string.cleanup_by_backup_confirm_title)) {
+            setCustomView(createBookPickView(candidates, checked))
+            setMessage(
+                getString(
+                    R.string.cleanup_by_backup_confirm_message,
+                    candidates.size,
+                    excludedNote
+                )
+            )
+            okButton {
+                val selected = candidates.filterIndexed { index, _ -> checked[index] }
+                if (selected.isEmpty()) {
+                    toastOnUi(R.string.cleanup_by_backup_none)
+                    return@okButton
+                }
+                confirmCleanup(selected)
+            }
+            cancelButton()
+        }
+    }
+
+    /** 二次确认：逐条列出将删书籍（不能只给数字，用户无法复核）。 */
+    private fun confirmCleanup(selected: List<Book>) {
+        val names = selected.joinToString("\n") { "· ${it.name}（${it.author}）" }
+        alert(title = getString(R.string.cleanup_by_backup_final_title)) {
+            setMessage(
+                getString(
+                    R.string.cleanup_by_backup_final_message,
+                    selected.size,
+                    names
+                )
+            )
+            okButton {
+                viewModel.deleteBooksByCleanup(selected) { deleted, manifestPath ->
+                    toastOnUi(getString(R.string.cleanup_by_backup_done, deleted))
+                    manifestPath?.let {
+                        AppLog.put(getString(R.string.cleanup_by_backup_list_saved, it))
+                    }
+                }
+            }
+            cancelButton()
+        }
+    }
+
+    /**
+     * 书籍多选列表。行点击热区**只限复选框本身**，不整行可点 ——
+     * 整行可点会让一次误触即改变「将删除」的集合（该模式在恢复项选择处已存在，此处收紧）。
+     */
+    private fun createBookPickView(books: List<Book>, checked: BooleanArray): View {
+        val context = requireContext()
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
+        }
+        books.forEachIndexed { index, book ->
+            val checkBox = AppCompatCheckBox(context).apply {
+                isChecked = checked[index]
+                setOnCheckedChangeListener { _, isChecked -> checked[index] = isChecked }
+            }
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minimumHeight = 48.dpToPx()
+                setPadding(20.dpToPx(), 8.dpToPx(), 20.dpToPx(), 8.dpToPx())
+                addView(checkBox, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(context).apply {
+                        text = book.name
+                        textSize = 16f
+                        includeFontPadding = false
+                    })
+                    addView(TextView(context).apply {
+                        text = "${book.author} · ${book.originName}"
+                        textSize = 12f
+                        alpha = 0.68f
+                        setPadding(0, 5.dpToPx(), 0, 0)
+                    })
+                }, LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                ).apply {
+                    marginStart = 8.dpToPx()
+                })
+            }
+            container.addView(row, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
+        return ScrollView(context).apply {
+            addView(container, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.heightPixels * 0.55f).toInt()
+            )
         }
     }
 
