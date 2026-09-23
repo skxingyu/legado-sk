@@ -96,6 +96,12 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference
+            android:key="backupTargets"
+            android:summary="@string/backup_targets_summary"
+            android:title="@string/backup_targets"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
             android:key="restoreIgnore"
             android:summary="@string/restore_ignore_summary"
             android:title="@string/restore_ignore"

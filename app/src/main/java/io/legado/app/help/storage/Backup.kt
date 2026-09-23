@@ -82,6 +82,19 @@ internal fun coverDirShouldBeZipped(coversDir: File): Boolean {
 }
 
 /**
+ * 导航栏图标目录名与共享清单里的字面量必须一致。
+ *
+ * `BackupItems.navigationBarDirName` 刻意写成字面量（引用 `rootDir` 会读 `appCtx`，
+ * 使整份清单无法在 JVM 单测中求值），于是这里成了可能漂移的第二处事实。
+ * 漂移即「导航栏图标」这一项静默失效：用户勾了不打包、取消了照旧打包。
+ *
+ * 独立成顶层函数以便 JVM 单测直接覆盖（同 [existingZipSources]）。
+ */
+internal fun navigationBarDirNameStaysInSync(): Boolean {
+    return BackupItems.navigationBarDirName == NavigationBarIconConfig.rootDir.name
+}
+
+/**
  * 备份
  */
 object Backup {

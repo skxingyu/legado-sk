@@ -27,22 +27,20 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupConfig
+import io.legado.app.help.storage.BackupItems
+import io.legado.app.help.storage.BackupTargetConfig
 import io.legado.app.help.storage.BackupThemePackageDedupe
 import io.legado.app.help.storage.ImportOldData
 import io.legado.app.help.storage.Restore
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.progressDialog
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.model.BookCover
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
@@ -264,6 +262,7 @@ class BackupConfigFragment : PreferenceFragment(),
         when (preference.key) {
             PreferKey.backupPath -> selectBackupPath.launch()
             PreferKey.restoreIgnore -> backupIgnore()
+            "backupTargets" -> backupTargets()
             "web_dav_backup" -> backup()
             "web_dav_restore" -> restore()
             "import_old" -> restoreOld.launch()
@@ -293,6 +292,29 @@ class BackupConfigFragment : PreferenceFragment(),
         }
     }
 
+    /**
+     * 默认备份内容设置。
+     *
+     * 一次设定长期生效，之后的备份直接按此打包，不再逐次询问。
+     * 只写回本项目自己的选择，不影响恢复侧的「恢复忽略列表」。
+     */
+    private fun backupTargets() {
+        val items = BackupItems.all
+        val checkedItems = BooleanArray(items.size) { BackupTargetConfig.isSelected(items[it].key) }
+        alert(R.string.backup_targets) {
+            setCustomView(createMultiSelectView(
+                items.map { SelectItem(it.title) },
+                checkedItems
+            ))
+            okButton {
+                items.forEachIndexed { index, item ->
+                    BackupTargetConfig.setSelection(item.key, checkedItems[index])
+                }
+                BackupTargetConfig.save()
+            }
+            cancelButton()
+        }
+    }
 
     fun backup() {
         val backupPath = AppConfig.backupPath
@@ -514,71 +536,22 @@ class BackupConfigFragment : PreferenceFragment(),
     }
 
     private suspend fun selectBackupTargets(): Set<String>? {
-        val items = buildBackupItems()
-        val checkedItems = BooleanArray(items.size) { true }
-        val confirmed = showMultiSelectDialog(
-            title = "选择备份项目",
-            items = items.map { SelectItem(it.title) },
-            checkedItems = checkedItems
-        )
-        if (!confirmed) {
+        if (BackupTargetConfig.isAllSelected()) {
+            // 全选时不收窄清单：targets=null 走旧「全部打包」路径，
+            // 新增的备份目标不会因为清单漏更新而被静默漏备份。
             return null
         }
-        val targets = items.filterIndexed { index, _ -> checkedItems[index] }
-            .flatMapTo(hashSetOf()) { it.targets }
+        val targets = BackupTargetConfig.selectedTargets()
         if (targets.isEmpty()) {
-            appCtx.toastOnUi("未选择备份项目")
+            appCtx.toastOnUi(R.string.backup_select_none)
             return null
         }
         return targets
     }
 
+    /** 备份项目清单与恢复侧共用同一份定义（见 [BackupItems]），避免两侧口径漂移。 */
     private fun buildBackupItems(): List<RestoreItem> {
-        return listOf(
-            RestoreItem(
-                "书架",
-                listOf("bookshelf.json", "bookmark.json", "bookGroup.json", "covers")
-            ),
-            RestoreItem("书源", listOf("bookSource.json", "sourceSub.json")),
-            RestoreItem("RSS", listOf("rssSources.json", "rssStar.json")),
-            RestoreItem("替换规则", listOf("replaceRule.json")),
-            RestoreItem(
-                "阅读记录",
-                listOf("readRecord.json", "readRecordDaily.json", "readRecordGoalAvatar")
-            ),
-            RestoreItem("搜索记录", listOf("searchHistory.json")),
-            RestoreItem("TXT 目录规则", listOf("txtTocRule.json")),
-            RestoreItem("朗读引擎", listOf("httpTTS.json")),
-            RestoreItem("字典规则", listOf("dictRule.json")),
-            RestoreItem("键盘助手", listOf("keyboardAssists.json")),
-            RestoreItem("服务器配置", listOf("servers.json")),
-            RestoreItem("直链上传", listOf(DirectLinkUpload.ruleFileName)),
-            RestoreItem(
-                "阅读配置",
-                listOf(
-                    ReadBookConfig.configFileName,
-                    ReadBookConfig.shareConfigFileName,
-                    "bg",
-                    "font",
-                    PreferKey.bgImage,
-                    PreferKey.bgImageN,
-                    PreferKey.bookInfoBgImage,
-                    PreferKey.bookInfoBgImageN
-                )
-            ),
-            RestoreItem(
-                "主题配置",
-                listOf(
-                    ThemeConfig.configFileName,
-                    BackupThemePackageDedupe.themePackagesDirName,
-                    BackupThemePackageDedupe.manifestFileName
-                )
-            ),
-            RestoreItem("导航栏图标", listOf("navigationBarPackages")),
-            RestoreItem("封面规则", listOf(BookCover.configFileName)),
-            RestoreItem("应用设置", listOf("config.xml", "videoConfig.xml")),
-            RestoreItem("Agent（模式、配置、完整会话、记忆）", listOf(io.legado.app.help.agent.AgentBackup.FILE_NAME))
-        )
+        return BackupItems.all.map { RestoreItem(it.title, it.targets) }
     }
 
     private fun restoreFromUri(uri: Uri) {

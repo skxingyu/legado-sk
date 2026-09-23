@@ -1187,6 +1187,10 @@
     <string name="default_cover">默认封面</string>
     <string name="restore_ignore">恢复忽略列表</string>
     <string name="restore_ignore_summary">恢复时忽略一些内容不恢复，方便不同手机配置不同</string>
+    <string name="backup_targets">默认备份内容</string>
+    <string name="backup_targets_summary">设定备份包含哪些内容，之后备份按此执行，不再每次询问</string>
+    <string name="backup_select_none">未选择任何备份内容，请在「默认备份内容」中勾选</string>
+    <string name="backup_pack_failed">备份打包失败</string>
     <string name="read_config">阅读界面设置</string>
     <string name="group_name">分组名称</string>
     <string name="note_content">备注内容</string>

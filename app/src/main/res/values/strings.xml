@@ -1441,6 +1441,10 @@
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
     <string name="restore_ignore_summary">Ignore some contents while restoring</string>
+    <string name="backup_targets">Default backup contents</string>
+    <string name="backup_targets_summary">Set which contents a backup includes; later backups follow it without asking</string>
+    <string name="backup_select_none">No backup contents selected; choose some in "Default backup contents"</string>
+    <string name="backup_pack_failed">Backup packaging failed</string>
     <string name="read_config">Reading interface settings</string>
     <string name="group_name">Group name</string>
     <string name="note_content">Remarks section</string>
