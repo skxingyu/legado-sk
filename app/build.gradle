@@ -125,17 +125,21 @@ android {
         // 共存版：与交付版（app flavor + release，包名 io.legado.app.c）同签名、同版本号，
         // 仅包名不同，可与阅读C / 正式版同时安装。编译命令：
         //   gradlew :app:assembleAppSk2 -Pabi=arm64-v8a -PVERSION_CODE=... -PVERSION_NAME=...
-        // ⚠️ 必须清空 versionNameSuffix —— initWith debug 会继承 debug 的 'debug' 后缀，
-        // 否则 versionName 变成 3.26.091959cdebug，与正式版不一致且污染更新检查的版本比较。
+        // ⚠️ 必须 initWith release，**不能** initWith debug：debug 会给共存版带上
+        //   ① android:debuggable=true；② 关闭 dex 优化/合并（实测 23 个 dex vs 8 个，
+        //   未压缩体积多 ~14MB，APK 大 ~8MB）。共存版应与正式版行为完全一致，仅包名不同。
+        // ⚠️ 继承 release 会带上其 applicationIdSuffix '.c' 与 'beta' versionNameSuffix，
+        //   两者都必须显式覆盖（applicationIdSuffix 覆盖为 '.sk2'、versionNameSuffix 清空）。
         sk2 {
-            initWith debug
+            initWith release
             signingConfig signingConfigs.debug
             manifestPlaceholders.put("app_name", "@string/app_name")
 
             applicationIdSuffix '.sk2'
             versionNameSuffix ''
-            matchingFallbacks = ['debug']
+            matchingFallbacks = ['release']
             minifyEnabled false
+            shrinkResources = false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
     }
