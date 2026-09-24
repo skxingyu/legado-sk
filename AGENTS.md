@@ -151,7 +151,10 @@ $versionName = '3.26.<MMddHH>c'            # 完整版本名（含 c 后缀）
 > 历史：10004–10006 曾以 `sk2` 共存版随正式版双发，10007 起停发并写明「不再提供 sk2」。**2026-09-21 作者决定恢复**，本日起每次正式编译都**必须同时**产出共存版，文档口径已同步更正。
 
 - 变体 = `app` flavor + `sk2` buildType（**buildType，不是新 flavor**），包名 **`io.legado.app.sk2`**，应用名同「阅读SK」；与正式版 `io.legado.app.c`（`app`+`release`）、阅读C 三者可同时安装。
-- 产物在 `app\build\outputs\apk\app\sk2`；⚠️ **注意 `sk2` 是 `debug` 系 buildType（`initWith debug`，继承 debug 源集），产物目录就是 `app\sk2` 本身**（debug 的 `debug` 源集只被 `debug` 变体使用，不影响此路径）。
+- 产物在 `app\build\outputs\apk\app\sk2`；⚠️ 产物目录就是 `app\sk2` 本身（是 buildType 名，与是否继承 debug 无关）。
+- ⚠️ **`sk2` 必须 `initWith release`，禁止 `initWith debug`（2026-09-24 修正，勿改回）**：继承 debug 会让共存版带上 `android:debuggable=true` 且 dex 不合并/不优化 —— 实测 **23 个 dex vs 正式版 8 个**，APK 大 ~8 MB（44.5 MB vs 36.2 MB）。共存版与正式版的**唯一**差异只能是包名，行为与体积都必须对齐。同时必须显式覆盖继承自 `release` 的两项：`applicationIdSuffix '.sk2'`（否则变成 `.c.sk2` 之类）与 `versionNameSuffix ''`。
+  - ⚠️ 同类陷阱对**任何**新 buildType 成立：先想清 `initWith` 的基底是否与交付语义一致，再显式覆盖它会带偏的每一项（applicationIdSuffix / versionNameSuffix / minify / shrinkResources / matchingFallbacks）。
+  - ⚠️ 已存在的 sk2 产物（10073 之前，44.5 MB 那批）**是带 debuggable 的包**，如需发布共存量请用 `initWith release` 重编。
 - Gradle 输出名同正式版（`legado_sk_<versionName>_<versionCode>.apk`，无 `_arm64-v8a` 后缀），**收进 `release/` 时按约定补后缀并加 `_sk2`**。
 - ⚠️ **共存版与正式版共用同一 `VERSION_CODE` / `VERSION_NAME`，不另加版本后缀**（`sk2` 刻意**没有** `versionNameSuffix`）。两条产物的版本事实必须逐字一致，便于回溯「同一个 10058」。
 - ⚠️ **两者同用 SDK debug 签名**：改的是包名不是签名，因此**不能互相覆盖安装**（这正是共存的前提）；也**不能覆盖安装阅读C**（签名不同，需走 §2 的数据迁移流程）。
@@ -375,7 +378,8 @@ uiautomator2 / ADB
     - 取消「主题配置」+「阅读配置」并确定 → `backupTarget.json` = `{"readConfig":false,"themeConfig":false}`；**重启应用后保持**；点「取消」不改文件。
     - 点「备份」**不再弹框**直接打包：`backup.zip` **571 KB**，包内**无 `readConfig.json`/`themeConfig.json`/`bg/`/`font/`/`themePackages/`**（该机 `font` 9.1 MB + `themePackages` 6.8 MB，正是被排除的大头），其余项目齐全。
     - 全不勾时触发备份：**0 条 `阅读备份` 日志、不产出任何 zip** → 确认在动工前即被拦下。
-  - **产物**（同版本号、同签名、仅包名不同）：`release/legado_sk_3.26.092401c_10073_arm64-v8a.apk`（36,184,369 字节，`io.legado.app.c`）＋ `release/legado_sk_3.26.092401c_10073_arm64-v8a_sk2.apk`（44,542,383 字节，`io.legado.app.sk2`）；aapt 均为 `10073` / `3.26.092401c` / 阅读SK / arm64-v8a，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10073 正式版。**平板已装 sk2 10073。**
+  - **产物**（同版本号、同签名、仅包名不同，**已按 `initWith release` 重编**）：`release/legado_sk_3.26.092401c_10073_arm64-v8a.apk`（36,184,360 字节，`io.legado.app.c`，sha256 `ec20ad38…`）＋ `release/legado_sk_3.26.092401c_10073_arm64-v8a_sk2.apk`（36,184,231 字节，`io.legado.app.sk2`，sha256 `d76f2eab…`）；aapt 均为 `10073` / `3.26.092401c` / 阅读SK / arm64-v8a，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10073 正式版。
+    - ⚠️ **10073 首版共存包（44,542,383 字节）已废弃**：那是 `initWith debug` 的产物，带 `android:debuggable=true` 且 23 个未合并 dex。已由提交 `42fdabb5` 修正为 `initWith release`（8 个 dex，与正式版同体积），**发布/分发一律用重编后的 36,184,231 字节那份**。
 
 - ✅ **10063 / 10064 / 10065（`3.26.092111c` / `3.26.092112c` / `3.26.092117c`）已构建并验证（2026-09-21）——历史交付（内置预设改名 + 重复条目修复 + 升级保数据实证）**：
   - **三者代码完全相同**（10064/10065 仅为造出"版本号变大"的升级场景而重编）。**无 DB 迁移**。
