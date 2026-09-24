@@ -345,7 +345,33 @@ uiautomator2 / ADB
 
 仅保留最近交付状态，下一次覆盖安装必须在此基础上递增：
 
-- ✅ **10063 / 10064 / 10065（`3.26.092111c` / `3.26.092112c` / `3.26.092117c`）已构建并验证（2026-09-21）——当前交付（内置预设改名 + 重复条目修复 + 升级保数据实证）**：
+> ⚠️ **分支状态（2026-09-23 作者指示）**：`feat/cleanup-cloud-backup`（10066–10072，按备份清理支持云端 + 备份/恢复共用锁）是**试验分支，暂不合并 main**（仍有一些小问题未定）。其 versionCode 区间**不作为 main 的递增基线**；下面 10073 是 **main 分支**的当前产物，**main 下一次 versionCode 从 `10074` 递增**。
+
+- ✅ **10073（`3.26.092401c`）已构建并在平板实机验证（2026-09-23）——main 当前交付（新增「默认备份内容」）**：
+  - 分支 **main**（提交 `fe182e31`，基于 `0f4093e5`）。**未发布 Release**（作者未指示）。**无 DB 迁移**。
+  - **需求**：备份每次都强制弹框且硬编码全选 → 想去掉主题/阅读排版（**背景图/字体/主题包才是体积大头**）只能每次手动取消。对齐 Legado_Max 的「备份选择器」，改为**一次设定长期生效**。
+  - **改动一：新增 `BackupTargetConfig`**（`filesDir/backupTarget.json`）持久化备份范围。
+    - ⚠️ **未保存过的项必须默认勾选**（`selections[key] ?: true`）：存量设备升级后无该文件，**默认方向反了会让升级后第一次备份变成空包**，而用户以为备份成功。
+    - ⚠️ 项目 `key` 一旦发布即存量设备的持久化键，**只能新增、不能改名或复用**。
+  - **改动二：抽 `BackupItems`**（storage 层），把 18 个分组清单从 UI 层提升上来，**备份与恢复共用同一份**。
+    - ⚠️ **不得在两侧各留一份**：漂移会导致「备份能勾到某项目、恢复侧不认识它」→「按项目删除未勾内容」删不掉 → **恢复把不该恢复的内容恢复了且无任何报错**。
+    - ⚠️ `BackupItems.navigationBarDirName` 必须是**字面量**，并由 `Backup.navigationBarDirNameStaysInSync()` 与 `NavigationBarIconConfig.rootDir.name` 比对：直接引用 `rootDir` 会在初始化时读 `appCtx`，**使整份清单无法在 JVM 单测中求值**（实测 `ClassNotFoundException: android.app.ActivityThread`）。
+  - **改动三：备份入口不再弹框**（`selectBackupTargets`）：
+    1. **全选 → `targets = null`** 走既有「全部打包」路径。⚠️ 刻意不下发显式清单——`Backup` 只按 `targets` 过滤，清单漏更新会让新增目标**静默漏备份**；全选不下发才能自动包含新目标。
+    2. 部分勾选 → 下发选中目标集合。
+    3. **一个都没勾 → 拒绝 + toast**（`R.string.backup_select_none`），**绝不塌缩成"全打包"或"空包"**。
+  - **⚠️ 恢复侧行为一字未改**：仍逐次询问、仍只服从「恢复忽略列表」（`BackupConfig`/`restoreIgnore.json`）。**本项只管备份范围，两套语义互不干扰**，不要把两者合并。
+  - **回归锁**：`BackupTargetConfigTest`（7 项，源码级静态断言）。**已双向证伪**：注入 `selections[key] ?: false` 与摘掉 `isAllSelected` 分支**各失败一项**。
+  - **验证**：全量单测 **238 项 / 10 失败**（10 项＝既有已知失败 `CacheTaskStoreTest` ×9 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`，**无新增失败**）。
+  - **平板实机验证（HA1KAPWG，10072→10073 覆盖升级保数据）**：
+    - `legado.db` 12,279,808 字节**未变**；`logcat -b crash` **无本应用条目**（仅一条 Google Play `libapkanalysis.so`，与本应用无关）。
+    - 升级后打开对话框：18 项**全部默认勾选**（证实 `?: true` 的升级路径）。
+    - 取消「主题配置」+「阅读配置」并确定 → `backupTarget.json` = `{"readConfig":false,"themeConfig":false}`；**重启应用后保持**；点「取消」不改文件。
+    - 点「备份」**不再弹框**直接打包：`backup.zip` **571 KB**，包内**无 `readConfig.json`/`themeConfig.json`/`bg/`/`font/`/`themePackages/`**（该机 `font` 9.1 MB + `themePackages` 6.8 MB，正是被排除的大头），其余项目齐全。
+    - 全不勾时触发备份：**0 条 `阅读备份` 日志、不产出任何 zip** → 确认在动工前即被拦下。
+  - **产物**（同版本号、同签名、仅包名不同）：`release/legado_sk_3.26.092401c_10073_arm64-v8a.apk`（36,184,369 字节，`io.legado.app.c`）＋ `release/legado_sk_3.26.092401c_10073_arm64-v8a_sk2.apk`（44,542,383 字节，`io.legado.app.sk2`）；aapt 均为 `10073` / `3.26.092401c` / 阅读SK / arm64-v8a，apksigner exit 0（证书 SHA-256 `79fef578…`）。`release/legado-sk-arm64-v8a.apk`（固定名）已更新为 10073 正式版。**平板已装 sk2 10073。**
+
+- ✅ **10063 / 10064 / 10065（`3.26.092111c` / `3.26.092112c` / `3.26.092117c`）已构建并验证（2026-09-21）——历史交付（内置预设改名 + 重复条目修复 + 升级保数据实证）**：
   - **三者代码完全相同**（10064/10065 仅为造出"版本号变大"的升级场景而重编）。**无 DB 迁移**。
   - ✅ **10065 已发布 Pre-release `v3.26.092117-10065`（2026-09-21）**——**两个 APK 同时作为 Release 资产**（正式版 + 共存版），发布说明 `companion/发布说明-10065.md`。10060～10064 为中间构建，无 Release。**下一次 versionCode 从 `10066` 递增。**
   - **改动一：日/夜默认预设更名为「白」/「黑」**（`themeConfig.json` index 0/1，原「黑猫慢生活」/「黯夜」）。
