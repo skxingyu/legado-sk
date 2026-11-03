@@ -408,6 +408,7 @@ uiautomator2 / ADB
   - **实机回归暴露并修掉的真缺陷（`f09b2369`）**：「蓝牙朗读切段间隔」是普通 `Preference`，上游把点击处理与摘要刷新放在 `ReadAloudConfigDialog`，初版只换了 pref 行与分组白名单 ⇒ 实机上是**点了没反应的死行**且 summary 永远是静态文案。补 `showBluetoothReadAloudSkipIntervalDialog()` + `upBluetoothReadAloudSkipIntervalSummary()` + 变更监听刷新，回归锁升到 4 项。
   - **验证**：全量单测 **347 项 / 10 失败**（＝10116 基线 337/10 ＋ 新增 10 项全绿；10 项仍为既有 `CacheTaskStoreTest` 9 项 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）；两处变异证伪已做（`shouldPublishTextPosition` 去掉 `predictedPage != pageIndex`、音量键 `ACTION_PREVIOUS_PAGE`→`ACTION_NONE` 均 RED）。`assembleAppRelease`+`assembleAppSk2` 成功，两包 `10117` / `3.26.110311c` / `aapt` 包名正确 / `apksigner` 退出码 0。
   - **雷电模拟器回归（`emulator-5554`，覆盖 10116→10117，`firstInstallTime` 未变）**：菜单「蓝牙按键映射」在 帮助 之后、弹窗双槽/9 个动作可选并落盘；音量加/减翻页且不触发系统音量；`MEDIA_PREVIOUS`（阅读式=无操作）静默消费；把上一曲映射成下一页后按键真的翻页；朗读中 `MEDIA_NEXT`→ 映射为下一章后章号 30→31、位置回到章首；朗读设置 基础 组「蓝牙朗读切段间隔」显示 `400ms`、点开输入框可改、确定后摘要刷新；全程 `crash` buffer 无 FATAL。截图在 `test-records/朗读引擎对齐-回归/`（37 张）。
+  - **真机平板 `HA1KAPWG` 2026-11-03 覆盖 10114→10117**：`versionCode=10117` / `3.26.110311c`，`firstInstallTime` 仍 `2026-10-30 14:00:50`（＝升级保数据），启动后书架完整、`MainActivity` 为焦点应用、`crash` 无 FATAL。蓝牙按键与音量键的实机手感回归由作者在真机完成。
   - **未验证项**：书源音频「按字幕时长预测段内位置」的真机行为（需要带字幕的书源音频书，模拟器无素材；仅静态 + 单测覆盖）；熄屏 `readerInstance()` 路径未单独构造复现。
   - **产物**：正式版 36,204,291 B ＋ 共存版 36,204,430 B；已在 `release/`（固定名 + 两个版本名）。作者 2026-11-03 决定**暂不发布**（等真机试过），并清理掉 10114/10115/10116 三个未发布包；10111/10112/10113（同样未发布）暂留。
 
