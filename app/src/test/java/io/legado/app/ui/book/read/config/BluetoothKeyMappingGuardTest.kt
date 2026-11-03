@@ -67,4 +67,15 @@ class BluetoothKeyMappingGuardTest {
         assertTrue(receiver.contains("if (handleReaderMediaKey(context, keycode))"))
         assertFalse("mediaButtonPerNext 已删除，不得复活", receiver.contains("mediaButtonPerNext"))
     }
+
+    @Test
+    fun `skip interval preference is clickable`() {
+        val config = source("src/main/java/io/legado/app/ui/book/read/config/ReadAloudConfigDialog.kt")
+        // pref 行是普通 Preference，不挂点击处理就是一个点了没反应的死行（上游同款写法）
+        val clickBranch = config.substringAfter("PreferKey.bluetoothReadAloudSkipInterval ->")
+            .substringBefore("PreferKey.readAloudPlaybackPanelDuration")
+        assertTrue(clickBranch, clickBranch.contains("showBluetoothReadAloudSkipIntervalDialog()"))
+        assertTrue(config.contains("private fun showBluetoothReadAloudSkipIntervalDialog()"))
+        assertTrue(config.contains("upBluetoothReadAloudSkipIntervalSummary()"))
+    }
 }
