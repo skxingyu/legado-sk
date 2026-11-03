@@ -394,11 +394,24 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10117` 递增**。
+> **下一次交付 versionCode 从 `10118` 递增**。
 
 ---
 
-- ✅ **10116（`3.26.112023c`）—— 当前交付，未发布**（审查闭环：切章失败归还额度+提示、书源音频判据纯函数化、防双扣收口）：
+- ✅ **10117（`3.26.110311c`）—— 当前交付，未发布**（朗读引擎对齐上游：蓝牙按键映射 + 书源音频按字幕时长预测段内位置）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `78173037`（P2 书源音频）→ `17f6a213`（P1 引擎侧 + 删 mediaButtonPerNext）→ `025741c2`（映射弹窗 + 回归锁）→ `d1129a20`（差异台账 + 红线）→ `99ee5474`（映射到的键一律视为已消费）→ `f09b2369`（切段间隔设置行接上点击与摘要）。
+  - **起因（作者，2026-11-03）**：要求把朗读引擎对齐上游「阅读」——**只对齐引擎，UI 用 SK 自己的**。先做方案（`test-records/朗读引擎对齐上游-方案/方案.md`，含三份独立对抗式审查报告同目录），作者裁决 D1~D5 后开工。
+  - **范围核定**：SK 朗读引擎是上游的**超集**，上游独有的引擎能力只有两项 —— ① 蓝牙按键映射（上游 `8a549792`+`bd0521de`+`ae15087b`+`659f4483`）；② 书源音频按字幕时长预测段内位置（上游 `bdc01c7a`）。`help/tts`、引擎插件、TTS 实体/DAO、`TtsCacheService`、`TTS.kt` 与上游基本一致（仅多 SK 的 `TtsCacheJanitor`/`TtsCacheSweep`）。
+  - **① 书源音频预测（`78173037`）**：`AudioTextMapping` 新增 `withEstimatedTiming(durationMs)` / `paragraphFractionAt(timeMs, durationMs)`；`SourceAudioReadAloudService` 在 `onPlaybackStateChanged` 的 **`Player.STATE_READY`** 分支（`upReadAloudLoading(false)` 之后）用播放时长给字幕生成估计时间轴（**只在 `bindMappingToLayout` 返回非 null 后才替换 `mapping`**），`syncTextPosition` 去掉 `if (paragraphUnchanged && !syncView) return`，改为按 `fraction → offset → predictedPage` 发布，门槛抽成 `shouldPublishTextPosition(...)` 同时管页码与 TTS 位置事件。
+  - **② 蓝牙按键映射（`17f6a213`+`025741c2`）**：`BluetoothReadAloudSkip`（400ms 间隔排空队列）、`BluetoothKeyMapping`（7 键 × 阅读/朗读双槽 + `dispatch`）、`BluetoothKeyMappingDialog`（阅读菜单「蓝牙按键映射」入口，布局套 `NestedScrollView` + `vw_bg` 真实表面）、`MediaButtonReceiver.handleReaderMediaKey`（前台阅读页 → 熄屏时 `readerInstance()`）、`BaseReadAloudService` 媒体会话四个回调先问映射、`ReadBookActivity` 的 `onKeyDown`/`onKeyUp` 统一入口（`handleBluetoothMediaKey` / `handleVolumeKey` / `isVolumeKeyConsumed`）。`PreferKey.mediaButtonPerNext` **按上游删除**（常量/4 处读点/pref 行/2 条文案全删，不做迁移）。
+  - ⚠️ **6+1 项与上游有意不同**（台账 `docs/朗读引擎-上游对齐差异台账.md`，详见 §4 红线）：保留音量键闸门、音量键朗读态默认翻页、TOGGLE 走 `MediaButtonReceiver.readAloud`、预测只在绑定成功后生效、发布门槛共用、备份含 14 个映射键、映射到的键一律视为已消费。
+  - **实机回归暴露并修掉的真缺陷（`f09b2369`）**：「蓝牙朗读切段间隔」是普通 `Preference`，上游把点击处理与摘要刷新放在 `ReadAloudConfigDialog`，初版只换了 pref 行与分组白名单 ⇒ 实机上是**点了没反应的死行**且 summary 永远是静态文案。补 `showBluetoothReadAloudSkipIntervalDialog()` + `upBluetoothReadAloudSkipIntervalSummary()` + 变更监听刷新，回归锁升到 4 项。
+  - **验证**：全量单测 **347 项 / 10 失败**（＝10116 基线 337/10 ＋ 新增 10 项全绿；10 项仍为既有 `CacheTaskStoreTest` 9 项 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）；两处变异证伪已做（`shouldPublishTextPosition` 去掉 `predictedPage != pageIndex`、音量键 `ACTION_PREVIOUS_PAGE`→`ACTION_NONE` 均 RED）。`assembleAppRelease`+`assembleAppSk2` 成功，两包 `10117` / `3.26.110311c` / `aapt` 包名正确 / `apksigner` 退出码 0。
+  - **雷电模拟器回归（`emulator-5554`，覆盖 10116→10117，`firstInstallTime` 未变）**：菜单「蓝牙按键映射」在 帮助 之后、弹窗双槽/9 个动作可选并落盘；音量加/减翻页且不触发系统音量；`MEDIA_PREVIOUS`（阅读式=无操作）静默消费；把上一曲映射成下一页后按键真的翻页；朗读中 `MEDIA_NEXT`→ 映射为下一章后章号 30→31、位置回到章首；朗读设置 基础 组「蓝牙朗读切段间隔」显示 `400ms`、点开输入框可改、确定后摘要刷新；全程 `crash` buffer 无 FATAL。截图在 `test-records/朗读引擎对齐-回归/`（37 张）。
+  - **未验证项**：书源音频「按字幕时长预测段内位置」的真机行为（需要带字幕的书源音频书，模拟器无素材；仅静态 + 单测覆盖）；熄屏 `readerInstance()` 路径未单独构造复现。
+  - **产物**：正式版 36,204,291 B ＋ 共存版 36,204,430 B；已在 `release/`（固定名 + 两个版本名）。⚠️ 10114/10115/10116 的包仍在 `release/`，待作者定是否清理。
+
+- ✅ **10116（`3.26.112023c`）—— 历史交付，未发布**（审查闭环：切章失败归还额度+提示、书源音频判据纯函数化、防双扣收口）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `7721d729`。
   - **起因**：10115 交付后作者要求「做一次 review，给优化建议」。独立审查（`reviewer`，`del_mvxsn3wa_x201`）确认 10115 的 7 项修复中 6 项成立，但指出两处未闭合；作者选择全修。
   - **① 切章失败只从「静默 return」变成「静默停止」**：`stopReadAloudOnInvalidPosition(message)` 只 `putDebug` + `stopSelf()`，而切章走 `execute(IO)` 异步，`advanceToNextChapter()` 早已返回 true ⇒ 额度已扣、无音频、无提示，用户以为崩了。改：该函数加 `refundChapter: Boolean = false, toast: Boolean = false`，`switchReadAloudChapterKeepingView` 的 `prepareReadAloudChapter` 失败传 `refundChapter = true, toast = true`（归还 `timeChapter++` + 重发 `READ_ALOUD_DS_CHAPTER` + 刷新通知 + `AppLog.put(..., toast = true)`）。
@@ -421,16 +434,6 @@ uiautomator2 / ADB
   - **验证**：`assembleAppRelease` + `assembleAppSk2` 成功；两包 `10115` / `3.26.112008c` / `aapt` 包名正确 / `apksigner` 退出码 0。⚠️ **真机未安装验证**：本轮平板 `HA1KAPWG` 已从 adb 掉线（`adb devices` 为空），未做覆盖安装回归；未验证项与 10113/10114 相同（合成失败/干涸路径需外部触发）。
   - **未做**：`LogModule.READ_ALOUD` 默认勾选（「保存日志」仍可能拿不到证据）、`advanceScriptQueue()` 队列空续播、`isRun && !pause` 无播放事件看门狗。
   - **产物**：正式版 36,188,767 B ＋ 共存版 36,188,537 B；已在 `release/`（固定名 + 两个版本名）。10111–10114 四个未发布版本的包仍保留，待作者定是否清理。
-
-- ✅ **10114（`3.26.110118c`）—— 历史交付，未发布**（实时缓存新增可选「快速重试」：队列干涸 15s 判引擎挂死 + 单段超时 30s）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `5c1834ee`。
-  - **起因（作者，2026-11-01 17:43）**：改用「MultiTTS 作为系统 TTS 引擎 + 实时缓存」听书时卡住——界面显示仍在播放、无暂停无终止，约 67 秒后自己接着读。
-  - **真因（logcat `Legado` tag 的 AppLog 实锤）**：`17:44:17.857 [TTS缓存] 实时缓存合成超时(90s) 单元:54` → `tts realtime synthesize timeout, retry current paragraph` → `initTts engine:org.Multi_TTS`（系统侧 `Unbinding TTS engine … Reason: client disconnection request`）→ 重派发后 `17:44:18.231` 合成完成恢复。**崩溃对上时刻**：`11-01 17:42:48.243 Fatal signal 6 (SIGABRT) … (org.Multi_TTS)`，`Abort message: 'Pointer tag for 0x2200790065006b was truncated'`，backtrace 在 `/data/app/…/lib/arm64/libBDSpeechDecoder_V1.so (Java_com_baidu_speechsynthesizer_utility_SpeechDecoder_decodeWithCallback)` + `libc free`；线程名 `s.baidu.com/...`。⇒ **MultiTTS 内的百度合成 SDK 合成中 SIGABRT 崩溃，把这次 `synthesizeToFile` 请求带走了**（onDone/onError 都不来），已合成段播到 `17:43:10` 枯竭后无声 67 秒，直到看门狗到点。同日崩溃时刻：`09:32:03`、`10:02:38`、`11:33:42`、`17:42:48`；10-31 夜 `23:25:49`、`23:42:49`、`23:56:14`、`23:56:25`（后两次正对上 10113 那次焦点放弃 `23:56:32`）。
-  - **改动**：① `AppConfig` 新增开关 `ttsCacheFastRetry`（默认 **false**＝完全保持原保守行为）+ `FAST_RETRY_SEGMENT_TIMEOUT_SECONDS = 30` + `ttsRealtimeSegmentTimeoutSeconds`（开启时固定 30s，否则回落用户设置值）；② `TTSReadAloudService` 新增 `REALTIME_DRY_STALL_GRACE_SECONDS = 15` 与 `armRealtimeDryWatchdog(index)` / `cancelRealtimeDryWatchdog()`：`speakRealtimeUnit()` 入口武装，15s 后若 `index == nowSpeak && isRun && !pause && !wavPlayer.isPlaying` 则 `TtsCacheLog.put("实时缓存队列干涸(15s)未出声，按引擎挂死重试 单元:$index")` + `handleSpeakError("tts realtime dry timeout", retryWithReinit = true)`（复用既有 `clearTTS()+initTts()` 解卡链）；撤销点 `playWavFile()`/`pauseReadAloud()`/`resetWavPlayback()`；③ 设置项 `pref_config_tts_cache.xml` 的 `SwitchPreference`（`defaultValue=false`）+ 中英文案（summary 明说「需要语音引擎合成较快、慢速在线引擎请关闭」）；④ `TtsCacheConfigDialog.upSegmentTimeoutSummary()` 在快速重试开启时改显「实际按 30 秒生效」。
-  - ⚠️ **红线**：开关默认必须是 `false`（关闭＝单段超时仍走用户设置值、无干涸判据）；干涸看门狗**每次进场都重新计时**（10115 移除了 `realtimeDryIndex` 去重——重入不续期会提前误判、二次失败直接跳段），且 `handleSpeakError()` 必须撤销（重建引擎期间不得判干涸）；**三个撤销点缺一不可**；看门狗必须用 `AppConfig.ttsRealtimeSegmentTimeoutSeconds`，不得改回直接读 `ttsCacheSegmentTimeoutSeconds`。回归锁 `ReadAloudRealtimeDryWatchdogTest` 6 项（已变异证伪：删开关判定 ⇒ `dryWatchdogOnlyArmedInFastRetryMode` RED；删 `playWavFile` 的撤销 ⇒ `dryWatchdogIsPerUnitAndCancelledWherePlaybackStarts` RED）。
-  - **验证**：全量单测 **334 项 / 10 失败**（＝10113 基线 328/10 ＋ 新增 6 项全绿；10 项仍为既有 `CacheTaskStoreTest` 9 项 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）。正式编译两包成功；平板覆盖 10113→10114，两包 `firstInstallTime` 均未变（`c`=`2026-10-30 14:00:50`、`sk2`=`2026-10-31 18:28:26`），启动后 `MainActivity` 为焦点应用、`crash` buffer 无 18 时段 FATAL。⚠️ **干涸判据的真机行为未复现验证**（需 MultiTTS 再次崩溃），属静态 + 变异验证；开关默认关闭，不改默认行为。
-  - **未做 / 外部因素**：MultiTTS 百度 SDK 崩溃是**第三方缺陷**，legado 侧只能缩短恢复时间；建议作者在 MultiTTS 里换掉百度系引擎（Edge/微软/火山）或升级 MultiTTS。
-  - **产物**：正式版 36,187,422 B ＋ 共存版 36,187,220 B；均 `10114` / `3.26.110118c` / arm64-v8a / apksigner 退出码 0。已在 `release/`（`legado-sk-arm64-v8a.apk` 固定名 + 两个版本名；10111/10112/10113 未发布版本仍保留，待作者定是否清理）。
 
 ## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
 
