@@ -32,6 +32,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -1684,31 +1685,66 @@ abstract class BaseReadAloudService : BaseService(),
         )
         mediaSessionCompat.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                resumeReadAloud()
+                // 阅读页开着时播放/暂停交给蓝牙映射（可能映射成别的动作）
+                if (!MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                    )
+                ) {
+                    resumeReadAloud()
+                }
             }
 
             override fun onPause() {
-                pauseReadAloud()
+                if (!MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                    )
+                ) {
+                    pauseReadAloud()
+                }
             }
 
             override fun onSkipToNext() {
-                if (getPrefBoolean("mediaButtonPerNext", false)) {
-                    nextChapter(syncView = true)
-                } else {
-                    nextP()
-                }
+                if (MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_NEXT
+                    )
+                ) return
+                nextP()
             }
 
             override fun onSkipToPrevious() {
-                if (getPrefBoolean("mediaButtonPerNext", false)) {
-                    prevChapter(syncView = true)
-                } else {
-                    prevP()
-                }
+                if (MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                    )
+                ) return
+                prevP()
             }
 
             override fun onStop() {
                 stopSelf()
+            }
+
+            override fun onFastForward() {
+                if (!MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+                    )
+                ) {
+                    super.onFastForward()
+                }
+            }
+
+            override fun onRewind() {
+                if (!MediaButtonReceiver.handleReaderMediaKey(
+                        this@BaseReadAloudService,
+                        KeyEvent.KEYCODE_MEDIA_REWIND
+                    )
+                ) {
+                    super.onRewind()
+                }
             }
 
             override fun onCustomAction(action: String, extras: Bundle?) {

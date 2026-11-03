@@ -70,7 +70,7 @@ enum class ReadAloudConfigGroup(
             PreferKey.ignoreAudioFocus,
             PreferKey.pauseReadAloudWhilePhoneCalls,
             PreferKey.readAloudWakeLock,
-            PreferKey.mediaButtonPerNext,
+            PreferKey.bluetoothReadAloudSkipInterval,
             PreferKey.readAloudHideFloatingWindow,
             PreferKey.readAloudFloatOnDesktop,
             PreferKey.readAloudLongPressToAudioPlay

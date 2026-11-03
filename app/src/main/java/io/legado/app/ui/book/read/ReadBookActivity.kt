@@ -106,6 +106,7 @@ import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.config.IllustrationEditDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
+import io.legado.app.ui.book.read.config.BluetoothKeyMapping
 import io.legado.app.ui.book.read.creation.AiCreationDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.READ_MENU_BG_COLOR
@@ -487,6 +488,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onStart() {
         super.onStart()
         activeActivityRef = WeakReference(this)
+        readerInstanceRef = WeakReference(this)
         postEvent(EventBus.READ_BOOK_ACTIVITY_ACTIVE, true)
     }
 
@@ -1043,6 +1045,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (menuLayoutIsVisible) {
             return super.onKeyDown(keyCode, event)
         }
+        if (handleBluetoothMediaKey(keyCode)) {
+            return true
+        }
         val longPress = event.repeatCount > 0
         when {
             isPrevKey(keyCode) -> {
@@ -1056,11 +1061,11 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
         when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> if (volumeKeyPage(PageDirection.PREV, longPress)) {
+            KeyEvent.KEYCODE_VOLUME_UP -> if (handleVolumeKey(KeyEvent.KEYCODE_VOLUME_UP, longPress)) {
                 return true
             }
 
-            KeyEvent.KEYCODE_VOLUME_DOWN -> if (volumeKeyPage(PageDirection.NEXT, longPress)) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> if (handleVolumeKey(KeyEvent.KEYCODE_VOLUME_DOWN, longPress)) {
                 return true
             }
 
@@ -1089,7 +1094,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (volumeKeyPage(PageDirection.NONE, false)) {
+                if (isVolumeKeyConsumed(keyCode)) {
                     return true
                 }
             }
@@ -1676,10 +1681,70 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    private val bluetoothUiHandler = object : BluetoothKeyMapping.UiHandler {
+        // addPageBookmark 本身已自带「同页重复不重复加」与 toast，不需要另做静默版
+        override fun pageBookmark(): Boolean = addPageBookmark()
+
+        override fun previousPage() = keyPage(PageDirection.PREV)
+
+        override fun nextPage() = keyPage(PageDirection.NEXT)
+    }
+
     /**
-     * 音量键翻页
+     * 蓝牙/耳机媒体键映射（媒体会话与广播都过这里）。只处理媒体键，
+     * 音量键走 [handleVolumeKey]。
      */
-    private fun volumeKeyPage(direction: PageDirection, longPress: Boolean): Boolean {
+    fun handleBluetoothMediaKey(keyCode: Int): Boolean {
+        val key = BluetoothKeyMapping.keyForKeyCode(keyCode) ?: return false
+        if (!key.isMediaKey) {
+            return false
+        }
+        val action = BluetoothKeyMapping.slotAction(key, this)
+        if (action == BluetoothKeyMapping.ACTION_NONE) {
+            return key.consumeWhenNone
+        }
+        return BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+    }
+
+    /**
+     * 音量键：先过 SK 自己的翻页闸门，再走按键映射。
+     *
+     * 闸门（volumeKeyPage / volumeKeyPageOnPlay）决定「朗读中是否接管音量键」，
+     * 接管后具体做什么由映射决定（默认翻页，可改成段落/章节/书签）。
+     */
+    private fun handleVolumeKey(keyCode: Int, longPress: Boolean): Boolean {
+        if (!volumeKeyTakeoverActive()) {
+            return false
+        }
+        val key = BluetoothKeyMapping.keyForKeyCode(keyCode) ?: return false
+        val action = BluetoothKeyMapping.slotAction(key, this)
+        if (action == BluetoothKeyMapping.ACTION_NONE) {
+            return key.consumeWhenNone
+        }
+        // 翻页必须走 handleKeyPage：长按抑制与 600ms 防抖在 keyPageDebounce 里，
+        // 直接 dispatch 会丢掉长按判断，长按一下连翻十几页
+        when (action) {
+            BluetoothKeyMapping.ACTION_PREVIOUS_PAGE -> handleKeyPage(PageDirection.PREV, longPress)
+            BluetoothKeyMapping.ACTION_NEXT_PAGE -> handleKeyPage(PageDirection.NEXT, longPress)
+            else -> {
+                if (longPress) return true
+                return BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+            }
+        }
+        return true
+    }
+
+    /** 音量键按下且会被本页消费（供 onKeyUp 吞掉系统音量变化）。 */
+    private fun isVolumeKeyConsumed(keyCode: Int): Boolean {
+        if (!volumeKeyTakeoverActive()) {
+            return false
+        }
+        val key = BluetoothKeyMapping.keyForKeyCode(keyCode) ?: return false
+        return BluetoothKeyMapping.slotAction(key, this) != BluetoothKeyMapping.ACTION_NONE
+    }
+
+    /** 音量键是否由阅读页接管（SK 双开关 + 内嵌音频块让位）。 */
+    private fun volumeKeyTakeoverActive(): Boolean {
         if (!AppConfig.volumeKeyPage) {
             return false
         }
@@ -1690,7 +1755,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (AppConfig.illustrationAudioVolumeKey && AudioBlockPlayer.isPlaying) {
             return false
         }
-        handleKeyPage(direction, longPress)
         return true
     }
 
@@ -3665,6 +3729,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (activeActivityRef?.get() === this) {
             activeActivityRef = null
         }
+        if (readerInstanceRef?.get() === this) {
+            readerInstanceRef = null
+        }
         postEvent(EventBus.READ_BOOK_ACTIVITY_ACTIVE, false)
         textActionMenu.dismiss()
         popupAction.dismiss()
@@ -3939,8 +4006,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         const val DIRECT_AUDIO_PLAY_ALL = "all"
         const val DIRECT_AUDIO_PLAY_IF_NO_SUBTITLE = "ifNoSubtitle"
         private var activeActivityRef: WeakReference<ReadBookActivity>? = null
+        private var readerInstanceRef: WeakReference<ReadBookActivity>? = null
 
         fun activeActivity(): ReadBookActivity? = activeActivityRef?.get()
+
+        /**
+         * 最近创建的阅读页实例。
+         *
+         * 只给熄屏时的蓝牙按键用：屏幕熄灭后蓝牙按键不会把 Activity 唤回前台，
+         * activeActivity() 已空，但页面/段落动作仍然可以作用在最后那一页上。
+         * ⚠️ 只在真 onDestroy 清理，onStop 不清（熄屏就是 onStop，清了就没实例可用）。
+         */
+        fun readerInstance(): ReadBookActivity? = readerInstanceRef?.get()
     }
 
 }

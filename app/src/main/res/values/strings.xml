@@ -1665,8 +1665,25 @@
     <string name="autobackup_fail">Autobackup failed\n%s</string>
     <string name="end">end</string>
     <string name="custom_group_summary">Turn off Replace Group / Turn on Add Group</string>
-    <string name="pref_media_button_per_next">Headset Buttons • Previous | Next</string>
-    <string name="pref_media_button_per_next_summary">Wired/Bluetooth headset buttons only: off = previous|next paragraph, on = previous|next chapter</string>
+    <string name="bluetooth_read_aloud_skip_interval_title">Bluetooth paragraph skip interval</string>
+    <string name="bluetooth_read_aloud_skip_interval_summary">Space repeated paragraph skips by this interval while reading aloud. Shorter intervals skip faster.</string>
+    <string name="bluetooth_read_aloud_skip_interval_dialog_title">Bluetooth paragraph skip interval (ms)</string>
+    <string name="bluetooth_read_aloud_skip_interval_value">%sms</string>
+    <string name="bluetooth_key_mapping">Bluetooth key mapping</string>
+    <string name="bluetooth_key_previous_track">Previous track</string>
+    <string name="bluetooth_key_rewind">Rewind</string>
+    <string name="bluetooth_key_next_track">Next track</string>
+    <string name="bluetooth_key_fast_forward">Fast forward</string>
+    <string name="bluetooth_key_play_pause">Play/Pause</string>
+    <string name="bluetooth_key_volume_up">Volume up</string>
+    <string name="bluetooth_key_volume_down">Volume down</string>
+    <string name="bluetooth_mode_read">Reading</string>
+    <string name="bluetooth_mode_aloud">Read aloud</string>
+    <string name="bluetooth_action_page_bookmark">Whole-page bookmark</string>
+    <string name="bluetooth_action_read_aloud_previous_paragraph">Read aloud previous paragraph</string>
+    <string name="bluetooth_action_read_aloud_next_paragraph">Read aloud next paragraph</string>
+    <string name="bluetooth_action_select">Choose action</string>
+    <string name="bluetooth_action_choose">Choose an action</string>
     <string name="read_aloud_force_page_follow_summary">When on, turning to a page is like double-tapping the top paragraph of that page to start reading aloud; the view always stays on the read-aloud page.</string>
     <string name="read_aloud_page_split_summary">When on, a paragraph crossing a page break becomes two real read-aloud units (exact boundary, slight pause); when off, the whole paragraph is read as one and the page turns naturally as reading passes the break.</string>
     <string name="read_aloud_tts_wav_mode_summary">The engine synthesizes each paragraph to a local wav file first, then the app plays it itself. Audio duration is exactly known, so page turns follow the real audio progress. The first paragraph has a short synthesis delay; later ones are pre-synthesized while playing.</string>

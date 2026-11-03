@@ -94,6 +94,21 @@ object PreferKey {
     const val ttsVolumeGain = "ttsVolumeGain"
     const val prevKeys = "prevKeyCodes"
     const val nextKeys = "nextKeyCodes"
+    // 蓝牙/耳机键映射（阅读态一个槽、朗读态一个槽），见 BluetoothKeyMapping
+    const val bluetoothPreviousTrackAction = "bluetoothPreviousTrackAction"
+    const val bluetoothPreviousTrackActionOnPlay = "bluetoothPreviousTrackActionOnPlay"
+    const val bluetoothRewindAction = "bluetoothRewindAction"
+    const val bluetoothRewindActionOnPlay = "bluetoothRewindActionOnPlay"
+    const val bluetoothNextTrackAction = "bluetoothNextTrackAction"
+    const val bluetoothNextTrackActionOnPlay = "bluetoothNextTrackActionOnPlay"
+    const val bluetoothFastForwardAction = "bluetoothFastForwardAction"
+    const val bluetoothFastForwardActionOnPlay = "bluetoothFastForwardActionOnPlay"
+    const val bluetoothPlayPauseAction = "bluetoothPlayPauseAction"
+    const val bluetoothPlayPauseActionOnPlay = "bluetoothPlayPauseActionOnPlay"
+    const val bluetoothVolumeUpAction = "bluetoothVolumeUpAction"
+    const val bluetoothVolumeUpActionOnPlay = "bluetoothVolumeUpActionOnPlay"
+    const val bluetoothVolumeDownAction = "bluetoothVolumeDownAction"
+    const val bluetoothVolumeDownActionOnPlay = "bluetoothVolumeDownActionOnPlay"
     const val showDiscovery = "showDiscovery"
     const val showHomepage = "showHomepage"
     const val homepageSourceHidden = "homepageSourceHidden"
@@ -363,6 +378,8 @@ object PreferKey {
     const val readAloudDoubleTapTimeout = "readAloudDoubleTapTimeout"
     const val readAloudScrollFollowTimeout = "readAloudScrollFollowTimeout"
     const val readAloudProgressPollInterval = "readAloudProgressPollInterval"
+    // 连续蓝牙切段的最小间隔（毫秒），避免一次按键被重复上报连跳多段
+    const val bluetoothReadAloudSkipInterval = "bluetoothReadAloudSkipInterval"
     const val pageAnimationSpeed = "pageAnimationSpeed"
     const val keyPageAnimationSpeed = "keyPageAnimationSpeed"
     const val showAddToShelfAlert = "showAddToShelfAlert"
@@ -402,7 +419,6 @@ object PreferKey {
      * 此前它们只以字面量散落在 xml 与 ReadAloudConfigDialog 的 when 分支里，
      * 分组过滤需要按 key 归类，故收敛成常量，避免组定义与分支各写一份字面量。
      */
-    const val mediaButtonPerNext = "mediaButtonPerNext"
     const val readAloudCacheEntry = "readAloudCacheEntry"
     const val sysTtsConfig = "sysTtsConfig"
     const val ttsCacheSettings = "ttsCacheSettings"
