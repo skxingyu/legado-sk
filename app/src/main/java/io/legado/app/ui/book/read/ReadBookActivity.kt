@@ -1709,7 +1709,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (action == BluetoothKeyMapping.ACTION_NONE) {
             return key.consumeWhenNone
         }
-        return BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+        // 阅读页在前台时，映射到的动作一律为「已消费」：dispatch 返回 false（如整页书签
+        // 本页已存在）若直接下传，广播侧会接着走 else 分支把朗读开关一遍
+        BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+        return true
     }
 
     /**
@@ -1734,7 +1737,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             BluetoothKeyMapping.ACTION_NEXT_PAGE -> handleKeyPage(PageDirection.NEXT, longPress)
             else -> {
                 if (longPress) return true
-                return BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+                // 同媒体键：映射到的动作一律算已消费，不把按键漏回系统调音量
+                BluetoothKeyMapping.dispatch(action, this, bluetoothUiHandler)
+                return true
             }
         }
         return true
