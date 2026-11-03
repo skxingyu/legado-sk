@@ -39,6 +39,14 @@ internal fun audioChapterAdvanced(
     minMs: Int = AUDIO_CHAPTER_ADVANCE_MIN_MS
 ): Boolean = startMs >= 0 && maxPlayedMs - startMs >= minMs
 
+/** 预测出的段内位置是否需要发布：段落变化、用户显式传送、或按比例算出的页变化。 */
+internal fun shouldPublishTextPosition(
+    paragraphChanged: Boolean,
+    syncView: Boolean,
+    predictedPage: Int,
+    pageIndex: Int,
+): Boolean = paragraphChanged || syncView || predictedPage != pageIndex
+
 class SourceAudioReadAloudService : BaseReadAloudService(), Player.Listener {
 
     companion object {
@@ -299,6 +307,23 @@ class SourceAudioReadAloudService : BaseReadAloudService(), Player.Listener {
                     return
                 }
                 upReadAloudLoading(false)
+                // 无时间标签的字幕：按时长估计每段起点，再绑定到正文做段内位置预测。
+                if (!mapping.hasTimeMapping) {
+                    /*
+                     * shortcut: 与上游不同——上游先 withEstimatedTiming 再 bind，hasTimeMapping
+                     * 因此恒为 true，正文晚于 STATE_READY 时 bindMappingToLayout 返回 null 后再也
+                     * 进不来，整章预测静默失效（SK 的 sessionChapterCanStartWithoutText = true 使
+                     * 正文晚到成为常态）。故只在绑定成功后才替换 mapping。
+                     */
+                    val estimated = mapping.withEstimatedTiming(duration.toInt())
+                    runCatching { bindMappingToLayout(estimated) }
+                        .onFailure { AppLog.put("书源音频预测字幕绑定失败", it) }
+                        .getOrNull()
+                        ?.let { binding ->
+                            mapping = estimated
+                            layoutBinding = binding
+                        }
+                }
                 currentChapter?.takeIf { it.index == currentChapterIndex }?.let { chapter ->
                     if (chapter.end != duration) {
                         chapter.end = duration
@@ -368,9 +393,6 @@ class SourceAudioReadAloudService : BaseReadAloudService(), Player.Listener {
         val chapter = textChapter?.takeIf { it.chapter.index == currentChapterIndex } ?: return
         val paragraphIndex = layoutBinding?.layoutParagraphAt(position) ?: return
         val paragraphUnchanged = paragraphIndex == lastMappedParagraph
-        // 用户显式传送（拖动进度条）：映射段落未变也要发布一次位置事件，
-        // 阅读页“回原进度”对齐才有目标；常规轮询保持段落变化才发布。
-        if (paragraphUnchanged && !syncView) return
         val paragraphs = chapter.getParagraphs(false)
         val paragraph = paragraphs.getOrNull(paragraphIndex) ?: run {
             // 字幕映射异常只影响正文同步与高亮，不能停止正常播放的音频
@@ -385,7 +407,21 @@ class SourceAudioReadAloudService : BaseReadAloudService(), Player.Listener {
             readAloudNumber = paragraph.chapterPosition
             pageIndex = chapter.getPageIndexByCharIndex(paragraph.chapterPosition)
         }
-        postReadAloudTextPosition(paragraph.chapterPosition + 1, syncView)
+        // 按字幕区间内的播放比例估算段内位置；无时间轴时保持原页码不动。
+        val fraction = mapping.paragraphFractionAt(position, player.duration.toInt())
+        val predictedPage = if (fraction == null) {
+            pageIndex
+        } else {
+            val offset = (paragraph.length * fraction).toInt()
+                .coerceIn(0, (paragraph.length - 1).coerceAtLeast(0))
+            chapter.getPageIndexByCharIndex(paragraph.chapterPosition + offset)
+        }
+        // 门槛同时管「页码」和「位置事件」：否则每个轮询周期都会 post，白白驱动
+        // 阅读页跟随判定、面板刷新与高亮重算。
+        if (shouldPublishTextPosition(!paragraphUnchanged, syncView, predictedPage, pageIndex)) {
+            pageIndex = predictedPage
+            postReadAloudTextPosition(paragraph.chapterPosition + 1, syncView)
+        }
     }
 
     private fun persistProgress(position: Int) {

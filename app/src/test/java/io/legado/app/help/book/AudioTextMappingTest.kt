@@ -269,4 +269,38 @@ class AudioTextMappingTest {
         assertEquals(1, binding.layoutParagraphAt(1_000))
         assertEquals(2, binding.layoutParagraphAt(3_000))
     }
+
+    @Test
+    fun `untimed lyrics get estimated timing by text length`() {
+        val mapping = AudioTextMapping.parse("短\n长长")
+
+        assertFalse(mapping.hasTimeMapping)
+        val estimated = mapping.withEstimatedTiming(3_000)
+
+        assertTrue(estimated.hasTimeMapping)
+        assertEquals(listOf(0, 1_000), estimated.cues.map { it.startMs })
+        assertEquals(
+            listOf(0, 1),
+            estimated.displayParts.filterIsInstance<AudioTextMapping.DisplayPart.Body>()
+                .map { it.cueIndex }
+        )
+        // 已有时间轴或时长非法时不得覆盖
+        assertEquals(listOf(0, 1_000), estimated.withEstimatedTiming(9_000).cues.map { it.startMs })
+        assertFalse(mapping.withEstimatedTiming(0).hasTimeMapping)
+    }
+
+    @Test
+    fun `paragraph fraction is linear inside a cue and rejects empty ranges`() {
+        val mapping = AudioTextMapping.parse(
+            "[00:00.00]甲\n[00:10.00]乙"
+        )
+
+        assertEquals(0.5, mapping.paragraphFractionAt(5_000, 20_000)!!, 1e-9)
+        assertEquals(0.0, mapping.paragraphFractionAt(0, 20_000)!!, 1e-9)
+        assertEquals(1.0, mapping.paragraphFractionAt(20_000, 20_000)!!, 1e-9)
+        // 下一个 cue 起点 <= 当前起点（重复时间戳）时无法求区间
+        val collapsed = AudioTextMapping.parse("[00:10.00]甲\n[00:10.00]乙")
+        assertNull(collapsed.paragraphFractionAt(10_000, 20_000))
+        assertNull(AudioTextMapping(emptyList(), emptyList()).paragraphFractionAt(0, 1_000))
+    }
 }
