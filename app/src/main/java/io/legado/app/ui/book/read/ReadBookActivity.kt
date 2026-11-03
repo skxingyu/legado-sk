@@ -107,6 +107,7 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.config.IllustrationEditDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.BluetoothKeyMapping
+import io.legado.app.ui.book.read.config.BluetoothKeyMappingDialog
 import io.legado.app.ui.book.read.creation.AiCreationDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.READ_MENU_BG_COLOR
@@ -859,6 +860,11 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_help -> showHelp()
+
+            R.id.menu_bluetooth_key_mapping -> {
+                binding.readMenu.runMenuOut()
+                showDialogFragment(BluetoothKeyMappingDialog())
+            }
         }
         return super.onCompatOptionsItemSelected(item)
     }

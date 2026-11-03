@@ -81,6 +81,8 @@ object BluetoothKeyMapping {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             true
         ),
+        // 音量键两个槽都默认翻页：是否接管由 SK 的音量键翻页闸门（volumeKeyPage /
+        // volumeKeyPageOnPlay）决定，这里再给 ACTION_NONE 会让开了闸门的用户按音量键没反应
         Key(
             PreferKey.bluetoothVolumeUpAction,
             PreferKey.bluetoothVolumeUpActionOnPlay,
@@ -88,8 +90,6 @@ object BluetoothKeyMapping {
             KeyEvent.KEYCODE_VOLUME_UP,
             false,
             ACTION_PREVIOUS_PAGE,
-            // 阅读态默认翻页，朗读态也默认翻页：音量键翻页闸门（PreferKey.volumeKeyPageOnPlay）
-            // 已经决定朗读中是否接管，这里再给 ACTION_NONE 会让开了闸门的用户按音量键没反应
             ACTION_PREVIOUS_PAGE,
             consumeWhenNone = false
         ),
