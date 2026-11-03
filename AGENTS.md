@@ -14,7 +14,7 @@
 4. **红线与排错** → 以本文件（AGENTS.md）为准：§4 UI/工程质量、§3 构建版本产物、§6 交付基线；具体历史红线见 §4「功能红线」。
 5. **机器环境/路径** → 本文件 §7「当前机器环境与配套文档」§7.1 环境快照、§7.2 companion 文档清单。
 6. **动手前决定用几个子代理** → 读 §1.5「子代理编排」。大范围审计/排查**默认拆并行**，串行单代理是已知失败模式；边界（只读、写域切分、主代理收口）见该节。
-7. **改朗读链路前必读** `docs/朗读链路.md`（朗读状态所有权契约，10023 架构的唯一细节来源）；**改造缓存/评论任务域前必读** `docs/重构下载架构.md`（缓存域唯一架构契约）。这两份是本仓库唯一描述内部契约的设计文档。
+7. **改朗读链路前必读** `docs/朗读链路.md`（朗读状态所有权契约，10023 架构的唯一细节来源）；**朗读引擎与上游「阅读」的差异、已删旧能力必读** `docs/朗读引擎-上游对齐差异台账.md`（有意保留的 6 项差异 + SK 独有能力清单，改回去即回归）；**改造缓存/评论任务域前必读** `docs/重构下载架构.md`（缓存域唯一架构契约）。
 8. ⚠️ `companion/` 整目录在 `.gitignore` 中忽略、**不推送公开仓库**（含机器信息）；只读不随意改动，改动需与对应事实一致。若发现文档与源码事实不符，**以源码和 GitHub Releases 为准**并先核实再改文档。
 
 ## 1. 核心工作原则
@@ -304,6 +304,8 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
   - ⚠️ **在 `onCreate` / `onViewCreated` 里注册布局回调是最高危场景**：此时控件必然未 attach。10024 的「朗读面板定位就绪才显示」重放时踩中此坑，10095~10100 期间「听书状态重进阅读页」必崩。
   - 回归锁：`ReadAloudPanelPositionGuardTest.panelsArePositionedBeforeRevealed` 含**反向断言**，禁止该函数体内再出现 `viewTreeObserver` / `removeOnGlobalLayoutListener`。
 
+- **蓝牙按键映射与音量键：6 项与上游的有意差异不得合回上游形态**（台账 `docs/朗读引擎-上游对齐差异台账.md`）：① 音量键翻页闸门 `volumeKeyPage`/`volumeKeyPageOnPlay` 必须保留（上游已删），`handleVolumeKey` 里 `ACTION_PREVIOUS_PAGE`/`ACTION_NEXT_PAGE` **必须走 `handleKeyPage(direction, longPress)`**，否则长按连翻十几页并丢掉 600ms 防抖；② 音量键朗读态默认动作是翻页不是 `ACTION_NONE`（否则开了闸门的用户按键无反应）；③ 播放暂停键未朗读时走 `MediaButtonReceiver.readAloud()`，不得直调 `ui.toggleReadAloud()`（会绕过 `readAloudByMediaButton`/`mediaButtonOnExit`/`MEDIA_BUTTON`）；④ `readerInstanceRef` 只在 `onStart` 设置、**只在真 onDestroy 清**（`onStop` 里清会让熄屏蓝牙翻页失效）；⑤ 书源音频的预测字幕**只在绑定成功后**才替换 `mapping`（上游先替换后 bind，本服务 `sessionChapterCanStartWithoutText = true`，返回 null 后永不重试⇒整章预测静默失效）；⑥ 预测位置发布门槛必须走 `shouldPublishTextPosition(...)` 并同时管页码与 TTS 位置事件。回归锁 `BluetoothKeyMappingGuardTest` / `SourceAudioChapterTimerGuardTest` / `PredictedTextPositionTest`。
+- **蓝牙按键映射入口在阅读菜单**（`R.id.menu_bluetooth_key_mapping`），**不在**朗读设置里；朗读设置 Basic 组只有「蓝牙朗读切段间隔」一行。`mediaButtonPerNext` 已按上游删除（常量、读点、pref 行、文案全删），不要复活。
 - **阅读排版预设按数组下标寻址**：`DefaultData.readConfigs` 由 `ReadBookConfig.getConfig(index)` 直接取用，`readStyleSelect` 是 **Int**。**只允许在数组末尾追加**，改名安全但要同步 `BuiltinPresetAssetTest.READ_PRESET_HEAD`；插入/重排会让存量用户当前排版整体位移。唯一比较预设**名字**的地方是 `ReadBookConfig.kt` 的 `isOldFormatConfigList`（旧格式迁移），改名经实跑验证不影响其布尔结果（下标 0 先命中 `||` 短路）。
 - **语言裁剪边界**：`resConfigs "zh"` **会裁掉同语言 region 变体**（`zh-rHK`/`zh-rTW` 与繁体、其他语言一样被裁，只保留精确 `zh`）。产物实测 `locales: '--_--' 'zh'`、`unzip` 中 HK/TW 计数为 0，故 `values-zh-rHK|rTW` 是**不进 APK 的死资源**（已于 10038 删除），不存在"HK/TW 回退到简体或英文"的情形。详见 §6 的语言裁剪边界注。
 - **备份打包清单的两类路径（10044 确立、10045 补强，改动前必读）**：给 `ZipUtils.zipFile` 的路径分两类——「本次流程自己创建/校验的」可直接传，「依赖用户配置才存在的」必须先 `exists()` 过滤。⚠️ 但**过滤时点**同样关键：由本次流程**稍后**才创建的目录（如 `covers`，`prepareCustomCoverBackup()` 才建）**不能放进 `backgroundAssetDirNames` 交给存在性判定**，否则会被提前跳过 → 数据静默漏备份（10045 修）。正确做法：先让创建者建好目录并补齐内容，**再按"目录里实际有什么"判定**（`coverDirShouldBeZipped(File)` 判 `listFiles()` 非空）。⚠️ **判据必须锚定"最终要被打包的那个对象的状态"，不能锚定"本次流程做了什么动作"**——`prepareCustomCoverBackup()` 对**已在该目录内**的封面会跳过拷贝，用"本次拷了几个"判定会把最常见的场景误判为空（10045 首版实现即犯此错，被实机回归抓到）。
