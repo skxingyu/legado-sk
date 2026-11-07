@@ -226,7 +226,8 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                 }
                 val checked = voices.indexOfFirst { it.id == engine.activeVoiceId }
                 alert(title = engine.name) {
-                    singleChoiceItems(labels.toTypedArray(), checked) { _, which ->
+                    singleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+                        dialog.dismiss()
                         val voice = voices[which]
                         lifecycleScope.launch(IO) {
                             if (TtsEngineStore.selectVoice(engine.id, voice.id) == null) {
