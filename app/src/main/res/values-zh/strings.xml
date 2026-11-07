@@ -2618,6 +2618,10 @@
     <string name="tts_engine_v2_fetch_done">发音人目录已更新</string>
     <string name="tts_engine_v2_fetch_empty">发音人目录为空，请先获取发音人目录</string>
     <string name="tts_engine_v2_no_pickable_engine">没有可绑定的朗读引擎，请先导入或新建脚本引擎</string>
+    <string name="tts_engine_v2_options">脚本选项</string>
+    <string name="tts_engine_v2_option_unset">（默认）</string>
+    <string name="tts_engine_v2_options_empty">当前引擎没有可配置的选项</string>
+    <string name="tts_engine_v2_options_saved">脚本选项已保存</string>
     <string name="homepage">主页</string>
     <string name="show_homepage">显示主页</string>
     <string name="show_homepage_s">在底栏显示聚合主页页面</string>

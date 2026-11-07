@@ -2765,6 +2765,10 @@
     <string name="tts_engine_v2_fetch_done">Voice catalog updated</string>
     <string name="tts_engine_v2_fetch_empty">Voice catalog is empty; fetch voices first</string>
     <string name="tts_engine_v2_no_pickable_engine">No bindable read-aloud engine. Import or create a script engine first.</string>
+    <string name="tts_engine_v2_options">Script options</string>
+    <string name="tts_engine_v2_option_unset">(default)</string>
+    <string name="tts_engine_v2_options_empty">This engine has no configurable options</string>
+    <string name="tts_engine_v2_options_saved">Script options saved</string>
     <string name="homepage">Homepage</string>
     <string name="show_homepage">Show homepage</string>
     <string name="show_homepage_s">Add an aggregate homepage page to the bottom navigation</string>

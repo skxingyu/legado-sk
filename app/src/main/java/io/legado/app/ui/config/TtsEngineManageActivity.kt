@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.ViewGroup
+import android.widget.EditText
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
@@ -16,7 +18,10 @@ import io.legado.app.databinding.ActivityTtsEngineManageBinding
 import io.legado.app.databinding.ItemTtsEngineV2Binding
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
+import io.legado.app.help.tts.TtsScriptEngineClient
+import io.legado.app.help.tts.TtsScriptOption
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
@@ -161,6 +166,7 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                 if (engine.supportsVoiceFetch()) {
                     add(getString(R.string.tts_engine_v2_fetch_voices))
                 }
+                add(getString(R.string.tts_engine_v2_options))
                 add(getString(R.string.export))
                 add(getString(R.string.delete))
             }
@@ -170,6 +176,7 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                         getString(R.string.tts_engine_v2_enable),
                         getString(R.string.tts_engine_v2_disable) -> toggleEnabled(engine)
                         getString(R.string.tts_engine_v2_fetch_voices) -> fetchVoices(engine)
+                        getString(R.string.tts_engine_v2_options) -> editOptions(engine)
                         getString(R.string.export) -> exportEngine(engine)
                         getString(R.string.delete) -> deleteEngine(engine)
                     }
@@ -187,6 +194,125 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                     refreshData()
                 }.onFailure { error ->
                     AppLog.put("获取发音人目录失败\n${error.localizedMessage}", error)
+                    toastOnUi(error.localizedMessage)
+                }
+            }
+        }
+
+        private fun editOptions(engine: TtsEngineSetting) {
+            lifecycleScope.launch {
+                val options = withContext(IO) {
+                    runCatching { TtsScriptEngineClient.loadOptions(engine) }
+                }.getOrElse { error ->
+                    AppLog.put("读取脚本选项失败\n${error.localizedMessage}", error)
+                    toastOnUi(error.localizedMessage)
+                    return@launch
+                }
+                if (options.isEmpty()) {
+                    toastOnUi(R.string.tts_engine_v2_options_empty)
+                    return@launch
+                }
+                showOptions(engine, options, engine.effectiveOptionValues(options).toMutableMap())
+            }
+        }
+
+        private fun showOptions(
+            engine: TtsEngineSetting,
+            options: List<TtsScriptOption>,
+            values: MutableMap<String, String>
+        ) {
+            val rows = options.map { option ->
+                val value = values[option.safeKey].orEmpty()
+                val shown = when {
+                    value.isEmpty() -> getString(R.string.tts_engine_v2_option_unset)
+                    option.normalizedType == "password" -> "••••••"
+                    else -> value
+                }
+                "${option.displayLabel}: $shown"
+            }
+            alert(title = engine.name) {
+                items(rows) { _: DialogInterface, index: Int ->
+                    editOption(engine, options, values, options[index])
+                }
+                positiveButton(R.string.sure) { saveOptions(engine, options, values) }
+                negativeButton(R.string.cancel)
+            }
+        }
+
+        private fun editOption(
+            engine: TtsEngineSetting,
+            options: List<TtsScriptOption>,
+            values: MutableMap<String, String>,
+            option: TtsScriptOption
+        ) {
+            val key = option.safeKey
+            if (key.isEmpty()) return
+            when (option.normalizedType) {
+                "boolean" -> {
+                    values[key] =
+                        if (values[key] == "true" || values[key] == "1") "false" else "true"
+                    showOptions(engine, options, values)
+                }
+
+                "select" -> {
+                    val items = option.safeValues
+                    if (items.isEmpty()) return
+                    selector(title = option.displayLabel, items = items.map { it.label }) { _, index ->
+                        values[key] = items[index].value
+                        showOptions(engine, options, values)
+                    }
+                }
+
+                else -> {
+                    val input = EditText(this@TtsEngineManageActivity).apply {
+                        setText(values[key].orEmpty())
+                        setSingleLine(true)
+                        hint = key
+                        when (option.normalizedType) {
+                            "password" -> inputType =
+                                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+
+                            "number" -> inputType = InputType.TYPE_CLASS_NUMBER or
+                                    InputType.TYPE_NUMBER_FLAG_DECIMAL or
+                                    InputType.TYPE_NUMBER_FLAG_SIGNED
+                        }
+                    }
+                    alert(title = option.displayLabel) {
+                        customView { input }
+                        positiveButton(R.string.sure) {
+                            values[key] = input.text.toString().trim()
+                            showOptions(engine, options, values)
+                        }
+                        negativeButton(R.string.cancel)
+                    }
+                }
+            }
+        }
+
+        private fun saveOptions(
+            engine: TtsEngineSetting,
+            options: List<TtsScriptOption>,
+            values: Map<String, String>
+        ) {
+            val current = engine.effectiveOptionValues(options)
+            val updated = engine.optionValues.toMutableMap()
+            options.forEach { option ->
+                val key = option.safeKey
+                if (key.isNotEmpty() && values[key] != current[key]) {
+                    updated[key] = values[key].orEmpty()
+                }
+            }
+            if (updated == engine.optionValues) return
+            lifecycleScope.launch {
+                runCatching {
+                    withContext(IO) {
+                        TtsEngineStore.saveEngine(engine.copy(optionValues = updated.toMap()))
+                    }
+                }.onSuccess {
+                    toastOnUi(R.string.tts_engine_v2_options_saved)
+                    refreshData()
+                }.onFailure { error ->
+                    AppLog.put("保存脚本选项失败\n${error.localizedMessage}", error)
                     toastOnUi(error.localizedMessage)
                 }
             }
