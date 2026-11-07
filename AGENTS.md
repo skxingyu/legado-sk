@@ -299,6 +299,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
 - **实时缓存的「快速重试」必须保持可选且默认关闭（10114 确立）**：`AppConfig.ttsCacheFastRetry` 默认 **false**——关闭时必须是原来那套保守行为（只有从派发起算的单段超时、无干涸判据）；开启后单段超时固定 `FAST_RETRY_SEGMENT_TIMEOUT_SECONDS = 30` + 队列干涸 `REALTIME_DRY_STALL_GRACE_SECONDS = 15` 判定引擎挂死并走 `handleSpeakError(retryWithReinit = true)`。三条不可改回的点：① `armRealtimeDryWatchdog` 入口必须有 `if (!AppConfig.ttsCacheFastRetry) return`；② `realtimeDryIndex` 去重必须保留（同一单元重复武装会因 `retryParagraphKey` 二次命中而**直接跳段**）；③ 撤销点 `playWavFile()` / `pauseReadAloud()` / `resetWavPlayback()` 缺一不可；④ 看门狗必须用 `AppConfig.ttsRealtimeSegmentTimeoutSeconds`，不得改回直接读 `ttsCacheSegmentTimeoutSeconds`。回归锁 `ReadAloudRealtimeDryWatchdogTest` 6 项。
   - ⚠️ 上游真相（排查同类卡顿时先用）：卡住往往是**语音引擎自己崩了**——`logcat -b crash` 里 `org.Multi_TTS` 的 `Fatal signal 6 (SIGABRT) … Abort message: 'Pointer tag for … was truncated'`，backtrace 落在 `libBDSpeechDecoder_V1.so`（百度 SDK tagged-pointer 缺陷），崩溃时刻与「派发后无声」完全对齐；legado 只能缩短恢复时间，根治靠换引擎。
   - ⚠️ 日志通道（2026-11-01 修正旧误判）：**`AppLog` 会以 tag `Legado` 写 logcat**（`I/Legado (pid): AppLog …`），release 包也能 `adb logcat -d | grep Legado` 读到，不必等用户开「记录日志」。
+- **百度语音是「内置脚本引擎」，不是新引擎类型（10118）**：`app/src/main/assets/defaultData/tts/baidu_online_tts.js` / `baidu_fanyi_tts.js` 随 `DEFAULT_SCRIPT_ASSETS` 自动出现，**不要**改成 Kotlin 引擎或 HTTP 预设；脚本引擎的配置入口只有 `TtsEngineManageActivity` 的「脚本选项」，音色入口只有「选择音色」（`TtsEngineStore.selectVoice`），不要搬进引擎选择弹窗（那里行点击=选中、长按=进详情页）。`aue` 必须保持 `3`（服务端 HTTP TTS 缓存文件固定 `.mp3`，PCM 会播不出来）。
 - **禁止缓存 `viewTreeObserver` 局部引用后自行移除监听（10101 确立，主线程崩溃级）**：`View.getViewTreeObserver()` 在 View **尚未 attach** 时返回的是 View 内部的临时 `mFloatingTreeObserver`；attach 时 `View.dispatchAttachedToWindow` 调 `info.mTreeObserver.merge(mFloatingTreeObserver)` 把监听**搬进真实 observer 并 `kill()` 掉这份临时对象**（`mAlive=false`）。监听仍会被派发，但回调里对**缓存的旧引用**调 `removeOnGlobalLayoutListener` / `removeOnPreDrawListener` 会先过 `checkIsAlive()` → `IllegalStateException: This ViewTreeObserver is not alive`，主线程 FATAL。
   - 正确写法三选一：① 每次从 View 现取（`view.viewTreeObserver.add/remove`）；② 移除前查 `isAlive()`（本仓库范例 `AnimationExtensions.doAfterFirstDraw`）；③ 直接用 androidx `doOnLayout` / `doOnPreDraw`（`OneShotPreDrawListener` 内部已含 `isAlive()` 回退，且 detach 时自动移除）。
   - ⚠️ **在 `onCreate` / `onViewCreated` 里注册布局回调是最高危场景**：此时控件必然未 attach。10024 的「朗读面板定位就绪才显示」重放时踩中此坑，10095~10100 期间「听书状态重进阅读页」必崩。
@@ -394,11 +395,21 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10118` 递增**。
+> **下一次交付 versionCode 从 `10119` 递增**。
 
 ---
 
-- ✅ **10117（`3.26.110311c`）—— 当前交付，未发布**（朗读引擎对齐上游：蓝牙按键映射 + 书源音频按字幕时长预测段内位置）：
+- ✅ **10118（`3.26.110720c`）—— 当前交付，未发布**（内置「百度在线语音」「百度翻译免密语音」两条 V2 脚本引擎 + 脚本引擎可编辑选项/可选发音人）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `85abfa8f`（详情页支持编辑脚本选项）→ `bc05d2c6`（两条百度脚本 + 帮助文档）→ `aae68fa5`（详情页支持选择发音人）→ `d7c4bfbf`（选完关闭弹窗）。
+  - **起因（作者，2026-11-07）**：问 `FactorCitrus/Juyue`（苹果端重构版）里的「百度在线语音」能否集成。核查结论：它只是两条 HTTP 预设（`https://tsn.baidu.com/text2audio` 需 `tok`；`https://fanyi.baidu.com/gettts` 免 Key 但长文本不稳），Swift 实现**不可照抄**——语言/模板引擎不同、`spd=5` 写死、token 不续期、per 表重复收费档未区分、单次 1024 GBK 字节上限、免 Key 接口 520 字起失败。故按「方案 B：内置 V2 脚本引擎」落地，不引入新引擎类型。
+  - **两条内置脚本**（`app/src/main/assets/defaultData/tts/`，`@enabled false`）：`baidu_online_tts.js`（84 个官方音色含 基础/精品/臻品/大模型 档位标签；POST `tsn.baidu.com/text2audio`，body `tex/tok/cuid/ctp=1/lan=zh/aue=3/per/spd/pit/vol`；access_token 走 `aip.baidubce.com/oauth/2.0/token`，cache key = `baidu_tts_token_<apiKey>_<secretKey>`、TTL 25 天；cuid 随机缓存 365 天；语速/音调/音量 0-100→0-15（50→5），基础音库音调上限 9）、`baidu_fanyi_tts.js`（GET `fanyi.baidu.com/gettts`，单音色、无选项、只适合短句）。两者靠 `DEFAULT_SCRIPT_ASSETS` 自动出现，存量装机无需迁移。
+  - **选项与音色入口**（`TtsEngineManageActivity` 菜单，脚本行在引擎弹窗里长按进详情页）：新增「脚本选项」（读 `TtsScriptEngineClient.loadOptions`，按 `normalizedType` 分支编辑，**只写真正变化的 key**，避免 `saveEngine` 触发 `shouldClearVoiceCacheFor` 清空发音人目录）、新增「选择音色」（`TtsEngineStore.selectVoice`，列表带音库标签区分同名音色，选中后关闭弹窗）。此前全库**没有任何**脚本引擎选项/音色编辑入口（`selectVoice` 零调用方）。
+  - **旧文档失效已修**：内置 `defaultData/httpTTS.json` 与 `web/help/md/httpTTSHelp.md` 里的 `http://tts.baidu.com/text2audio` 旧地址实测现在也要求 `tok`（缺则 `err_no 501 / err_subcode 16`），帮助文档示例已换成 `https://tsn.baidu.com/text2audio` + `tok` 并注明 30 天过期。
+  - **验证**：`assembleAppRelease`+`assembleAppSk2` 成功，两包 `10118` / `3.26.110720c` / `aapt` 包名正确 / `apksigner` 退出码 0。雷电模拟器 10117→10118 覆盖（`firstInstallTime` 未变）：两条引擎出现在朗读引擎弹窗，`百度在线语音` 详情页显示「发音人 84」、脚本选项弹窗可开、选择音色弹窗 84 项带档位；`百度翻译免密语音` 被选为引擎后**真实出声**（段 68→76，logcat 有音频焦点与位置发布），证明脚本引擎 GET→mp3→ExoPlayer 全链路可用；`crash` 无本应用 FATAL。**平板 `HA1KAPWG` 2026-11-07 覆盖 10117→10118**：`versionCode=10118`，`firstInstallTime` 仍 `2026-10-30 14:00:50`，启动后 `MainActivity` 为焦点、`crash` 只有系统 settings 的历史 FATAL。
+  - **未验证**：百度在线语音的真实合成（作者尚未申请 API Key，且明确钥匙只在手机/平板使用，不在模拟器验证）；精品/臻品/大模型音色的实际效果与计费档。
+  - **产物**：正式版 36,217,477 B ＋ 共存版 36,217,271 B；已在 `release/`（固定名 + 两个版本名）。**未发布 Release**。
+
+- ✅ **10117（`3.26.110311c`）—— 历史交付，未发布**（朗读引擎对齐上游：蓝牙按键映射 + 书源音频按字幕时长预测段内位置）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `78173037`（P2 书源音频）→ `17f6a213`（P1 引擎侧 + 删 mediaButtonPerNext）→ `025741c2`（映射弹窗 + 回归锁）→ `d1129a20`（差异台账 + 红线）→ `99ee5474`（映射到的键一律视为已消费）→ `f09b2369`（切段间隔设置行接上点击与摘要）。
   - **起因（作者，2026-11-03）**：要求把朗读引擎对齐上游「阅读」——**只对齐引擎，UI 用 SK 自己的**。先做方案（`test-records/朗读引擎对齐上游-方案/方案.md`，含三份独立对抗式审查报告同目录），作者裁决 D1~D5 后开工。
   - **范围核定**：SK 朗读引擎是上游的**超集**，上游独有的引擎能力只有两项 —— ① 蓝牙按键映射（上游 `8a549792`+`bd0521de`+`ae15087b`+`659f4483`）；② 书源音频按字幕时长预测段内位置（上游 `bdc01c7a`）。`help/tts`、引擎插件、TTS 实体/DAO、`TtsCacheService`、`TTS.kt` 与上游基本一致（仅多 SK 的 `TtsCacheJanitor`/`TtsCacheSweep`）。
@@ -411,18 +422,6 @@ uiautomator2 / ADB
   - **真机平板 `HA1KAPWG` 2026-11-03 覆盖 10114→10117**：`versionCode=10117` / `3.26.110311c`，`firstInstallTime` 仍 `2026-10-30 14:00:50`（＝升级保数据），启动后书架完整、`MainActivity` 为焦点应用、`crash` 无 FATAL。蓝牙按键与音量键的实机手感回归由作者在真机完成。
   - **未验证项**：书源音频「按字幕时长预测段内位置」的真机行为（需要带字幕的书源音频书，模拟器无素材；仅静态 + 单测覆盖）；熄屏 `readerInstance()` 路径未单独构造复现。
   - **产物**：正式版 36,204,291 B ＋ 共存版 36,204,430 B；已在 `release/`（固定名 + 两个版本名）。作者 2026-11-03 决定**暂不发布**（等真机试过），并清理掉 10114/10115/10116 三个未发布包；10111/10112/10113（同样未发布）暂留。
-
-- ✅ **10116（`3.26.112023c`）—— 历史交付，未发布**（审查闭环：切章失败归还额度+提示、书源音频判据纯函数化、防双扣收口）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `7721d729`。
-  - **起因**：10115 交付后作者要求「做一次 review，给优化建议」。独立审查（`reviewer`，`del_mvxsn3wa_x201`）确认 10115 的 7 项修复中 6 项成立，但指出两处未闭合；作者选择全修。
-  - **① 切章失败只从「静默 return」变成「静默停止」**：`stopReadAloudOnInvalidPosition(message)` 只 `putDebug` + `stopSelf()`，而切章走 `execute(IO)` 异步，`advanceToNextChapter()` 早已返回 true ⇒ 额度已扣、无音频、无提示，用户以为崩了。改：该函数加 `refundChapter: Boolean = false, toast: Boolean = false`，`switchReadAloudChapterKeepingView` 的 `prepareReadAloudChapter` 失败传 `refundChapter = true, toast = true`（归还 `timeChapter++` + 重发 `READ_ALOUD_DS_CHAPTER` + 刷新通知 + `AppLog.put(..., toast = true)`）。
-  - **② `chapterStartNumber = readAloudNumber` 对书源音频的防双扣无效**：音频判据只看 `chapterPlaybackStart`/`maxPlayedPosition`，而这俩只在 `play()` 复位；片尾提前切章（`closeCredits`）与 `STATE_ENDED` 两次 `nextChapter()` 落在新章 `play()` 之前时仍会重复扣一章。改：基类新增 `protected open fun onChapterConsumed() = Unit`，在 `nextChapter()` 消费成立处（`chapterStartNumber = readAloudNumber` 之后）调用；`SourceAudioReadAloudService` 覆写为把两个字段置 -1。
-  - **③ 音频判据纯函数化 + 补行为测试**：抽出顶层 `internal const val AUDIO_CHAPTER_ADVANCE_MIN_MS = 1_000` 与 `internal fun audioChapterAdvanced(startMs: Int, maxPlayedMs: Int, minMs: Int = AUDIO_CHAPTER_ADVANCE_MIN_MS): Boolean = startMs >= 0 && maxPlayedMs - startMs >= minMs`，`chapterAdvancedAloud()` 改为 `super… || audioChapterAdvanced(chapterPlaybackStart, maxPlayedPosition)`。原测试是源码文本断言，把阈值改成 `1_000_000`（等于回到「永不消耗」）仍会绿 ⇒ 新增 `audioChapterAdvanceFollowsRealBehaviour` 真行为断言（已变异证伪：阈值改 `2_000` ⇒ RED）。
-  - **④ 顺手**：`clearTTS()` 注明「干涸看门狗由 `resetWavPlayback()` 撤销」（审查建议的「收口到 `clearTTS`」经核对**已被传递覆盖**，不需要再加一行，重复调用无收益）；修 `onRealtimeSynthesisTimeout()` 一行挤两条语句的排版残迹。
-  - ⚠️ **红线**：① 任何「消耗额度后才发现无法继续」的新失败路径都必须给 `stopReadAloudOnInvalidPosition` 传 `refundChapter = true, toast = true`；② 子类若用自有推进基准（如书源音频的播放进度），**必须重写 `onChapterConsumed()` 复位它**，否则同章连判会双扣；③ `audioChapterAdvanced()` 的默认阈值必须仍是 1000ms（改大等于回到「永不消耗」，行为测试会挡）。
-  - **验证**：全量单测 **337 项 / 10 失败**（＝10115 基线 336/10 ＋ 新增 1 项全绿；10 项仍为既有 `CacheTaskStoreTest` 9 项 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）；`assembleAppRelease` + `assembleAppSk2` 成功，两包 `10116` / `3.26.112023c` / `aapt` 包名正确 / `apksigner` 退出码 0。⚠️ **真机未安装**：平板 `HA1KAPWG` 仍从 adb 掉线（`adb devices` 为空），10115/10116 两版均未做覆盖安装回归。
-  - **产物**：正式版 36,189,277 B ＋ 共存版 36,189,247 B；已在 `release/`（固定名 + 两个版本名）。10111–10115 五个未发布版本的包仍在，待作者定是否清理。
-  - **仍未做**：`LogModule.READ_ALOUD` 默认勾选（「保存日志」可能仍拿不到证据）、`advanceScriptQueue()` 队列空续播、`isRun && !pause` 无播放事件看门狗；5 处内联 `index == nowSpeak && isRun && !pause` 未收口到 `shouldTreatAsDry`（那几处 `playerPlaying` 无意义，收口只会塞凑数参数）。
 
 - ✅ **10115（`3.26.112008c`）—— 历史交付，未发布**（审查整改：修 P1 书源音频「章节定时永不消耗」+ 6 项缺陷）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `310ebe23`。
