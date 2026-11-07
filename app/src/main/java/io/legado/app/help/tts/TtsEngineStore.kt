@@ -194,7 +194,9 @@ object TtsEngineStore {
         "next_edge_proxy.js",
         "mimo_v25_tts.js",
         "stepaudio_25_tts.js",
-        "mossland_tts.js"
+        "mossland_tts.js",
+        "baidu_online_tts.js",
+        "baidu_fanyi_tts.js"
     )
     private val defaultScriptEngineSnapshots by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         loadDefaultScriptEngines()
