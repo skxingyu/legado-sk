@@ -166,6 +166,7 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                 if (engine.supportsVoiceFetch()) {
                     add(getString(R.string.tts_engine_v2_fetch_voices))
                 }
+                add(getString(R.string.tts_engine_v2_pick_voice))
                 add(getString(R.string.tts_engine_v2_options))
                 add(getString(R.string.export))
                 add(getString(R.string.delete))
@@ -176,6 +177,7 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                         getString(R.string.tts_engine_v2_enable),
                         getString(R.string.tts_engine_v2_disable) -> toggleEnabled(engine)
                         getString(R.string.tts_engine_v2_fetch_voices) -> fetchVoices(engine)
+                        getString(R.string.tts_engine_v2_pick_voice) -> pickVoice(engine)
                         getString(R.string.tts_engine_v2_options) -> editOptions(engine)
                         getString(R.string.export) -> exportEngine(engine)
                         getString(R.string.delete) -> deleteEngine(engine)
@@ -195,6 +197,47 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
                 }.onFailure { error ->
                     AppLog.put("获取发音人目录失败\n${error.localizedMessage}", error)
                     toastOnUi(error.localizedMessage)
+                }
+            }
+        }
+
+        private fun pickVoice(engine: TtsEngineSetting) {
+            lifecycleScope.launch {
+                val voices = withContext(IO) {
+                    runCatching {
+                        if (engine.effectiveVoices().isEmpty() && engine.supportsVoiceFetch()) {
+                            TtsEngineStore.ensureVoiceCatalog(engine.id)
+                        } else {
+                            engine
+                        }
+                    }.onFailure { error ->
+                        AppLog.put("读取发音人目录失败\n${error.localizedMessage}", error)
+                        toastOnUi(error.localizedMessage)
+                    }.getOrNull()
+                }?.effectiveVoices().orEmpty()
+                if (voices.isEmpty()) {
+                    toastOnUi(R.string.tts_engine_v2_fetch_empty)
+                    return@launch
+                }
+                // 同名音色（如度博文有精品/臻品/大模型三档）靠音库标签区分
+                val labels = voices.map { voice ->
+                    val tier = voice.tags.lastOrNull().orEmpty()
+                    if (tier.isEmpty()) voice.name else "${voice.name} · $tier"
+                }
+                val checked = voices.indexOfFirst { it.id == engine.activeVoiceId }
+                alert(title = engine.name) {
+                    singleChoiceItems(labels.toTypedArray(), checked) { _, which ->
+                        val voice = voices[which]
+                        lifecycleScope.launch(IO) {
+                            if (TtsEngineStore.selectVoice(engine.id, voice.id) == null) {
+                                AppLog.put("选择发音人失败: ${engine.id}/${voice.id}")
+                            } else {
+                                toastOnUi(voice.name)
+                                refreshData()
+                            }
+                        }
+                    }
+                    negativeButton(R.string.cancel)
                 }
             }
         }
