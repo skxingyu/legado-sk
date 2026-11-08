@@ -202,6 +202,11 @@ class TtsEngineManageActivity : BaseActivity<ActivityTtsEngineManageBinding>() {
         }
 
         private fun pickVoice(engine: TtsEngineSetting) {
+            // selectVoice 只处理已启用的引擎，禁用时先提示，避免点了没反应
+            if (!engine.enabled) {
+                toastOnUi(getString(R.string.tts_engine_v2_enable_first, engine.name))
+                return
+            }
             lifecycleScope.launch {
                 val voices = withContext(IO) {
                     runCatching {

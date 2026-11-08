@@ -2590,6 +2590,7 @@
     <string name="tts_engine_v2_state_active">当前朗读引擎</string>
     <string name="tts_engine_v2_state_enabled">已启用</string>
     <string name="tts_engine_v2_state_disabled">已禁用</string>
+    <string name="tts_engine_v2_enable_first">请先启用「%1$s」</string>
     <string name="tts_engine_v2_state_builtin">内置</string>
     <string name="tts_engine_v2_create">新建自定义朗读引擎</string>
     <string name="tts_engine_v2_import">导入朗读引擎</string>

@@ -29,6 +29,7 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
 import io.legado.app.help.tts.TtsEngineImportConflictAction
 import io.legado.app.help.tts.TtsEngineImportConflictException
+import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.lib.dialogs.SelectItem
@@ -127,17 +128,26 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
     }
 
     private fun refreshScriptEngineRows() {
+        if (scriptEngineRows.isEmpty()) return
+        // 一次快照即可：engines() 会整体解析配置并逐引擎查库，不能按行重复调用。
+        val engines = TtsEngineStore.engines().associateBy { it.id }
         scriptEngineRows.forEach { row ->
-            val engine = TtsEngineStore.scriptEngineById(row.engineId)
-            row.radioButton.visible(engine != null)
-            row.badge.visible(engine != null)
-            if (engine == null) return@forEach
-            row.radioButton.text = engine.name
-            row.radioButton.isChecked = engine.enabled &&
-                    ttsEngine == TtsEngineStore.scriptEngineSelection(engine.id)
-            row.radioButton.alpha = if (engine.enabled) 1f else 0.45f
-            row.badge.alpha = row.radioButton.alpha
+            bindScriptEngineRow(
+                row,
+                engines[row.engineId]?.takeIf { it.type == TtsEngineType.SCRIPT }
+            )
         }
+    }
+
+    private fun bindScriptEngineRow(row: ScriptEngineRow, engine: TtsEngineSetting?) {
+        row.radioButton.visible(engine != null)
+        row.badge.visible(engine != null)
+        if (engine == null) return
+        row.radioButton.text = engine.name
+        row.radioButton.isChecked = engine.enabled &&
+                ttsEngine == TtsEngineStore.scriptEngineSelection(engine.id)
+        row.radioButton.alpha = if (engine.enabled) 1f else 0.45f
+        row.badge.alpha = row.radioButton.alpha
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -251,7 +261,7 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
         }
         TtsEngineStore.engines()
             .filter { it.type == TtsEngineType.SCRIPT && it.script.isNotBlank() }
-            .forEach { addScriptEngineRow(it.id) }
+            .forEach { addScriptEngineRow(it) }
         tvFooterLeft.setText(R.string.book)
         tvFooterLeft.typeface = requireContext().uiTypeface()
         tvFooterLeft.visible()
@@ -303,7 +313,8 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
      * 脚本行放在 HTTP 源实际列表之后，避免再以独立管理页制造第二个选择面。
      * footer 的构建回调只捕获 id，始终从存储读取最新快照，避免导入覆盖后的旧对象复活。
      */
-    private fun addScriptEngineRow(engineId: String) {
+    private fun addScriptEngineRow(engine: TtsEngineSetting) {
+        val engineId = engine.id
         if (!scriptEngineIds.add(engineId)) return
         adapter.addFooterView {
             ItemHttpTtsBinding.inflate(layoutInflater, binding.recyclerView, false).apply {
@@ -313,8 +324,10 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
                 ivEdit.gone()
                 ivMenuDelete.gone()
                 cbName.tag = TtsEngineStore.scriptEngineSelection(engineId)
-                scriptEngineRows += ScriptEngineRow(engineId, cbName, tvBadge)
-                refreshScriptEngineRows()
+                val row = ScriptEngineRow(engineId, cbName, tvBadge)
+                scriptEngineRows += row
+                // footer 行是懒构建的，这里复用创建时的快照，不再逐行回读存储
+                bindScriptEngineRow(row, engine)
                 cbName.setOnClickListener {
                     val engine = TtsEngineStore.scriptEngineById(engineId)
                         ?: return@setOnClickListener
@@ -365,7 +378,7 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
                 TtsEngineStore.importEngineText(text, action).getOrThrow()
             }.onSuccess { imported ->
                 withContext(Main) {
-                    imported.forEach { addScriptEngineRow(it.id) }
+                    imported.forEach { addScriptEngineRow(it) }
                     refreshScriptEngineRows()
                     toastOnUi(getString(R.string.tts_engine_v2_import_success, imported.size))
                 }
@@ -476,13 +489,18 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
 
     private fun upTts(tts: String) {
         ttsEngine = tts
+        // 这三种判定与行无关，逐行重复会让每次点选都把整张引擎表重建十几遍。
+        val pluginSelected = ReadAloudEngines.byId(tts) != null
+        val scriptSelected = TtsEngineStore.scriptEngineForSelection(tts) != null
+        val systemSelectValue = if (pluginSelected || scriptSelected) null else {
+            GSON.fromJsonObject<SelectItem<String>>(tts).getOrNull()?.value
+        }
         sysTtsViews.forEach {
             val isChecked = when {
-                ttsEngine == ReadAloud.SOURCE_AUDIO_ENGINE_ID -> it.tag == ReadAloud.SOURCE_AUDIO_ENGINE_ID
-                ReadAloudEngines.byId(ttsEngine) != null -> it.tag == ttsEngine
-                TtsEngineStore.scriptEngineForSelection(ttsEngine) != null -> it.tag == ttsEngine
-                else -> GSON.fromJsonObject<SelectItem<String>>(ttsEngine)
-                    .getOrNull()?.value == it.tag
+                tts == ReadAloud.SOURCE_AUDIO_ENGINE_ID -> it.tag == ReadAloud.SOURCE_AUDIO_ENGINE_ID
+                pluginSelected -> it.tag == tts
+                scriptSelected -> it.tag == tts
+                else -> systemSelectValue == it.tag
             }
             it.isChecked = isChecked
         }

@@ -2737,6 +2737,7 @@
     <string name="tts_engine_v2_state_active">active read-aloud engine</string>
     <string name="tts_engine_v2_state_enabled">enabled</string>
     <string name="tts_engine_v2_state_disabled">disabled</string>
+    <string name="tts_engine_v2_enable_first">Enable %1$s first</string>
     <string name="tts_engine_v2_state_builtin">built-in</string>
     <string name="tts_engine_v2_create">New custom engine</string>
     <string name="tts_engine_v2_import">Import engine</string>
