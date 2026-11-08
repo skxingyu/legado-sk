@@ -17,6 +17,7 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.model.ReadAloud
 import io.legado.app.plugin.TtsVoiceDirectories
 import io.legado.app.utils.GSON
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
@@ -194,10 +195,11 @@ object TtsEngineStore {
         "next_edge_proxy.js",
         "mimo_v25_tts.js",
         "stepaudio_25_tts.js",
-        "mossland_tts.js",
-        "baidu_online_tts.js",
-        "baidu_fanyi_tts.js"
+        "mossland_tts.js"
     )
+
+    // 已下线的内置引擎 id：资产删除后，存量设备里残留的已保存副本也要一并屏蔽。
+    private val RETIRED_ENGINE_IDS = setOf("baidu_online_tts", "baidu_fanyi_tts")
     private val defaultScriptEngineSnapshots by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         loadDefaultScriptEngines()
     }
@@ -683,11 +685,19 @@ object TtsEngineStore {
 
     private fun savedEngines(): List<TtsEngineSetting> {
         val json = appCtx.getPrefString(PreferKey.ttsEngineV2SettingsJson)
-        val normalized = GSON.fromJsonArray<TtsEngineSetting>(json)
+        val loaded = GSON.fromJsonArray<TtsEngineSetting>(json)
             .getOrDefault(emptyList())
             .mapNotNull { it.normalizedOrNull() }
-        if (json?.contains("\"last_voice_update_time\"") == true) {
+        val normalized = loaded.filterNot { it.id in RETIRED_ENGINE_IDS }
+        if (normalized.size != loaded.size ||
+            json?.contains("\"last_voice_update_time\"") == true
+        ) {
             appCtx.putPrefString(PreferKey.ttsEngineV2SettingsJson, GSON.toJson(normalized))
+        }
+        // 旧版单选键没有任何读取点，但残留下来的已下线引擎 id 会误导排查
+        val legacySelection = appCtx.getPrefString(PreferKey.ttsEngine)
+        if (scriptEngineIdFromSelection(legacySelection) in RETIRED_ENGINE_IDS) {
+            appCtx.defaultSharedPreferences.edit().remove(PreferKey.ttsEngine).apply()
         }
         return normalized
     }
