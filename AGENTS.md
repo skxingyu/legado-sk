@@ -407,8 +407,9 @@ uiautomator2 / ADB
   - **移除引擎**：删除 `assets/defaultData/tts/baidu_online_tts.js`、`baidu_fanyi_tts.js`，`DEFAULT_SCRIPT_ASSETS` 去掉两项；`TtsEngineStore` 新增 `RETIRED_ENGINE_IDS`，`savedEngines()` 读取时过滤并**一次性回写**（无需标志位，幂等），同时清掉遗留单选键 `PreferKey.ttsEngine`（无读取点，但残留 `script:baidu_fanyi_tts` 会误导排查）。`httpTTSHelp.md` 删掉两条推荐，保留 tsn+tok 手写示例。
   - **顺带修**：`选择音色` 对**禁用**引擎原先点了没反应（`selectVoice` 只处理 `enabled` 引擎，失败只写 AppLog），改为提示「请先启用「%1$s」」（新增 `tts_engine_v2_enable_first`）。
   - **验证（雷电 `emulator-5554`，10118→10119 覆盖，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：引擎列表已无两条百度，内置脚本行完整；点选行 **90th percentile 1350ms → 27ms**，无 Davey 超时；「选择音色」弹窗开启 90th 34ms、选中 7ms；启用阶跃星辰后选音色，pref 写入 `active_voice_id: qinqienvsheng` 成功；pref 内 `baidu_online_tts`/`baidu_fanyi_tts` 引用已清零。
-  - **未验证**：真机；`选择音色` 在语音卡顿场景下的长列表滚动性能。
-  - **产物**：正式版 36,213,188 B ＋ 共存版 36,213,244 B；已在 `release/`（固定名 + 两个版本名）。**未发布 Release**。
+  - **真机平板 `HA1KAPWG` 2026-11-08 覆盖 10118→10119**：`versionCode=10119` / `3.26.110816c`，`firstInstallTime` 仍 `2026-10-30 14:00:50`（升级保数据），启动后 `MainActivity` 为焦点，`crash` buffer 无本应用 FATAL。
+  - **未验证**：`选择音色` 长列表（84 项）的滚动性能与真机手感。
+  - **产物**：正式版 36,213,188 B ＋ 共存版 36,213,244 B；已在 `release/`（固定名 + 两个版本名），旧包按作者指示全部清理（10111/10112/10113/10117/10118 均未发布，已删）。**未发布 Release**。
 
 - ✅ **10117（`3.26.110311c`）—— 历史交付，未发布**（朗读引擎对齐上游：蓝牙按键映射 + 书源音频按字幕时长预测段内位置）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `78173037`（P2 书源音频）→ `17f6a213`（P1 引擎侧 + 删 mediaButtonPerNext）→ `025741c2`（映射弹窗 + 回归锁）→ `d1129a20`（差异台账 + 红线）→ `99ee5474`（映射到的键一律视为已消费）→ `f09b2369`（切段间隔设置行接上点击与摘要）。
