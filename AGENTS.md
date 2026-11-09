@@ -284,7 +284,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
   2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
   3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
 - **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
-- **系统 TTS 必须保留两个无响应看门狗（10120 确立）**：`TTSReadAloudService` 的 `TTS_INIT_TIMEOUT_MS = 15_000L`（`initTts` 后 `onTtsInit` 不来 → 重建一次，再不来 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 45_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新，超时走 `handleSpeakError("tts no callback", retryWithReinit = true)`）。⚠️ 不得因为「看起来是兜底」删掉：引擎进程被杀或合成请求在引擎内丢失时，`UtteranceProgressListener` 三个回调都不会来，没有超时就表现为「服务与通知仍在、永久无声」（2026-11-09 平板 MultiTTS 实测，`stop/shutdown failed: not bound to TTS engine` 同场出现）。看门狗必须在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
+- **系统 TTS 必须保留两个无响应看门狗（10120 确立）**：`TTSReadAloudService` 的 `TTS_INIT_TIMEOUT_MS = 10_000L`（`initTts` 后 `onTtsInit` 不来 → 重建一次，再不来 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 15_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新，超时走 `handleSpeakError("tts no callback", retryWithReinit = true)`）。⚠️ 不得因为「看起来是兜底」删掉：引擎进程被杀或合成请求在引擎内丢失时，`UtteranceProgressListener` 三个回调都不会来，没有超时就表现为「服务与通知仍在、永久无声」（2026-11-09 平板 MultiTTS 实测，`stop/shutdown failed: not bound to TTS engine` 同场出现）。看门狗必须在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
 - **在线朗读的「暂停」必须真的停声（10113 确立）**：`HttpReadAloudService.pauseReadAloud()` / `resumeReadAloud()` 对 ExoPlayer 的操作必须 `lifecycleScope.launch { }` 在主线程执行，**禁止用 `runCatching` 包裹**。原因：`super.pauseReadAloud()` 内部已 `abandonFocus()` 放弃音频焦点，而合成失败回调跑在 `BaseService.execute` 默认的 `Dispatchers.IO`；异常一旦被吞，表现就是「焦点已弃、声音继续 → 缓冲播完章中静音」，服务与通知仍在、章节定时额度也没用完（2026-10-31 夜间实机事故）。合成失败必须走 `prepareScriptMediaItemsWithRetry()`（3 次、间隔 1.2s）并在最终失败时 `AppLog`(`LogModule.READ_ALOUD`) + toast 明示；一次失败即静默暂停属回归。回归锁 `ReadAloudPauseOnMainThreadGuardTest` 3 项。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
@@ -396,15 +396,22 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10121` 递增**。
+> **下一次交付 versionCode 从 `10122` 递增**。
 
 ---
 
-- ✅ **10120（`3.26.110914c`）—— 当前交付，未发布**（系统 TTS 无回调不再永久静默）：
+- ✅ **10121（`3.26.110917c`）—— 当前交付，未发布**（看门狗等待时间收紧：初始化 15s→10s、无回调 45s→15s）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。改动仅 `TTSReadAloudService` 两个常量：`TTS_INIT_TIMEOUT_MS = 10_000L`、`TTS_STALL_TIMEOUT_MS = 15_000L`，轮询 `TTS_STALL_POLL_MS = 5_000L → 2_000L`（检测延迟 15~17s）。注释写明下限理由：冷启动引擎 1~5s、离线引擎长段合成可能 >10s，再短会误判重建。
+  - **为什么不再短**：`STALL` 看门狗在「首段尚未出声」时也要覆盖合成耗时，离线引擎合成长段可能十几秒且期间零回调；低于 15s 会把慢合成误判成引擎挂死 → 重建 → 同一段二次失败被跳段（内容丢失）。
+  - **验证**：`assembleAppRelease` + `assembleAppSk2` 均成功（10121 / `3.26.110917c`，正式版 36,214,871 B、共存版 36,215,017 B，aapt 包名与 versionCode 正确，apksigner 0）；手机 `72a2b362` 10120→10121 覆盖（`firstInstallTime` 仍 `2026-10-30 17:34:58`），启动正常无 FATAL。⚠️ **15s 阈值未在真机复现**：平板 `HA1KAPWG` 已不在 adb 上；模拟器是实时缓存（WAV）模式，该模式下看门狗按设计不启用。
+  - **产物**：已在 `release/`（固定名 + 两个版本名），10120 两包已删除（从未发布）。
+  - **发布文案**：`companion/发布说明-10121.md`（已去掉百度引擎相关条目）。
+
+- ✅ **10120（`3.26.110914c`）—— 历史交付，未发布**（系统 TTS 无回调不再永久静默）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。单提交 `127b7176`。
   - **起因（作者，2026-11-09）**：平板朗读「读一点就断掉」—— 声音停、通知栏仍在、朗读没退出（silent pause），怀疑 10119 回归或 MultiTTS 问题，要求在平板上排查。
   - **根因（证据确认）**：断在系统 TTS 引擎侧。MultiTTS（`org.nobody.multittt` 1.8.3）当天 `logcat -b crash` 崩 5 次（`libBDSpeechDecoder_V1.so`，`Abort message: 'Pointer tag … was truncated'`）；其 `/sdcard/Android/data/org.nobody.multittt/files/log/daily_*.log` 记有 `qttsAudioGet: status=1, err=0`（讯飞系 `msctts_*`）与 `bdotts` 的 `Socket closed`。legado 侧 `TTSReadAloudService` 只有两个缺口：`initTts()` 无初始化超时、朗读中无「无回调」看门狗 —— 引擎崩溃/请求丢失时 `UtteranceProgressListener` 三个回调都不来，也不走 `handleSpeakError`，于是服务与通知在、永久无声。
-  - **修法**（`app/src/main/java/io/legado/app/service/TTSReadAloudService.kt`）：新增 `TTS_INIT_TIMEOUT_MS = 15_000L`（`onTtsInit` 超时 → 重建一次；再超时 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 45_000L` / `TTS_STALL_POLL_MS = 5_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新；超时走 `handleSpeakError("tts no callback", retryWithReinit = true)` → 重试本段，第二次失败跳段）。看门狗在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
+  - **修法**（`app/src/main/java/io/legado/app/service/TTSReadAloudService.kt`）：新增 `TTS_INIT_TIMEOUT_MS = 15_000L`（`onTtsInit` 超时 → 重建一次；再超时 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 15_000L` / `TTS_STALL_POLL_MS = 2_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新；超时走 `handleSpeakError("tts no callback", retryWithReinit = true)` → 重试本段，第二次失败跳段）。看门狗在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
   - **平板实测（`HA1KAPWG`，10119→10120，`firstInstallTime` 仍 `2026-10-30 14:00:50`）**：15:01:58 起朗读 → 15:02:09 `am force-stop org.nobody.multittt` → **15:02:48 日志 `[朗读] 45000ms 无引擎回调，按引擎无响应重试本段`** → `stop/shutdown failed: not bound to TTS engine` → `initTts` 重新绑定成功 → 继续朗读（15:04 仍在读）。即这条断流路径确实没有任何引擎回调，修前会永久静默。
   - **模拟器回归（`emulator-5554`，10119→10120，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：正常朗读 60s+ 位置持续推进（pos 255→712），`无引擎回调` 0 次（无假阳性），`crash` 无本应用 FATAL。
   - **产物**：正式版 36,214,983 B ＋ 共存版 36,215,009 B；已在 `release/`（固定名 + 两个版本名），10119 旧包暂留。

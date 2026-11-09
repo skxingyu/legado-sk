@@ -66,12 +66,18 @@ internal fun shouldTreatAsDry(
 class TTSReadAloudService : BaseReadAloudService() {
 
     private companion object {
-        /** 引擎初始化回调最长等待：引擎进程崩溃/重启时 binder 回调可能永远不来 */
-        const val TTS_INIT_TIMEOUT_MS = 15_000L
+        /**
+         * 引擎初始化回调最长等待：引擎进程崩溃/重启时 binder 回调可能永远不来。
+         * 冷启动（引擎进程刚被拉起）通常 1~5 秒，10 秒是留了余量的下限，再短会在冷启动时误判重建。
+         */
+        const val TTS_INIT_TIMEOUT_MS = 10_000L
 
-        /** 朗读中无任何回调的最长静默：合成请求在引擎内丢失时同样不会有 onError */
-        const val TTS_STALL_TIMEOUT_MS = 45_000L
-        const val TTS_STALL_POLL_MS = 5_000L
+        /**
+         * 朗读中无任何回调的最长静默：合成请求在引擎内丢失时同样不会有 onError。
+         * 不能更短的原因：离线引擎合成一个长段可能耗时 10 秒以上，期间没有任何回调。
+         */
+        const val TTS_STALL_TIMEOUT_MS = 15_000L
+        const val TTS_STALL_POLL_MS = 2_000L
     }
 
     private var textToSpeech: TextToSpeech? = null
