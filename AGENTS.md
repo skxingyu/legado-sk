@@ -403,7 +403,7 @@ uiautomator2 / ADB
 - ✅ **10121（`3.26.110917c`）—— 当前交付，未发布**（看门狗等待时间收紧：初始化 15s→10s、无回调 45s→15s）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。改动仅 `TTSReadAloudService` 两个常量：`TTS_INIT_TIMEOUT_MS = 10_000L`、`TTS_STALL_TIMEOUT_MS = 15_000L`，轮询 `TTS_STALL_POLL_MS = 5_000L → 2_000L`（检测延迟 15~17s）。注释写明下限理由：冷启动引擎 1~5s、离线引擎长段合成可能 >10s，再短会误判重建。
   - **为什么不再短**：`STALL` 看门狗在「首段尚未出声」时也要覆盖合成耗时，离线引擎合成长段可能十几秒且期间零回调；低于 15s 会把慢合成误判成引擎挂死 → 重建 → 同一段二次失败被跳段（内容丢失）。
-  - **验证**：`assembleAppRelease` + `assembleAppSk2` 均成功（10121 / `3.26.110917c`，正式版 36,214,871 B、共存版 36,215,017 B，aapt 包名与 versionCode 正确，apksigner 0）；手机 `72a2b362` 10120→10121 覆盖（`firstInstallTime` 仍 `2026-10-30 17:34:58`），启动正常无 FATAL。⚠️ **15s 阈值未在真机复现**：平板 `HA1KAPWG` 已不在 adb 上；模拟器是实时缓存（WAV）模式，该模式下看门狗按设计不启用。
+  - **验证**：`assembleAppRelease` + `assembleAppSk2` 均成功（10121 / `3.26.110917c`，正式版 36,214,871 B、共存版 36,215,017 B，aapt 包名与 versionCode 正确，apksigner 0）；手机 `72a2b362` 10120→10121 覆盖（`firstInstallTime` 仍 `2026-10-30 17:34:58`），启动正常无 FATAL。**平板 `HA1KAPWG` 真机实测**（10120→10121，`firstInstallTime` 仍 `2026-10-30 14:00:50`）：19:19:38 `am force-stop org.nobody.multittt`，**19:19:52.626 日志 `[朗读] 15000ms 无引擎回调，按引擎无响应重试本段`** → `tts no callback, retry current paragraph` → `initTts` 重绑 `Sucessfully bound` → 位置继续推进（19:20:05 pos:1518）。⚠️ 雷电模拟器为实时缓存（WAV）模式，该模式按设计不启用本看门狗。
   - **产物**：已在 `release/`（固定名 + 两个版本名），10120 两包已删除（从未发布）。
   - **发布文案**：`companion/发布说明-10121.md`（已去掉百度引擎相关条目）。
 
