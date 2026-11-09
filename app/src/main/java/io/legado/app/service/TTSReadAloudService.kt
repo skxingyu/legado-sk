@@ -65,6 +65,15 @@ internal fun shouldTreatAsDry(
 
 class TTSReadAloudService : BaseReadAloudService() {
 
+    private companion object {
+        /** 引擎初始化回调最长等待：引擎进程崩溃/重启时 binder 回调可能永远不来 */
+        const val TTS_INIT_TIMEOUT_MS = 15_000L
+
+        /** 朗读中无任何回调的最长静默：合成请求在引擎内丢失时同样不会有 onError */
+        const val TTS_STALL_TIMEOUT_MS = 45_000L
+        const val TTS_STALL_POLL_MS = 5_000L
+    }
+
     private var textToSpeech: TextToSpeech? = null
     private var ttsInitFinish = false
     private val ttsUtteranceListener = TTSUtteranceListener()
@@ -74,6 +83,11 @@ class TTSReadAloudService : BaseReadAloudService() {
     private var retryingTtsInit = false
     private var ttsVoiceName: String? = null
     private var queuedUntilIndex = -1
+    private var ttsInitWatchdogJob: Job? = null
+    private var ttsStallWatchdogJob: Job? = null
+
+    @Volatile
+    private var lastTtsCallbackAt = 0L
 
     @Volatile
     private var activeUtteranceId: String? = null
@@ -197,6 +211,63 @@ class TTSReadAloudService : BaseReadAloudService() {
             TextToSpeech(this, { status -> onTtsInit(initGeneration, status) }, engine)
         }
         upSpeechRate()
+        armTtsInitWatchdog(initGeneration)
+    }
+
+    private fun armTtsInitWatchdog(initGeneration: Int) {
+        ttsInitWatchdogJob?.cancel()
+        ttsInitWatchdogJob = lifecycleScope.launch {
+            delay(TTS_INIT_TIMEOUT_MS)
+            if (initGeneration != ttsInitGeneration || ttsInitFinish) return@launch
+            AppLog.put(
+                "[朗读] TTS 初始化 ${TTS_INIT_TIMEOUT_MS}ms 未回调，按引擎无响应处理",
+                module = LogModule.READ_ALOUD,
+            )
+            if (retryingTtsInit) {
+                // 已经重建过一次仍无回调：曝光并停下，不能无限静默
+                retryingTtsInit = false
+                activeUtteranceId = null
+                reportInitFailure()
+                toastOnUi(R.string.tts_init_failed)
+                pauseReadAloud(false)
+            } else {
+                retryingTtsInit = true
+                clearTTS()
+                initTts()
+            }
+        }
+    }
+
+    /**
+     * 引擎无响应看门狗：MultiTTS 等引擎进程被杀、或合成请求在引擎内丢失时，
+     * UtteranceProgressListener 不会有任何回调（onStart/onDone/onError 全无），
+     * 表现为服务与通知仍在但永久无声。超时一律走 speak error 路径重试一次。
+     */
+    private fun armTtsStallWatchdog() {
+        if (AppConfig.ttsWavMode) return
+        ttsStallWatchdogJob?.cancel()
+        if (!isPlay()) return
+        lastTtsCallbackAt = SystemClock.elapsedRealtime()
+        ttsStallWatchdogJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(TTS_STALL_POLL_MS)
+                if (!isPlay() || !ttsInitFinish) return@launch
+                if (SystemClock.elapsedRealtime() - lastTtsCallbackAt < TTS_STALL_TIMEOUT_MS) continue
+                AppLog.put(
+                    "[朗读] ${TTS_STALL_TIMEOUT_MS}ms 无引擎回调，按引擎无响应重试本段",
+                    module = LogModule.READ_ALOUD,
+                )
+                handleSpeakError("tts no callback", retryWithReinit = true)
+                return@launch
+            }
+        }
+    }
+
+    private fun cancelTtsWatchdogs() {
+        ttsInitWatchdogJob?.cancel()
+        ttsInitWatchdogJob = null
+        ttsStallWatchdogJob?.cancel()
+        ttsStallWatchdogJob = null
     }
 
     /**
@@ -732,6 +803,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         cancelPageBreakPrediction()
         resetWavPlayback()
         ttsInitGeneration++
+        cancelTtsWatchdogs()
         if (forgetVoice) {
             ttsVoiceName = null
         }
@@ -752,9 +824,11 @@ class TTSReadAloudService : BaseReadAloudService() {
                 restoreOrRememberVoice(it)
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
+                ttsInitWatchdogJob?.cancel()
                 play()
             }
         } else {
+            ttsInitWatchdogJob?.cancel()
             retryParagraphKey = null
             retryingTtsInit = false
             activeUtteranceId = null
@@ -850,6 +924,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     }
 
     override fun playStop() {
+        cancelTtsWatchdogs()
         activeUtteranceId = null
         queuedUntilIndex = -1
         speakGeneration++
@@ -913,6 +988,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                     queuedUntilIndex = -1
                     handleSpeakError("tts speak error", retryWithReinit = true)
                 } else {
+                    armTtsStallWatchdog()
                     queueUpcomingUtterances(tts)
                 }
                 return
@@ -984,6 +1060,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     private fun handleSpeakError(message: String, retryWithReinit: Boolean) {
         // 重试/重建引擎期间不存在「引擎吞了请求」的情形，不能让它被当成第二次失败而跳段。
         cancelRealtimeDryWatchdog()
+        ttsStallWatchdogJob?.cancel()
         val paragraphKey = "$nowSpeak:$readAloudNumber:$paragraphStartPos"
         if (retryParagraphKey != paragraphKey) {
             AppLog.putDebug("$message, retry current paragraph")
@@ -1028,6 +1105,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     override fun pauseReadAloud(abandonFocus: Boolean) {
         super.pauseReadAloud(abandonFocus)
         cancelRealtimeDryWatchdog()
+        ttsStallWatchdogJob?.cancel()
         activeUtteranceId = null
         queuedUntilIndex = -1
         speakGeneration++
@@ -1058,6 +1136,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
         override fun onStart(s: String) {
             runActiveUtteranceCallback(s) {
+                lastTtsCallbackAt = SystemClock.elapsedRealtime()
                 utteranceIndex(s)?.let { syncToUtteranceIndex(it) }
                 LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
                 textChapter?.let {
@@ -1085,6 +1164,7 @@ class TTSReadAloudService : BaseReadAloudService() {
             }
             runActiveUtteranceCallback(s) {
                 LogUtils.d(TAG, "onDone utteranceId:$s")
+                lastTtsCallbackAt = SystemClock.elapsedRealtime()
                 nextParagraph(s)
             }
         }
@@ -1092,6 +1172,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
             super.onRangeStart(utteranceId, start, end, frame)
             runActiveUtteranceCallback(utteranceId) {
+                lastTtsCallbackAt = SystemClock.elapsedRealtime()
                 utteranceIndex(utteranceId)?.let { syncToUtteranceIndex(it) }
                 val msg =
                     "onRangeStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId start:$start end:$end frame:$frame"
