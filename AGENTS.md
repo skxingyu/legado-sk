@@ -284,6 +284,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
   2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
   3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
 - **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
+- **系统 TTS 必须保留两个无响应看门狗（10120 确立）**：`TTSReadAloudService` 的 `TTS_INIT_TIMEOUT_MS = 15_000L`（`initTts` 后 `onTtsInit` 不来 → 重建一次，再不来 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 45_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新，超时走 `handleSpeakError("tts no callback", retryWithReinit = true)`）。⚠️ 不得因为「看起来是兜底」删掉：引擎进程被杀或合成请求在引擎内丢失时，`UtteranceProgressListener` 三个回调都不会来，没有超时就表现为「服务与通知仍在、永久无声」（2026-11-09 平板 MultiTTS 实测，`stop/shutdown failed: not bound to TTS engine` 同场出现）。看门狗必须在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
 - **在线朗读的「暂停」必须真的停声（10113 确立）**：`HttpReadAloudService.pauseReadAloud()` / `resumeReadAloud()` 对 ExoPlayer 的操作必须 `lifecycleScope.launch { }` 在主线程执行，**禁止用 `runCatching` 包裹**。原因：`super.pauseReadAloud()` 内部已 `abandonFocus()` 放弃音频焦点，而合成失败回调跑在 `BaseService.execute` 默认的 `Dispatchers.IO`；异常一旦被吞，表现就是「焦点已弃、声音继续 → 缓冲播完章中静音」，服务与通知仍在、章节定时额度也没用完（2026-10-31 夜间实机事故）。合成失败必须走 `prepareScriptMediaItemsWithRetry()`（3 次、间隔 1.2s）并在最终失败时 `AppLog`(`LogModule.READ_ALOUD`) + toast 明示；一次失败即静默暂停属回归。回归锁 `ReadAloudPauseOnMainThreadGuardTest` 3 项。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
@@ -395,11 +396,21 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10120` 递增**。
+> **下一次交付 versionCode 从 `10121` 递增**。
 
 ---
 
-- ✅ **10119（`3.26.110816c`）—— 当前交付，未发布**（移除内置百度脚本引擎 + 修复朗读引擎弹窗点选卡顿）：
+- ✅ **10120（`3.26.110914c`）—— 当前交付，未发布**（系统 TTS 无回调不再永久静默）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。单提交 `127b7176`。
+  - **起因（作者，2026-11-09）**：平板朗读「读一点就断掉」—— 声音停、通知栏仍在、朗读没退出（silent pause），怀疑 10119 回归或 MultiTTS 问题，要求在平板上排查。
+  - **根因（证据确认）**：断在系统 TTS 引擎侧。MultiTTS（`org.nobody.multittt` 1.8.3）当天 `logcat -b crash` 崩 5 次（`libBDSpeechDecoder_V1.so`，`Abort message: 'Pointer tag … was truncated'`）；其 `/sdcard/Android/data/org.nobody.multittt/files/log/daily_*.log` 记有 `qttsAudioGet: status=1, err=0`（讯飞系 `msctts_*`）与 `bdotts` 的 `Socket closed`。legado 侧 `TTSReadAloudService` 只有两个缺口：`initTts()` 无初始化超时、朗读中无「无回调」看门狗 —— 引擎崩溃/请求丢失时 `UtteranceProgressListener` 三个回调都不来，也不走 `handleSpeakError`，于是服务与通知在、永久无声。
+  - **修法**（`app/src/main/java/io/legado/app/service/TTSReadAloudService.kt`）：新增 `TTS_INIT_TIMEOUT_MS = 15_000L`（`onTtsInit` 超时 → 重建一次；再超时 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 45_000L` / `TTS_STALL_POLL_MS = 5_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新；超时走 `handleSpeakError("tts no callback", retryWithReinit = true)` → 重试本段，第二次失败跳段）。看门狗在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
+  - **平板实测（`HA1KAPWG`，10119→10120，`firstInstallTime` 仍 `2026-10-30 14:00:50`）**：15:01:58 起朗读 → 15:02:09 `am force-stop org.nobody.multittt` → **15:02:48 日志 `[朗读] 45000ms 无引擎回调，按引擎无响应重试本段`** → `stop/shutdown failed: not bound to TTS engine` → `initTts` 重新绑定成功 → 继续朗读（15:04 仍在读）。即这条断流路径确实没有任何引擎回调，修前会永久静默。
+  - **模拟器回归（`emulator-5554`，10119→10120，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：正常朗读 60s+ 位置持续推进（pos 255→712），`无引擎回调` 0 次（无假阳性），`crash` 无本应用 FATAL。
+  - **产物**：正式版 36,214,983 B ＋ 共存版 36,215,009 B；已在 `release/`（固定名 + 两个版本名），10119 旧包暂留。
+  - **真机手感与根因**：MultiTTS 崩溃本身未修（百度离线 SDK 缺陷，改不动）；断流后最多静默 45s 自动恢复。
+
+- ✅ **10119（`3.26.110816c`）—— 历史交付，未发布**（移除内置百度脚本引擎 + 修复朗读引擎弹窗点选卡顿）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `acefb84f`（移除两条百度脚本 + 清理残留）→ `89b5fe1d`（弹窗卡顿修复 + 先启用提示）。
   - **起因（作者，2026-11-08）**：百度短文本合成免费额度虽足够日常使用，但作者认为后续定价偏高，要求**删掉两条内置百度引擎**；同时发现「切换朗读引擎时明显卡顿」，要求在模拟器上排查。作者明确「选择发音人功能保留」。
   - **卡顿根因**（实测定位，非猜测）：`SpeakEngineDialog.upTts()` 把与行无关的三次判定（`ReadAloudEngines.byId` / `TtsEngineStore.scriptEngineForSelection` / `GSON.fromJsonObject`）放在 `sysTtsViews.forEach` **内部**，12 行即 12 次 `TtsEngineStore.engines()` 全量重建；而 `engines()` 每次都要 Gson 解析 `ttsEngineV2SettingsJson`（已存引擎连脚本一起存，模拟器上 575 KB）并对每个引擎做 3 次 Room 查询（`voices(id)` / `ttsEngineRuntimeDao.get(id)` / `ttsVoiceDao.lastUpdatedAt(id)`），≈36 次查询。`refreshScriptEngineRows()` 另在每行 footer 里各调一次，形成 Σk 次重建。实测 `Davey! duration=1388ms/1553ms`、`Janky 40%`。
