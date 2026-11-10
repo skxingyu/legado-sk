@@ -284,7 +284,7 @@ Activity 页面标题和正文标题不是“弹窗头”，不得为追求无�
   2. `AppWebDav.getProgressFileName` 保持 `书名_作者.json` 双参无 mediaType 后缀；
   3. `ReadBookActivity` / `ReadMangaActivity.onPause` 自动同步禁止加 `BuildConfig.DEBUG` 限制。
 - **听书翻页竞态守卫（10023 起为新架构）**：朗读跟随体系采用上游「两原语 + 纯函数跟随规则 + 派生脱节」（10017/10018 的 `pageTurnAnimating` / `TTS_PROGRESS` 存储式守卫已被 `shouldFollowAloudAdvance` 单调性规则整体替代，`readAloudPageDetached`/地板闩已删除）。防拽页由「显示页==朗读出发页且位置前进才跟随」单一规则保证，翻页由 UI 侧观察者单点执行，引擎只发布位置绝不直写 `durChapterPos`。移植上游时不得回退到旧的存储式 detach / 跟随地板方案，不得让引擎重新直写显示进度。
-- **系统 TTS 必须保留两个无响应看门狗（10120 确立）**：`TTSReadAloudService` 的 `TTS_INIT_TIMEOUT_MS = 10_000L`（`initTts` 后 `onTtsInit` 不来 → 重建一次，再不来 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `TTS_STALL_TIMEOUT_MS = 15_000L`（轮询 `lastTtsCallbackAt`，`onStart`/`onDone`/`onRangeStart` 更新，超时走 `handleSpeakError("tts no callback", retryWithReinit = true)`）。⚠️ 不得因为「看起来是兜底」删掉：引擎进程被杀或合成请求在引擎内丢失时，`UtteranceProgressListener` 三个回调都不会来，没有超时就表现为「服务与通知仍在、永久无声」（2026-11-09 平板 MultiTTS 实测，`stop/shutdown failed: not bound to TTS engine` 同场出现）。看门狗必须在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
+- **系统 TTS 必须保留两个无响应看门狗（10120 确立）**：`TTSReadAloudService` 的 `TTS_INIT_TIMEOUT_MS = 10_000L`（`initTts` 后 `onTtsInit` 不来 → 重建一次，再不来 `reportInitFailure()` + toast + `pauseReadAloud(false)`）与 `ttsStallDeadlineMs(本段字数, measuredCharRate)` = `TTS_STALL_TIMEOUT_MS = 15_000L` + 本段预计朗读时长（额外封顶 `TTS_STALL_MAX_EXTRA_MS = 120_000L`；`onStart`/`onDone`/`onRangeStart` 更新 `lastTtsCallbackAt`，超时走 `handleSpeakError("tts no callback", retryWithReinit = true)`）。⚠️ **阈值不得退回固定 15 秒**（10122）：系统引擎整段只回调 `onStart`/`onDone`、不发 `onRangeStart`，169 字这种长段正常朗读就要 21 秒，固定阈值会把它判死 → 回段首重读 → 二次超时跳段（2026-11-10 模拟器实测，回归锁 `TtsStallDeadlineTest`）。⚠️ 不得因为「看起来是兜底」删掉：引擎进程被杀或合成请求在引擎内丢失时，`UtteranceProgressListener` 三个回调都不会来，没有超时就表现为「服务与通知仍在、永久无声」（2026-11-09 平板 MultiTTS 实测，`stop/shutdown failed: not bound to TTS engine` 同场出现）。看门狗必须在 `clearTTS`/`playStop`/`pauseReadAloud`/`handleSpeakError` 撤销，`ttsWavMode` 不启用。
 - **在线朗读的「暂停」必须真的停声（10113 确立）**：`HttpReadAloudService.pauseReadAloud()` / `resumeReadAloud()` 对 ExoPlayer 的操作必须 `lifecycleScope.launch { }` 在主线程执行，**禁止用 `runCatching` 包裹**。原因：`super.pauseReadAloud()` 内部已 `abandonFocus()` 放弃音频焦点，而合成失败回调跑在 `BaseService.execute` 默认的 `Dispatchers.IO`；异常一旦被吞，表现就是「焦点已弃、声音继续 → 缓冲播完章中静音」，服务与通知仍在、章节定时额度也没用完（2026-10-31 夜间实机事故）。合成失败必须走 `prepareScriptMediaItemsWithRetry()`（3 次、间隔 1.2s）并在最终失败时 `AppLog`(`LogModule.READ_ALOUD`) + toast 明示；一次失败即静默暂停属回归。回归锁 `ReadAloudPauseOnMainThreadGuardTest` 3 项。
 - **原版共享偏好 key**：`BookCover.kt` 的 `legadoCoverRuleConfig` 是原版遗留 key，不能改名。
 - **品牌与更新**：不做交流群（QQ 入口全删）；更新检查与仓库链接全部指向 `skxingyu/legado-sk`（`UpdateManager.GITHUB_API`、关于页 README 直连 `raw.githubusercontent.com/skxingyu/legado-sk/main/README.md`）；「更新设置」只存在于关于页，无启动自动检查。
@@ -396,11 +396,22 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10122` 递增**。
+> **下一次交付 versionCode 从 `10123` 递增**。
 
 ---
 
-- ✅ **10121（`3.26.110917c`）—— 当前交付，未发布**（看门狗等待时间收紧：初始化 15s→10s、无回调 45s→15s）：
+- ✅ **10122（`3.26.111009c`）—— 当前交付，未发布**（无回调看门狗按本段预计朗读时长动态放宽）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `81236df8`。
+  - **起因（作者，2026-11-10）**：MultiTTS 句长限制调到 32 后，遇到超过限制的长段落会「在限制区反复回段首重读、第二次读到限制就跳段」。
+  - **根因（日志确认）**：不是 MultiTTS 分句，也不是 SK 分句，而是 10121 的 `TTS_STALL_TIMEOUT_MS = 15_000L` 误判。MultiTTS 整段只回调 `onStart`/`onDone`，**从不发 `onRangeStart`**（日志计数 0）；第 85 段 169 字按 480 字/分钟要读 21 秒，`onStart` 后 16 秒零回调即触发 `[朗读] 15000ms 无引擎回调…` → `handleSpeakError("tts no callback", retryWithReinit = true)` 从段首重读 → 同一 `retryParagraphKey` 二次超时直接跳段。句长限制只是让整段耗时更长、更易越阈。
+  - **修法**：新增顶层纯函数 `ttsStallDeadlineMs(textLength, charRatePerMs) = TTS_STALL_TIMEOUT_MS + 本段字数 / measuredCharRate`（额外时长封顶 `TTS_STALL_MAX_EXTRA_MS = 120_000L`；速率非法时退回 15s）；`armTtsStallWatchdog()` 在武装时按 `currentUtteranceTextLength()` 算出 `deadlineMs`，日志带上本段字数。短段阈值基本不变（40 字 ≈ 20s），169 字 ≈ 36s。
+  - **验证**：新增 `app/src/test/java/io/legado/app/service/TtsStallDeadlineTest.kt` 5 项（空段 15s、169 字 36,125ms、40 字 20,000ms、速率非法退回 15s、封顶 135s），`testAppReleaseUnitTest` 通过。`assembleAppRelease` 8m39s + `assembleAppSk2` 6m15s 均成功（10122 / `3.26.111009c`；正式版 36,215,404 B、共存版 36,215,636 B；aapt 包名/versionCode 正确，apksigner 0）。
+  - **模拟器回归（`emulator-5554`，10121→10122，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：句长限制 32、Wav 模式关；同书第 85 段（169 字）09:18:07 起读，09:18:27 `onDone` **正常读完**（19.9s），`无引擎回调` 计数 **0**（修前同一段 16s 即触发重读），随后继续推进到后续段落。
+  - **平板（`HA1KAPWG`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 14:00:50`，`MainActivity` 正常前台，`crash` buffer 无本应用 FATAL。
+  - **代价**：引擎在长段中途真的死掉时，恢复最晚要等「预计读完时长 + 15 秒」（169 字约 36s），不再出现重读+跳段。
+  - **产物**：已在 `release/`（固定名 + 两个版本名）；10121 两包暂留（从未发布，待作者决定是否删除）。**发布文案** `companion/发布说明-10122.md`（沿用 10121 的累计口径并补本次修复）。
+
+- ✅ **10121（`3.26.110917c`）—— 历史交付，未发布**（看门狗等待时间收紧：初始化 15s→10s、无回调 45s→15s）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。改动仅 `TTSReadAloudService` 两个常量：`TTS_INIT_TIMEOUT_MS = 10_000L`、`TTS_STALL_TIMEOUT_MS = 15_000L`，轮询 `TTS_STALL_POLL_MS = 5_000L → 2_000L`（检测延迟 15~17s）。注释写明下限理由：冷启动引擎 1~5s、离线引擎长段合成可能 >10s，再短会误判重建。
   - **为什么不再短**：`STALL` 看门狗在「首段尚未出声」时也要覆盖合成耗时，离线引擎合成长段可能十几秒且期间零回调；低于 15s 会把慢合成误判成引擎挂死 → 重建 → 同一段二次失败被跳段（内容丢失）。
   - **验证**：`assembleAppRelease` + `assembleAppSk2` 均成功（10121 / `3.26.110917c`，正式版 36,214,871 B、共存版 36,215,017 B，aapt 包名与 versionCode 正确，apksigner 0）；手机 `72a2b362` 10120→10121 覆盖（`firstInstallTime` 仍 `2026-10-30 17:34:58`），启动正常无 FATAL。**平板 `HA1KAPWG` 真机实测**（10120→10121，`firstInstallTime` 仍 `2026-10-30 14:00:50`）：19:19:38 `am force-stop org.nobody.multittt`，**19:19:52.626 日志 `[朗读] 15000ms 无引擎回调，按引擎无响应重试本段`** → `tts no callback, retry current paragraph` → `initTts` 重绑 `Sucessfully bound` → 位置继续推进（19:20:05 pos:1518）。⚠️ 雷电模拟器为实时缓存（WAV）模式，该模式按设计不启用本看门狗。
@@ -416,32 +427,6 @@ uiautomator2 / ADB
   - **模拟器回归（`emulator-5554`，10119→10120，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：正常朗读 60s+ 位置持续推进（pos 255→712），`无引擎回调` 0 次（无假阳性），`crash` 无本应用 FATAL。
   - **产物**：正式版 36,214,983 B ＋ 共存版 36,215,009 B；已在 `release/`（固定名 + 两个版本名），10119 旧包暂留。
   - **真机手感与根因**：MultiTTS 崩溃本身未修（百度离线 SDK 缺陷，改不动）；断流后最多静默 45s 自动恢复。
-
-- ✅ **10119（`3.26.110816c`）—— 历史交付，未发布**（移除内置百度脚本引擎 + 修复朗读引擎弹窗点选卡顿）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `acefb84f`（移除两条百度脚本 + 清理残留）→ `89b5fe1d`（弹窗卡顿修复 + 先启用提示）。
-  - **起因（作者，2026-11-08）**：百度短文本合成免费额度虽足够日常使用，但作者认为后续定价偏高，要求**删掉两条内置百度引擎**；同时发现「切换朗读引擎时明显卡顿」，要求在模拟器上排查。作者明确「选择发音人功能保留」。
-  - **卡顿根因**（实测定位，非猜测）：`SpeakEngineDialog.upTts()` 把与行无关的三次判定（`ReadAloudEngines.byId` / `TtsEngineStore.scriptEngineForSelection` / `GSON.fromJsonObject`）放在 `sysTtsViews.forEach` **内部**，12 行即 12 次 `TtsEngineStore.engines()` 全量重建；而 `engines()` 每次都要 Gson 解析 `ttsEngineV2SettingsJson`（已存引擎连脚本一起存，模拟器上 575 KB）并对每个引擎做 3 次 Room 查询（`voices(id)` / `ttsEngineRuntimeDao.get(id)` / `ttsVoiceDao.lastUpdatedAt(id)`），≈36 次查询。`refreshScriptEngineRows()` 另在每行 footer 里各调一次，形成 Σk 次重建。实测 `Davey! duration=1388ms/1553ms`、`Janky 40%`。
-  - **修法**：① 三次判定提到 forEach 外，循环内只比较 tag；② `refreshScriptEngineRows()` 改为一次 `engines().associateBy { it.id }` 快照 + 新增 `bindScriptEngineRow(row, engine)`；③ `addScriptEngineRow` 签名改为接收 `TtsEngineSetting`，footer 是**懒构建**（`RecyclerAdapter.addFooterView` 只存 builder），必须在 builder 里用创建时的快照绑定——**首版把刷新挪到 forEach 之后一次性调用，导致内置脚本行全部消失**（`scriptEngineRows` 此时仍为空，`if (isEmpty) return` 直接跳过）。
-  - **移除引擎**：删除 `assets/defaultData/tts/baidu_online_tts.js`、`baidu_fanyi_tts.js`，`DEFAULT_SCRIPT_ASSETS` 去掉两项；`TtsEngineStore` 新增 `RETIRED_ENGINE_IDS`，`savedEngines()` 读取时过滤并**一次性回写**（无需标志位，幂等），同时清掉遗留单选键 `PreferKey.ttsEngine`（无读取点，但残留 `script:baidu_fanyi_tts` 会误导排查）。`httpTTSHelp.md` 删掉两条推荐，保留 tsn+tok 手写示例。
-  - **顺带修**：`选择音色` 对**禁用**引擎原先点了没反应（`selectVoice` 只处理 `enabled` 引擎，失败只写 AppLog），改为提示「请先启用「%1$s」」（新增 `tts_engine_v2_enable_first`）。
-  - **验证（雷电 `emulator-5554`，10118→10119 覆盖，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：引擎列表已无两条百度，内置脚本行完整；点选行 **90th percentile 1350ms → 27ms**，无 Davey 超时；「选择音色」弹窗开启 90th 34ms、选中 7ms；启用阶跃星辰后选音色，pref 写入 `active_voice_id: qinqienvsheng` 成功；pref 内 `baidu_online_tts`/`baidu_fanyi_tts` 引用已清零。
-  - **真机平板 `HA1KAPWG` 2026-11-08 覆盖 10118→10119**：`versionCode=10119` / `3.26.110816c`，`firstInstallTime` 仍 `2026-10-30 14:00:50`（升级保数据），启动后 `MainActivity` 为焦点，`crash` buffer 无本应用 FATAL。
-  - **未验证**：`选择音色` 长列表（84 项）的滚动性能与真机手感。
-  - **产物**：正式版 36,213,188 B ＋ 共存版 36,213,244 B；已在 `release/`（固定名 + 两个版本名），旧包按作者指示全部清理（10111/10112/10113/10117/10118 均未发布，已删）。**未发布 Release**。
-
-- ✅ **10117（`3.26.110311c`）—— 历史交付，未发布**（朗读引擎对齐上游：蓝牙按键映射 + 书源音频按字幕时长预测段内位置）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交链 `78173037`（P2 书源音频）→ `17f6a213`（P1 引擎侧 + 删 mediaButtonPerNext）→ `025741c2`（映射弹窗 + 回归锁）→ `d1129a20`（差异台账 + 红线）→ `99ee5474`（映射到的键一律视为已消费）→ `f09b2369`（切段间隔设置行接上点击与摘要）。
-  - **起因（作者，2026-11-03）**：要求把朗读引擎对齐上游「阅读」——**只对齐引擎，UI 用 SK 自己的**。先做方案（`test-records/朗读引擎对齐上游-方案/方案.md`，含三份独立对抗式审查报告同目录），作者裁决 D1~D5 后开工。
-  - **范围核定**：SK 朗读引擎是上游的**超集**，上游独有的引擎能力只有两项 —— ① 蓝牙按键映射（上游 `8a549792`+`bd0521de`+`ae15087b`+`659f4483`）；② 书源音频按字幕时长预测段内位置（上游 `bdc01c7a`）。`help/tts`、引擎插件、TTS 实体/DAO、`TtsCacheService`、`TTS.kt` 与上游基本一致（仅多 SK 的 `TtsCacheJanitor`/`TtsCacheSweep`）。
-  - **① 书源音频预测（`78173037`）**：`AudioTextMapping` 新增 `withEstimatedTiming(durationMs)` / `paragraphFractionAt(timeMs, durationMs)`；`SourceAudioReadAloudService` 在 `onPlaybackStateChanged` 的 **`Player.STATE_READY`** 分支（`upReadAloudLoading(false)` 之后）用播放时长给字幕生成估计时间轴（**只在 `bindMappingToLayout` 返回非 null 后才替换 `mapping`**），`syncTextPosition` 去掉 `if (paragraphUnchanged && !syncView) return`，改为按 `fraction → offset → predictedPage` 发布，门槛抽成 `shouldPublishTextPosition(...)` 同时管页码与 TTS 位置事件。
-  - **② 蓝牙按键映射（`17f6a213`+`025741c2`）**：`BluetoothReadAloudSkip`（400ms 间隔排空队列）、`BluetoothKeyMapping`（7 键 × 阅读/朗读双槽 + `dispatch`）、`BluetoothKeyMappingDialog`（阅读菜单「蓝牙按键映射」入口，布局套 `NestedScrollView` + `vw_bg` 真实表面）、`MediaButtonReceiver.handleReaderMediaKey`（前台阅读页 → 熄屏时 `readerInstance()`）、`BaseReadAloudService` 媒体会话四个回调先问映射、`ReadBookActivity` 的 `onKeyDown`/`onKeyUp` 统一入口（`handleBluetoothMediaKey` / `handleVolumeKey` / `isVolumeKeyConsumed`）。`PreferKey.mediaButtonPerNext` **按上游删除**（常量/4 处读点/pref 行/2 条文案全删，不做迁移）。
-  - ⚠️ **6+1 项与上游有意不同**（台账 `docs/朗读引擎-上游对齐差异台账.md`，详见 §4 红线）：保留音量键闸门、音量键朗读态默认翻页、TOGGLE 走 `MediaButtonReceiver.readAloud`、预测只在绑定成功后生效、发布门槛共用、备份含 14 个映射键、映射到的键一律视为已消费。
-  - **实机回归暴露并修掉的真缺陷（`f09b2369`）**：「蓝牙朗读切段间隔」是普通 `Preference`，上游把点击处理与摘要刷新放在 `ReadAloudConfigDialog`，初版只换了 pref 行与分组白名单 ⇒ 实机上是**点了没反应的死行**且 summary 永远是静态文案。补 `showBluetoothReadAloudSkipIntervalDialog()` + `upBluetoothReadAloudSkipIntervalSummary()` + 变更监听刷新，回归锁升到 4 项。
-  - **验证**：全量单测 **347 项 / 10 失败**（＝10116 基线 337/10 ＋ 新增 10 项全绿；10 项仍为既有 `CacheTaskStoreTest` 9 项 + `ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing`）；两处变异证伪已做（`shouldPublishTextPosition` 去掉 `predictedPage != pageIndex`、音量键 `ACTION_PREVIOUS_PAGE`→`ACTION_NONE` 均 RED）。`assembleAppRelease`+`assembleAppSk2` 成功，两包 `10117` / `3.26.110311c` / `aapt` 包名正确 / `apksigner` 退出码 0。
-  - **雷电模拟器回归（`emulator-5554`，覆盖 10116→10117，`firstInstallTime` 未变）**：菜单「蓝牙按键映射」在 帮助 之后、弹窗双槽/9 个动作可选并落盘；音量加/减翻页且不触发系统音量；`MEDIA_PREVIOUS`（阅读式=无操作）静默消费；把上一曲映射成下一页后按键真的翻页；朗读中 `MEDIA_NEXT`→ 映射为下一章后章号 30→31、位置回到章首；朗读设置 基础 组「蓝牙朗读切段间隔」显示 `400ms`、点开输入框可改、确定后摘要刷新；全程 `crash` buffer 无 FATAL。截图在 `test-records/朗读引擎对齐-回归/`（37 张）。
-  - **真机平板 `HA1KAPWG` 2026-11-03 覆盖 10114→10117**：`versionCode=10117` / `3.26.110311c`，`firstInstallTime` 仍 `2026-10-30 14:00:50`（＝升级保数据），启动后书架完整、`MainActivity` 为焦点应用、`crash` 无 FATAL。蓝牙按键与音量键的实机手感回归由作者在真机完成。
-  - **未验证项**：书源音频「按字幕时长预测段内位置」的真机行为（需要带字幕的书源音频书，模拟器无素材；仅静态 + 单测覆盖）；熄屏 `readerInstance()` 路径未单独构造复现。
-  - **产物**：正式版 36,204,291 B ＋ 共存版 36,204,430 B；已在 `release/`（固定名 + 两个版本名）。作者 2026-11-03 决定**暂不发布**（等真机试过），并清理掉 10114/10115/10116 三个未发布包；10111/10112/10113（同样未发布）暂留。
 
 ## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
 
