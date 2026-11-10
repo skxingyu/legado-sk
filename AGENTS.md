@@ -408,6 +408,7 @@ uiautomator2 / ADB
   - **验证**：新增 `app/src/test/java/io/legado/app/service/TtsStallDeadlineTest.kt` 5 项（空段 15s、169 字 36,125ms、40 字 20,000ms、速率非法退回 15s、封顶 135s），`testAppReleaseUnitTest` 通过。`assembleAppRelease` 8m39s + `assembleAppSk2` 6m15s 均成功（10122 / `3.26.111009c`；正式版 36,215,404 B、共存版 36,215,636 B；aapt 包名/versionCode 正确，apksigner 0）。
   - **模拟器回归（`emulator-5554`，10121→10122，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：句长限制 32、Wav 模式关；同书第 85 段（169 字）09:18:07 起读，09:18:27 `onDone` **正常读完**（19.9s），`无引擎回调` 计数 **0**（修前同一段 16s 即触发重读），随后继续推进到后续段落。
   - **平板（`HA1KAPWG`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 14:00:50`，`MainActivity` 正常前台，`crash` buffer 无本应用 FATAL。
+  - **手机（`72a2b362`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 17:34:58`，`MainActivity` 正常前台，`crash` 无本应用 FATAL。
   - **代价**：引擎在长段中途真的死掉时，恢复最晚要等「预计读完时长 + 15 秒」（169 字约 36s），不再出现重读+跳段。
   - **产物**：已在 `release/`（固定名 + 两个版本名）；10121 两包暂留（从未发布，待作者决定是否删除）。**发布文案** `companion/发布说明-10122.md`（沿用 10121 的累计口径并补本次修复）。
 
