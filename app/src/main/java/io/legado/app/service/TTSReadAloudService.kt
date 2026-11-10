@@ -46,6 +46,29 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
+ * 朗读中「引擎无回调」的基础静默阈值：初始化/合成请求在引擎内丢失时不会有 onError。
+ */
+private const val TTS_STALL_TIMEOUT_MS = 15_000L
+
+/**
+ * 预计朗读时长最多给多少额外余量（防止语速采样异常时阈值无限放大）。
+ */
+private const val TTS_STALL_MAX_EXTRA_MS = 120_000L
+
+/**
+ * 无回调看门狗的判定阈值（纯函数，JVM 单测可直接断言行为）。
+ *
+ * 系统引擎（MultiTTS 等）整段只回调 onStart/onDone，**不报 onRangeStart**，
+ * 因此「长时间没有回调」在长段正常朗读时同样成立。阈值必须覆盖本段预计朗读时长，
+ * 否则 169 字这类长段读到一半就被判成引擎无响应 → 重试本段（听成「回段首重读」）
+ * → 第二次仍超时 → 直接跳段（2026-11-10 模拟器实测）。
+ */
+internal fun ttsStallDeadlineMs(textLength: Int, charRatePerMs: Double): Long {
+    val estimated = if (charRatePerMs > 0.0) (textLength / charRatePerMs).toLong() else 0L
+    return TTS_STALL_TIMEOUT_MS + estimated.coerceIn(0L, TTS_STALL_MAX_EXTRA_MS)
+}
+
+/**
  * 快速重试模式下「播放队列干涸」的等待秒数：当前段还在合成、播放器已无音频，
  * 超过该时长仍未出声即判定引擎把这次请求吞了（见 [TTSReadAloudService.armRealtimeDryWatchdog]）。
  */
@@ -73,10 +96,9 @@ class TTSReadAloudService : BaseReadAloudService() {
         const val TTS_INIT_TIMEOUT_MS = 10_000L
 
         /**
-         * 朗读中无任何回调的最长静默：合成请求在引擎内丢失时同样不会有 onError。
-         * 不能更短的原因：离线引擎合成一个长段可能耗时 10 秒以上，期间没有任何回调。
+         * 朗读中无回调的静默轮询间隔；阈值本身按本段预计朗读时长动态放宽，
+         * 见 [ttsStallDeadlineMs]。
          */
-        const val TTS_STALL_TIMEOUT_MS = 15_000L
         const val TTS_STALL_POLL_MS = 2_000L
     }
 
@@ -254,13 +276,16 @@ class TTSReadAloudService : BaseReadAloudService() {
         ttsStallWatchdogJob?.cancel()
         if (!isPlay()) return
         lastTtsCallbackAt = SystemClock.elapsedRealtime()
+        // 本段预计朗读时长 + 基础静默阈值：长段只回调 onStart/onDone，不能按固定 15 秒判死
+        val utteranceLength = currentUtteranceTextLength()
+        val deadlineMs = ttsStallDeadlineMs(utteranceLength, measuredCharRate)
         ttsStallWatchdogJob = lifecycleScope.launch {
             while (isActive) {
                 delay(TTS_STALL_POLL_MS)
                 if (!isPlay() || !ttsInitFinish) return@launch
-                if (SystemClock.elapsedRealtime() - lastTtsCallbackAt < TTS_STALL_TIMEOUT_MS) continue
+                if (SystemClock.elapsedRealtime() - lastTtsCallbackAt < deadlineMs) continue
                 AppLog.put(
-                    "[朗读] ${TTS_STALL_TIMEOUT_MS}ms 无引擎回调，按引擎无响应重试本段",
+                    "[朗读] ${deadlineMs}ms 无引擎回调（本段 ${utteranceLength} 字），按引擎无响应重试本段",
                     module = LogModule.READ_ALOUD,
                 )
                 handleSpeakError("tts no callback", retryWithReinit = true)
