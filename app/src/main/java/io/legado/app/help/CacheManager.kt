@@ -13,6 +13,16 @@ import io.legado.app.utils.memorySize
 private val queryTTFMap = LruCache<String, QueryTTF>(4)
 
 /**
+ * 内存条目的过期时间（毫秒时间戳，0 = 不过期）。内存层原先不记 TTL，
+ * 带 saveTime 的 `put` 在进程内一直命中旧值（令牌/元数据过期后仍返回）。
+ */
+private val memoryDeadlines = LruCache<String, Long>(4096)
+
+/** 缓存过期判据：`deadline == 0` 表示永不过期；内存层与数据库层共用。 */
+internal fun cacheDeadlineExpired(deadline: Long, now: Long): Boolean =
+    deadline != 0L && deadline <= now
+
+/**
  * 最多只缓存50M的数据,防止OOM
  */
 private val memoryLruCache = object : LruCache<String, Any>(1024 * 1024 * 50) {
@@ -23,8 +33,7 @@ private val memoryLruCache = object : LruCache<String, Any>(1024 * 1024 * 50) {
 
 }
 
-private fun Any?.estimatedMemorySize(): Int {
-    val size = when (this) {
+private fun Any?.estimatedMemorySize(): Int {    val size = when (this) {
         null -> 0L
         is String -> memorySize().toLong()
         is CharSequence -> toString().memorySize().toLong()
@@ -84,7 +93,7 @@ object CacheManager {
             is ByteArray -> ACache.get().put(key, value, saveTime)
             else -> {
                 val valueStr = value.toString()
-                putMemory(key, valueStr)
+                putMemory(key, valueStr, deadline)
                 val cache = Cache(key, valueStr, deadline)
                 appDb.cacheDao.insert(cache)
             }
@@ -92,16 +101,29 @@ object CacheManager {
     }
 
     fun putMemory(key: String, value: Any) {
+        // 直接写内存（会话 cookie、WebView 结果等）不带 TTL，必须清掉旧条目的截止时间。
+        memoryDeadlines.remove(key)
         memoryLruCache.put(key, value)
+    }
+
+    private fun putMemory(key: String, value: Any, deadline: Long) {
+        memoryLruCache.put(key, value)
+        if (deadline == 0L) memoryDeadlines.remove(key) else memoryDeadlines.put(key, deadline)
     }
 
     //从内存中获取数据 使用lruCache
     fun getFromMemory(key: String): Any? {
-        return memoryLruCache[key]
+        val value = memoryLruCache[key] ?: return null
+        if (cacheDeadlineExpired(memoryDeadlines[key] ?: 0L, System.currentTimeMillis())) {
+            deleteMemory(key)
+            return null
+        }
+        return value
     }
 
     fun deleteMemory(key: String) {
         memoryLruCache.remove(key)
+        memoryDeadlines.remove(key)
     }
 
     fun get(key: String): String? {
@@ -109,9 +131,12 @@ object CacheManager {
             if (it is String) return it
         }
         val cache = appDb.cacheDao.get(key)
-        if (cache != null && (cache.deadline == 0L || cache.deadline > System.currentTimeMillis())) {
+        if (cache != null) {
+            if (cacheDeadlineExpired(cache.deadline, System.currentTimeMillis())) {
+                return null
+            }
             return cache.value?.also {
-                putMemory(key, it)
+                putMemory(key, it, cache.deadline)
             }
         }
         return null
@@ -122,7 +147,7 @@ object CacheManager {
             return get(key)
         }
         val cache = appDb.cacheDao.get(key)
-        if (cache != null && (cache.deadline == 0L || cache.deadline > System.currentTimeMillis())) {
+        if (cache != null && !cacheDeadlineExpired(cache.deadline, System.currentTimeMillis())) {
             return cache.value
         }
         return null

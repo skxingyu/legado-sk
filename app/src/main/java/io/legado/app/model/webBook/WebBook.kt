@@ -303,14 +303,17 @@ object WebBook {
         }
         val runningJob = chapterListJobs.putIfAbsent(key, job)
         return if (runningJob == null) {
-            job.await()
-                .onFailure {
-                    currentCoroutineContext().ensureActive()
-                }
-                .map { it.chapters }
-                .also {
-                    chapterListJobs.remove(key, job)
-                }
+            try {
+                job.await()
+                    .onFailure {
+                        currentCoroutineContext().ensureActive()
+                    }
+                    .map { it.chapters }
+            } finally {
+                // 必须无条件移除：取消/异常都走不到普通返回路径，遗留的失败 Deferred
+                // 会让同一 key 在进程内永远命中“正在加载”分支而不再重试。
+                chapterListJobs.remove(key, job)
+            }
         } else {
             job.cancel()
             runningJob.await()
