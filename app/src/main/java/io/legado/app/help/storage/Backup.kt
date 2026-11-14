@@ -413,7 +413,6 @@ object Backup {
         targets: Set<String>? = null
     ) {
         LogUtils.d(TAG, "开始备份 path:$path")
-        LocalConfig.lastBackup = System.currentTimeMillis()
         val aes = BackupAES()
         FileUtils.delete(backupPath)
         writeListToJson(appDb.bookDao.all, "bookshelf.json", backupPath)
@@ -575,18 +574,26 @@ object Backup {
                     throw e
                 }
             }
+            // 只有真正落盘（必要时含上传）成功才算备份完成：
+            // 写在动作之前会让一次失败把这 24 小时的自动备份全部挡掉。
+            LocalConfig.lastBackup = System.currentTimeMillis()
         }
         FileUtils.delete(backupPath)
         FileUtils.delete(zipFilePath)
         currentCoroutineContext().ensureActive()
-        ReadBookConfig.getAllPicBgStr().map {
-            if (it.contains(File.separator)) {
-                File(it)
-            } else {
-                appCtx.externalFiles.getFile("bg", it)
+        // 背景图清单同步是备份后的附带动作，失败不能把已成功的备份报成「备份出错」。
+        runCatching {
+            ReadBookConfig.getAllPicBgStr().map {
+                if (it.contains(File.separator)) {
+                    File(it)
+                } else {
+                    appCtx.externalFiles.getFile("bg", it)
+                }
+            }.let {
+                AppWebDav.upBgs(it.toTypedArray())
             }
-        }.let {
-            AppWebDav.upBgs(it.toTypedArray())
+        }.onFailure {
+            AppLog.put("同步背景图清单失败\n${it.localizedMessage}", it)
         }
     }
 
