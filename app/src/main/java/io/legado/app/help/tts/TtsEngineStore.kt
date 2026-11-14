@@ -678,9 +678,11 @@ object TtsEngineStore {
         engine: TtsEngineSetting,
         voices: List<TtsVoice>
     ): String? {
+        // 回退也必须跳过被禁用的音色，否则 activeVoice()（走 enabledVoices）与这里状态错位。
+        val enabled = voices.filter { engine.isVoiceEnabled(it) }
         return engine.activeVoiceId
-            ?.takeIf { voiceId -> voices.any { it.id == voiceId } }
-            ?: voices.firstOrNull()?.id
+            ?.takeIf { voiceId -> enabled.any { it.id == voiceId } }
+            ?: enabled.firstOrNull()?.id
     }
 
     private fun savedEngines(): List<TtsEngineSetting> {

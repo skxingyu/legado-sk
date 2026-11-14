@@ -361,11 +361,13 @@ object TtsScriptEngineClient {
     private fun Response.requireAudioStream(expectedAudioContentType: String?): InputStream {
         headers["Content-Type"]?.let { rawContentType ->
             val contentType = rawContentType.substringBefore(';').trim()
-            val expected = expectedAudioContentType.orEmpty()
-            if (contentType == "application/json" || contentType.startsWith("text/")) {
+            val expected = expectedAudioContentType.orEmpty().substringBefore(';').trim()
+            if (contentType.equals("application/json", ignoreCase = true) ||
+                contentType.startsWith("text/", ignoreCase = true)
+            ) {
                 throw NoStackTraceException(body.string())
             }
-            if (expected.isNotBlank() && !contentType.matches(expected.toRegex())) {
+            if (expected.isNotBlank() && !audioMimeMatches(contentType, expected)) {
                 throw NoStackTraceException("TTS服务器返回错误：${body.string()}")
             }
         }
@@ -798,4 +800,20 @@ object TtsScriptEngineClient {
         val voiceId: String?,
         val voiceName: String?
     )
+}
+
+/**
+ * 脚本引擎声明的是期望 MIME（如 `audio/mpeg`），服务端常回 `audio/mp3`、`audio/x-wav`。
+ * 按主类型比较并吸收 x- 前缀与常见别名，避免把正常音频当错误体吞掉。
+ */
+internal fun audioMimeMatches(actual: String, expected: String): Boolean {
+    fun normalize(mime: String): String {
+        val type = mime.substringBefore(';').trim().lowercase().removePrefix("audio/")
+        return when (val subtype = type.removePrefix("x-")) {
+            "mp3" -> "mpeg"
+            "wave" -> "wav"
+            else -> subtype
+        }
+    }
+    return normalize(actual) == normalize(expected)
 }
