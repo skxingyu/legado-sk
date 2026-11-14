@@ -137,6 +137,8 @@ private fun mirrorToolbarTitle(toolbar: Toolbar) {
     val titleText = toolbar.title?.takeIf { it.isNotBlank() } ?: return
     val parent = toolbar.parent as? ViewGroup ?: return
     val titleView = TextView(toolbar.context).apply {
+        // ConstraintSet.clone 要求所有 child 都有 id，缺了会直接崩
+        id = View.generateViewId()
         text = titleText
         applyUiTitleTypeface(toolbar.context)
         setTextColor(toolbar.context.primaryTextColor)
