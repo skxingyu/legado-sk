@@ -96,7 +96,18 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
         viewModel.initContent {
             chunks = it
             adapter.submit(chunks)
+            // 章节内容异步就绪后标题才可用；chrome 安装时可能还没拿到，
+            // 用 headerlessTitle 后补镜像（toolbar.title 本身也同步）。
+            upTitle()
             scrollToReadPosition()
+        }
+    }
+
+    private fun upTitle() {
+        val book = ReadBook.book
+        binding.toolBar.headerlessTitle = when {
+            book?.isLocalTxt == true -> book.name
+            else -> ReadBook.curTextChapter?.title ?: binding.toolBar.title
         }
     }
 
