@@ -434,8 +434,8 @@ object ReadManga : CoroutineScope by MainScope() {
 
     fun cancelPreDownloadTask() {
         if (curMangaChapter != null && nextMangaChapter != null) {
+            // 同 ReadBook：不能取消共享 downloadScope，否则正在加载的漫画章也被杀。
             preDownloadTask?.cancel()
-            downloadScope.coroutineContext.cancelChildren()
         }
     }
 

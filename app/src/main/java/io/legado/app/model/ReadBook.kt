@@ -1279,8 +1279,11 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun cancelPreDownloadTask() {
         if (contentLoadFinish) {
+            // 只取消预下载调度；不能 cancelChildren(downloadScope)——
+            // 当前章的正文加载也跑在这个共享 scope 里（loadContent → download），
+            // 切章后立刻退到后台会把正在加载的章节一起杀掉。
+            // 在途的单章下载属于 CacheBook，写完缓存自然结束，数量受 preDownloadNum 限制。
             preDownloadTask?.cancel()
-            downloadScope.coroutineContext.cancelChildren()
         }
     }
 
