@@ -396,11 +396,20 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10125` 递增**。
+> **下一次交付 versionCode 从 `10126` 递增**。
 
 ---
 
-- ✅ **10124（`3.26.111418c`）—— 当前交付，未发布**（review 的 P2 批次：朗读可见性 / MIME 判定 / 备份计时 / 网络重试 / zip 步进 / LIKE 转义）：
+- ✅ **10125（`3.26.111419c`）—— 当前交付，未发布**（无头标题镜像落地 + 退后台不杀当前章加载 + 导入确认）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。五个独立提交：`6bb7627e` 标题镜像、`92682bc6` 退后台、`4eb90b5a`+`ffe7e363` webBook/导入确认、`701128be`→`f56637f6`→`28ca3fc8`→`6b354e35` 标题镜像四轮修复（Device 实测逐步收敛）。
+  - **无头标题镜像（HeaderlessDialogChrome）**：`applyHeaderlessDialogChrome` 隐藏 Toolbar 前把 `toolbar.title` 镜像成同样式 TextView（`createTitleMirror`，UiTitle 字体/20sp/primaryTextColor，占 Toolbar 原槽位）；新增扩展 `var Toolbar.headerlessTitle` 供 chrome 之后才拿到标题的对话框后补/同步（`ContentEditDialog` 章节内容异步就绪后 `upTitle()`）；ConstraintLayout 宿主额外执行 `reanchorToolbarChildren`——把原约束到 `tool_bar` 的子项（rv_content 等）重锚到镜像（AGENTS §4 同类规则）；⚠️ 两个必踩坑已有回归性结论：① 镜像 TextView 必须 `id = View.generateViewId()`，否则 `ConstraintSet.clone` 报「All children of ConstraintLayout must have ids」打开即 FATAL；② 不能复用 `toolbar.layoutParams` 实例挂到镜像——两个 child 共享同一 LayoutParams 会让 ConstraintLayout 把镜像解析到 toolbar 的（已 GONE 折叠）widget，镜像 0×0 且重锚定失效，必须 `titleLayoutParams()` 生成独立副本（`copyConstraintsFrom` 在 constraintlayout 2.2.1 不存在，改为逐字段拷贝锚点与 bias）。
+  - **退后台不再杀当前章加载**：`ReadBook.cancelPreDownloadTask()` / `ReadManga.kt` 删掉 `downloadScope.coroutineContext.cancelChildren()`，只保留 `preDownloadTask?.cancel()`——当前章正文加载也跑在共享 `downloadScope`，切章后立刻退后台会把加载一起取消。
+  - **webBook/导入**：并发分页取正文空 `res.body` 由 `!!` 改抛 `ContentEmptyException("并发分页获取正文失败：…")`；`legado://import/readConfig` 改为先 `alert` 确认再导入（新增字符串 `import_read_config`；⚠️ `alert` 的命名参数是 `message` 不是 `msg`）。
+  - **验证**：`testAppReleaseUnitTest` 361 项 / 10 项既有失败同基线（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1）；`assembleAppRelease` 4m5s + `assembleAppSk2` 4m2s 成功（正式版 36,220,115 B、共存版 36,220,426 B；aapt `io.legado.app.c`/`io.legado.app.sk2` + 10125，apksigner 0）。
+  - **模拟器回归（`emulator-5554`，10124→10125，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：BookmarkDialog（LinearLayout 根）标题「书签」+ 章节行正常；ContentEditDialog（ConstraintLayout 根）标题「星际：从清洁工开始」成为正文首行、内容不再盖住标题、底部动作行「保存/重置/拷贝所有」正常；中途无 FATAL。
+  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `60062bc718d3ce8c628fbce4561d918d`）+ 两个版本名包。10121–10124 旧包暂留，删前需作者确认（均从未发布）。
+
+- ✅ **10124（`3.26.111418c`）—— 历史交付，未发布**（review 的 P2 批次：朗读可见性 / MIME 判定 / 备份计时 / 网络重试 / zip 步进 / LIKE 转义）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。四个独立提交：`5da72029` 朗读可见性、`939f0f53` 脚本引擎、`19571044` 备份计时、`b1bca968` 网络与解析。⚠️ 与 10123 **同 versionName**（同一小时内编译，按 `MMddHH` 只能相同，靠 `versionCode` 区分）。
   - **朗读**：`BaseReadAloudService` 的 `isRun` / `pause` / `loading` / `timeMinute` / `timeChapter` 加 `@Volatile`（IO 线程写、主线程读）；`TTSReadAloudService.pauseReadAloud()` 撤销 `ttsInitWatchdogJob`（暂停期间不再重建引擎、不再二次超时 toast）。
   - **脚本引擎**：`requireAudioStream` 改按 MIME 等价类比对（忽略大小写与参数、`x-` 前缀、`mp3↔mpeg`、`wave↔wav`），不再用 `matches(Regex)` 把正常音频判成错误（新增 `AudioMimeMatchTest` 5 项）；`resolveActiveVoiceId` 的回退音色跳过 `disabledVoiceIds`，与 `activeVoice()` 状态一致。
@@ -421,21 +430,6 @@ uiautomator2 / ADB
   - **模拟器回归（`emulator-5554`，10122→10123，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：启动无 FATAL；手动备份成功；长按「恢复」走本地备份，恢复项目对话框正常、完成后无崩溃；朗读 `TTSReadAloudService` 起播、位置推进到 ch43 pos293、速率校准 452/min。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `eae4b45e5f3a2cb1ce1024c1ba3546f4`）+ 两个版本名包；10121/10122 旧包暂留（10121 从未发布，删除需作者确认）。
 
-- ✅ **10122（`3.26.111009c`）—— 历史交付，已发布 Pre-release `v3.26.111009-10122`（2026-11-12）**（无回调看门狗按本段预计朗读时长动态放宽）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `81236df8`。
-  - **起因（作者，2026-11-10）**：MultiTTS 句长限制调到 32 后，遇到超过限制的长段落会「在限制区反复回段首重读、第二次读到限制就跳段」。
-  - **根因（日志确认）**：不是 MultiTTS 分句，也不是 SK 分句，而是 10121 的 `TTS_STALL_TIMEOUT_MS = 15_000L` 误判。MultiTTS 整段只回调 `onStart`/`onDone`，**从不发 `onRangeStart`**（日志计数 0）；第 85 段 169 字按 480 字/分钟要读 21 秒，`onStart` 后 16 秒零回调即触发 `[朗读] 15000ms 无引擎回调…` → `handleSpeakError("tts no callback", retryWithReinit = true)` 从段首重读 → 同一 `retryParagraphKey` 二次超时直接跳段。句长限制只是让整段耗时更长、更易越阈。
-  - **修法**：新增顶层纯函数 `ttsStallDeadlineMs(textLength, charRatePerMs) = TTS_STALL_TIMEOUT_MS + 本段字数 / measuredCharRate`（额外时长封顶 `TTS_STALL_MAX_EXTRA_MS = 120_000L`；速率非法时退回 15s）；`armTtsStallWatchdog()` 在武装时按 `currentUtteranceTextLength()` 算出 `deadlineMs`，日志带上本段字数。短段阈值基本不变（40 字 ≈ 20s），169 字 ≈ 36s。
-  - **验证**：新增 `app/src/test/java/io/legado/app/service/TtsStallDeadlineTest.kt` 5 项（空段 15s、169 字 36,125ms、40 字 20,000ms、速率非法退回 15s、封顶 135s），`testAppReleaseUnitTest` 通过。`assembleAppRelease` 8m39s + `assembleAppSk2` 6m15s 均成功（10122 / `3.26.111009c`；正式版 36,215,404 B、共存版 36,215,636 B；aapt 包名/versionCode 正确，apksigner 0）。
-  - **模拟器回归（`emulator-5554`，10121→10122，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：句长限制 32、Wav 模式关；同书第 85 段（169 字）09:18:07 起读，09:18:27 `onDone` **正常读完**（19.9s），`无引擎回调` 计数 **0**（修前同一段 16s 即触发重读），随后继续推进到后续段落。
-  - **平板（`HA1KAPWG`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 14:00:50`，`MainActivity` 正常前台，`crash` buffer 无本应用 FATAL。
-  - **手机（`72a2b362`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 17:34:58`，`MainActivity` 正常前台，`crash` 无本应用 FATAL。
-  - **代价**：引擎在长段中途真的死掉时，恢复最晚要等「预计读完时长 + 15 秒」（169 字约 36s），不再出现重读+跳段。
-  - **产物**：已在 `release/`（固定名 + 两个版本名）；10121 两包暂留（从未发布，待作者决定是否删除）。**发布文案** `companion/发布说明-10122.md`（沿用 10121 的累计口径并补本次修复）。
-
-## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
-
-> 迁移后的电脑为全新环境：无 D 盘，原先 `D:\code\...`、`D:\OneDrive\桌面\Ai\legado-sk\`、`F:\leidian\LDPlayer14`、`F:\down\雷电模拟器14...` 均已失效或弃用。本节统一登记本机事实；若某条与实际不符，先核实再改，勿让 AGENTS 出现悬空路径。
 
 ### 7.1 环境快照（已逐项核对）
 
