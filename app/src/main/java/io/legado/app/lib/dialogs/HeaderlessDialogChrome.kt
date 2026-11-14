@@ -153,8 +153,62 @@ private fun createTitleMirror(toolbar: Toolbar): TextView {
         setPadding(24.dpToPx(), 22.dpToPx(), 24.dpToPx(), 4.dpToPx())
         tag = TAG_HEADERLESS_TITLE
     }
-    parent.addView(titleView, parent.indexOfChild(toolbar), toolbar.layoutParams)
+    parent.addView(titleView, parent.indexOfChild(toolbar), titleLayoutParams(toolbar))
+    reanchorToolbarChildren(parent, toolbar.id, titleView.id)
     return titleView
+}
+
+/**
+ * 不能直接复用 toolbar.layoutParams —— 同一个 LayoutParams 实例挂到两个 child 上会让
+ * ConstraintLayout 把镜像解析到 toolbar 的（已 GONE 折叠）widget 上，镜像变成 0×0、
+ * 重锚定后的子内容也跟着贴回顶部。
+ */
+private fun titleLayoutParams(toolbar: Toolbar): ViewGroup.LayoutParams = when (val src = toolbar.layoutParams) {
+    is ConstraintLayout.LayoutParams ->
+        ConstraintLayout.LayoutParams(src.width, src.height).apply {
+            topToTop = src.topToTop; topToBottom = src.topToBottom
+            bottomToTop = src.bottomToTop; bottomToBottom = src.bottomToBottom
+            startToStart = src.startToStart; startToEnd = src.startToEnd
+            endToStart = src.endToStart; endToEnd = src.endToEnd
+            horizontalBias = src.horizontalBias; verticalBias = src.verticalBias
+            matchConstraintDefaultWidth = src.matchConstraintDefaultWidth
+            matchConstraintDefaultHeight = src.matchConstraintDefaultHeight
+            matchConstraintPercentWidth = src.matchConstraintPercentWidth
+            matchConstraintPercentHeight = src.matchConstraintPercentHeight
+        }
+    is ViewGroup.MarginLayoutParams ->
+        ViewGroup.MarginLayoutParams(src)
+    else ->
+        ViewGroup.LayoutParams(src.width, src.height)
+}
+
+/**
+ * Toolbar 被 GONE 后会折叠为零高度，ConstraintLayout 里原先约束在
+ * toolbar 下方的内容会塌到顶部盖住标题镜像（AGENTS §4 同类规则：
+ * 被隐藏元素的约束必须跟着重新锚定，不能只藏 toolbar）。
+ */
+private fun reanchorToolbarChildren(parent: ViewGroup, toolbarId: Int, titleId: Int) {
+    if (parent !is ConstraintLayout || toolbarId == View.NO_ID) return
+    val constrained = parent.children.toList().filter { child ->
+        child.id != titleId && child.id != toolbarId &&
+            (child.layoutParams as? ConstraintLayout.LayoutParams)?.let {
+                it.topToBottom == toolbarId || it.bottomToTop == toolbarId
+            } == true
+    }
+    if (constrained.isEmpty()) return
+    val cs = ConstraintSet()
+    cs.clone(parent)
+    constrained.forEach { child ->
+        if (child.id == View.NO_ID) child.id = View.generateViewId()
+        val lp = child.layoutParams as ConstraintLayout.LayoutParams
+        if (lp.topToBottom == toolbarId) {
+            cs.connect(child.id, ConstraintSet.TOP, titleId, ConstraintSet.BOTTOM)
+        }
+        if (lp.bottomToTop == toolbarId) {
+            cs.connect(child.id, ConstraintSet.BOTTOM, titleId, ConstraintSet.TOP)
+        }
+    }
+    cs.applyTo(parent)
 }
 
 /** 存量对话框在 chrome 安装后仍需更新标题时，用这个入口写，镜像同步可见。 */
