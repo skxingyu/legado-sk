@@ -37,7 +37,7 @@ interface CacheDao {
     fun sourceState(): List<Cache>
 
     @Query(
-        """delete from caches where `key` like 'v_' || :key || '_%'
+        """delete from caches where `key` like 'v\_' || replace(replace(replace(:key,'\','\'),'%','\%'),'_','\_') || '\_%' escape '\'
         or `key` = 'userInfo_' || :key
         or `key` = 'loginHeader_' || :key
         or `key` = 'sourceVariable_' || :key

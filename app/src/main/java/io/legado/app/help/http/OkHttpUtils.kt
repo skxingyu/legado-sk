@@ -40,8 +40,15 @@ suspend fun OkHttpClient.newCallResponse(
     }
     var response: Response? = null
     for (i in 0..retry) {
+        // 重试前必须释放上一次的 Response，否则连接与 body 一直悬着。
+        response?.close()
         response = newCall(requestBuilder.build()).await()
         if (response.isSuccessful) {
+            return response
+        }
+        // 4xx 是确定性拒绝，重放只会放大副作用与计费；只重试可能是瞬时的状态码。
+        val code = response.code
+        if (code !in 500..599 && code != 408 && code != 429) {
             return response
         }
     }

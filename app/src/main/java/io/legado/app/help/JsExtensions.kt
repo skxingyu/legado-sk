@@ -912,7 +912,6 @@ interface JsExtensions : JsEncodeUtils {
                     zis.use { it.copyTo(bos) }
                     return bos.toByteArray()
                 }
-                entry = zis.nextEntry
             }
         }
 

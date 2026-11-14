@@ -942,7 +942,7 @@ class AnalyzeUrl(
         }
 
         fun setServerID(value: String?) {
-            serverID = if (value.isNullOrBlank()) null else value.toLong()
+            serverID = value?.takeIf { it.isNotBlank() }?.toLongOrNull()
         }
 
         fun getServerID(): Long? {
@@ -950,7 +950,7 @@ class AnalyzeUrl(
         }
 
         fun setWebViewDelayTime(value: String?) {
-            webViewDelayTime = if (value.isNullOrBlank()) null else value.toLong()
+            webViewDelayTime = value?.takeIf { it.isNotBlank() }?.toLongOrNull()
         }
 
         fun getWebViewDelayTime(): Long? {
