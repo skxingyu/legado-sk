@@ -1609,6 +1609,7 @@
     <string name="file_not_supported">文件 %1$s 不受支持，是否继续打开？</string>
     <string name="import_tts">导入 TTS</string>
     <string name="import_theme">导入主题</string>
+    <string name="import_read_config">导入阅读排版</string>
     <string name="import_txt_toc_rule">导入 TXT 目录规则</string>
     <string name="auto_save_cookie">CookieJar</string>
     <string name="cookie">清除 Cookie</string>

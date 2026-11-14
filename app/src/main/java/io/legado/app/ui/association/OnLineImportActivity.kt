@@ -78,8 +78,17 @@ class OnLineImportActivity :
                 "/theme" -> showDialogFragment(
                     ImportThemeDialog(url, true)
                 )
-                "/readConfig" -> viewModel.getBytes(url) { bytes ->
-                    viewModel.importReadConfig(bytes, this::finallyDialog)
+                "/readConfig" -> alert(
+                    title = getString(R.string.import_read_config),
+                    msg = url
+                ) {
+                    // 排版导入会覆盖同名自定义预设，必须先确认，与其它导入入口对齐。
+                    okButton {
+                        viewModel.getBytes(url) { bytes ->
+                            viewModel.importReadConfig(bytes, this@OnLineImportActivity::finallyDialog)
+                        }
+                    }
+                    cancelButton { finish() }
                 }
                 "/addToBookshelf" -> showDialogFragment(
                     AddToBookshelfDialog(url, true)

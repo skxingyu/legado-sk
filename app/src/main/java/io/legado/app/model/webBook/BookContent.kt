@@ -114,8 +114,12 @@ object BookContent {
                     coroutineContext = currentCoroutineContext()
                 )
                 val res = analyzeUrl.getStrResponseAwait() //控制并发访问
+                // 空 body 不能用 !!，否则报错信息只剩 NPE，用户无法定位是哪一页。
+                val pageBody = res.body ?: throw ContentEmptyException(
+                    "并发分页获取正文失败：${urlStr} 返回空内容(${res.code()})"
+                )
                 analyzeContent(
-                    book, urlStr, res.url, res.body!!, contentRule,
+                    book, urlStr, res.url, pageBody, contentRule,
                     bookChapter, bookSource, mNextChapterUrl,
                     getNextPageUrl = false,
                     printLog = false

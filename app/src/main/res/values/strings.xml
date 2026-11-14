@@ -1865,6 +1865,7 @@
     <string name="file_not_supported">Continue to open although %1$s is not supported ?</string>
     <string name="import_tts">Import TTS</string>
     <string name="import_theme">Import theme</string>
+    <string name="import_read_config">Import reading layout</string>
     <string name="import_txt_toc_rule">Import txt directory rules</string>
     <string name="auto_save_cookie">CookieJar</string>
     <string name="cookie">Clear cookie</string>
