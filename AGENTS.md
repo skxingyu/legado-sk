@@ -396,11 +396,21 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10124` 递增**。
+> **下一次交付 versionCode 从 `10125` 递增**。
 
 ---
 
-- ✅ **10123（`3.26.111418c`）—— 当前交付，未发布**（全库 review 后的四批修复：数据安全 / 密钥外泄 / 朗读状态 / 内核卡死）：
+- ✅ **10124（`3.26.111418c`）—— 当前交付，未发布**（review 的 P2 批次：朗读可见性 / MIME 判定 / 备份计时 / 网络重试 / zip 步进 / LIKE 转义）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。四个独立提交：`5da72029` 朗读可见性、`939f0f53` 脚本引擎、`19571044` 备份计时、`b1bca968` 网络与解析。⚠️ 与 10123 **同 versionName**（同一小时内编译，按 `MMddHH` 只能相同，靠 `versionCode` 区分）。
+  - **朗读**：`BaseReadAloudService` 的 `isRun` / `pause` / `loading` / `timeMinute` / `timeChapter` 加 `@Volatile`（IO 线程写、主线程读）；`TTSReadAloudService.pauseReadAloud()` 撤销 `ttsInitWatchdogJob`（暂停期间不再重建引擎、不再二次超时 toast）。
+  - **脚本引擎**：`requireAudioStream` 改按 MIME 等价类比对（忽略大小写与参数、`x-` 前缀、`mp3↔mpeg`、`wave↔wav`），不再用 `matches(Regex)` 把正常音频判成错误（新增 `AudioMimeMatchTest` 5 项）；`resolveActiveVoiceId` 的回退音色跳过 `disabledVoiceIds`，与 `activeVoice()` 状态一致。
+  - **备份**：`LocalConfig.lastBackup` 由「备份动作之前」移到「本地落盘 + WebDAV 上传成功之后」（失败一次不再让 24 小时内的自动备份全部停摆）；备份后的 `AppWebDav.upBgs` 用 `runCatching` 包裹，附带动作失败不再把已成功的备份报成「备份出错」。
+  - **网络/解析**：`OkHttpUtils.newCallResponse` 重试前 `close()` 上一个 Response，且只对 `5xx`/`408`/`429` 重试（4xx 与业务错误不再重放，避免放大副作用与计费）；`JsExtensions.getZipByteArrayContent` 删掉循环体里多余的 `entry = zis.nextEntry`（原来只检查奇数条目）；`CacheDao.deleteSourceVariables` 的 LIKE 加 `escape '\'` 并转义 `:key` 中的 `\`/`%`/`_`（URL 里的 `_` 曾是通配符，可能删到别的书源登录变量）；`AnalyzeUrl.setServerID` / `setWebViewDelayTime` 改 `toLongOrNull()`（规则里写错数字不再抛 `NumberFormatException`）。
+  - **验证**：`testAppReleaseUnitTest` 仍为 356 项 / 10 项既有失败（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1，见 10123 条），新增 `AudioMimeMatchTest` 5 项通过。`assembleAppRelease` 4m28s + `assembleAppSk2` 4m41s 成功（正式版 36,217,621 B、共存版 36,217,682 B；aapt `io.legado.app.c`/`io.legado.app.sk2` + 10124，apksigner 0）。
+  - **模拟器回归（`emulator-5554`，10123→10124，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：启动无 FATAL；开书起播朗读、`onStart` 与位置发布正常推进（ch44 pos 0→9）；crash buffer 无本应用 FATAL。
+  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `73b8c8f6823f3fd626d3f7b4e2440439`）+ `legado_sk_3.26.111418c_10124_arm64-v8a.apk` + `…_（共存版）.apk`。10121/10122/10123 旧包暂留，删前需作者确认（均从未发布或已被取代）。
+
+- ✅ **10123（`3.26.111418c`）—— 历史交付，未发布**（全库 review 后的四批修复：数据安全 / 密钥外泄 / 朗读状态 / 内核卡死）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。四个独立提交：`133f4488` 安全、`a9bf8001` 备份、`42e55c6b` 朗读、`cfbfe278` 内核。
   - **起因**：作者要求对全库做一次充分 review（m02089），5 个只读子代理按朗读/TTS、脚本引擎、备份恢复、阅读内核、UI 表面五域并行审计，主代理逐条回源码复核后汇总到 `test-records/review-10122/汇总-10122.md`；作者全选修复（m02236）。
   - **安全**：`BackupConfig.ignorePrefKeys` 加 `PreferKey.ttsEngineV2SettingsJson`（脚本引擎条目明文存 password 类型 API Key + 整段脚本，原来随备份 zip/WebDAV 外泄）；`defaultData/tts/next_edge_proxy.js` 由 `@enabled true` 改 `false`，描述改为「第三方明文 HTTP 中转调试模板」（存量已启用用户不受影响）。
@@ -422,13 +432,6 @@ uiautomator2 / ADB
   - **手机（`72a2b362`，10121→10122）**：`firstInstallTime` 仍 `2026-10-30 17:34:58`，`MainActivity` 正常前台，`crash` 无本应用 FATAL。
   - **代价**：引擎在长段中途真的死掉时，恢复最晚要等「预计读完时长 + 15 秒」（169 字约 36s），不再出现重读+跳段。
   - **产物**：已在 `release/`（固定名 + 两个版本名）；10121 两包暂留（从未发布，待作者决定是否删除）。**发布文案** `companion/发布说明-10122.md`（沿用 10121 的累计口径并补本次修复）。
-
-- ✅ **10121（`3.26.110917c`）—— 历史交付，未发布**（看门狗等待时间收紧：初始化 15s→10s、无回调 45s→15s）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。改动仅 `TTSReadAloudService` 两个常量：`TTS_INIT_TIMEOUT_MS = 10_000L`、`TTS_STALL_TIMEOUT_MS = 15_000L`，轮询 `TTS_STALL_POLL_MS = 5_000L → 2_000L`（检测延迟 15~17s）。注释写明下限理由：冷启动引擎 1~5s、离线引擎长段合成可能 >10s，再短会误判重建。
-  - **为什么不再短**：`STALL` 看门狗在「首段尚未出声」时也要覆盖合成耗时，离线引擎合成长段可能十几秒且期间零回调；低于 15s 会把慢合成误判成引擎挂死 → 重建 → 同一段二次失败被跳段（内容丢失）。
-  - **验证**：`assembleAppRelease` + `assembleAppSk2` 均成功（10121 / `3.26.110917c`，正式版 36,214,871 B、共存版 36,215,017 B，aapt 包名与 versionCode 正确，apksigner 0）；手机 `72a2b362` 10120→10121 覆盖（`firstInstallTime` 仍 `2026-10-30 17:34:58`），启动正常无 FATAL。**平板 `HA1KAPWG` 真机实测**（10120→10121，`firstInstallTime` 仍 `2026-10-30 14:00:50`）：19:19:38 `am force-stop org.nobody.multittt`，**19:19:52.626 日志 `[朗读] 15000ms 无引擎回调，按引擎无响应重试本段`** → `tts no callback, retry current paragraph` → `initTts` 重绑 `Sucessfully bound` → 位置继续推进（19:20:05 pos:1518）。⚠️ 雷电模拟器为实时缓存（WAV）模式，该模式按设计不启用本看门狗。
-  - **产物**：已在 `release/`（固定名 + 两个版本名），10120 两包已删除（从未发布）。
-  - **发布文案**：`companion/发布说明-10121.md`（已去掉百度引擎相关条目）。
 
 ## 7. 当前机器环境与配套文档（2026-09-04 迁移后）
 
