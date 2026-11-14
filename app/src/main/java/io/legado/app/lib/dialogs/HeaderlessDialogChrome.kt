@@ -134,12 +134,18 @@ private fun moveToolbarActionsToBottom(toolbar: Toolbar) {
 private val titleMirrors = WeakHashMap<Toolbar, TextView>()
 
 private fun mirrorToolbarTitle(toolbar: Toolbar) {
-    val titleText = toolbar.title?.takeIf { it.isNotBlank() } ?: return
-    val parent = toolbar.parent as? ViewGroup ?: return
+    if (toolbar.title?.isNotBlank() != true) return
+    titleMirrors[toolbar] = createTitleMirror(toolbar)
+}
+
+/** 在 Toolbar 原槽位创建标题镜像；Toolbar 已被 chrome 隐藏时也可以后补。 */
+private fun createTitleMirror(toolbar: Toolbar): TextView {
+    val parent = toolbar.parent as? ViewGroup
+        ?: throw IllegalStateException("headerless title mirror requires attached toolbar")
     val titleView = TextView(toolbar.context).apply {
         // ConstraintSet.clone 要求所有 child 都有 id，缺了会直接崩
         id = View.generateViewId()
-        text = titleText
+        text = toolbar.title
         applyUiTitleTypeface(toolbar.context)
         setTextColor(toolbar.context.primaryTextColor)
         textSize = 20f
@@ -148,7 +154,7 @@ private fun mirrorToolbarTitle(toolbar: Toolbar) {
         tag = TAG_HEADERLESS_TITLE
     }
     parent.addView(titleView, parent.indexOfChild(toolbar), toolbar.layoutParams)
-    titleMirrors[toolbar] = titleView
+    return titleView
 }
 
 /** 存量对话框在 chrome 安装后仍需更新标题时，用这个入口写，镜像同步可见。 */
@@ -156,7 +162,16 @@ var Toolbar.headerlessTitle: CharSequence
     get() = title
     set(value) {
         title = value
-        titleMirrors[this]?.text = value
+        val mirror = titleMirrors[this]
+        if (mirror == null) {
+            // chrome 安装时 title 还是空的（如章节内容异步加载后才拿到标题），
+            // 这里后补镜像；Toolbar 已 GONE 但仍在树里，槽位信息可用。
+            if (value.isNotBlank() && visibility == View.GONE) {
+                titleMirrors[this] = createTitleMirror(this)
+            }
+        } else {
+            mirror.text = value
+        }
     }
 
 private fun findActionHost(toolbar: Toolbar): ViewGroup? {
