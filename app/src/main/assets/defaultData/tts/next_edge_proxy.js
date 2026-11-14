@@ -4,7 +4,7 @@
 // @uuid next_edge_proxy
 // @author Legado
 // @url http://5.45.99.149:8075/tts
-// @enabled true
+// @enabled false
 // @cookieJar false
 // @audioType audio/mpeg
 // @defaultSpeed 50
@@ -12,7 +12,7 @@
 // @defaultPitch 50
 // @sampleText 前不见古人，后不见来者。念天地之悠悠，独怆然而涕下。
 // @capabilities style_tags,emotion
-// @description 第三方 Edge TTS 中转调试模板，发音人画像和 styles 参考 Edge VoiceTag 与 Azure Speech 文档。
+// @description 第三方 Edge TTS 中转调试模板（明文 HTTP，正文会发给中转服务器），默认关闭；启用前请自备可信中转地址。发音人画像和 styles 参考 Edge VoiceTag 与 Azure Speech 文档。
 
 var STYLE_NAMES = {
     "advertisement-upbeat": "广告活力",

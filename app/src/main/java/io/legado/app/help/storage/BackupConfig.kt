@@ -74,7 +74,10 @@ object BackupConfig {
         PreferKey.webServiceWakeLock,
         PreferKey.readAloudWakeLock,
         PreferKey.audioPlayWakeLock,
-        PreferKey.uiLayoutAlpha
+        PreferKey.uiLayoutAlpha,
+        // 脚本引擎条目含脚本全文与 password 类型的 API Key，明文进备份 = 随 zip/WebDAV 泄密。
+        // 引擎配置由详情页「导出」单独搬运。
+        PreferKey.ttsEngineV2SettingsJson
     )
 
     //阅读配置
