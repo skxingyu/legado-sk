@@ -1139,6 +1139,9 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     override fun pauseReadAloud(abandonFocus: Boolean) {
         super.pauseReadAloud(abandonFocus)
+        // 暂停期间引擎不该再被重建：初始化看门狗也必须撤销，
+        // 否则它到点重建引擎、二次超时还会弹「初始化失败」。
+        ttsInitWatchdogJob?.cancel()
         cancelRealtimeDryWatchdog()
         ttsStallWatchdogJob?.cancel()
         activeUtteranceId = null

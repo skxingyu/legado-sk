@@ -119,18 +119,23 @@ abstract class BaseReadAloudService : BaseService(),
     AudioManager.OnAudioFocusChangeListener {
 
     companion object {
+        /** 这些状态在播放线程（IO）写、在主线程读，必须 @Volatile 才能及时可见。 */
+        @Volatile
         @JvmStatic
         var isRun = false
             private set
 
+        @Volatile
         @JvmStatic
         var pause = true
             private set
 
+        @Volatile
         @JvmStatic
         var loading = false
             private set
 
+        @Volatile
         @JvmStatic
         var timeMinute: Int = 0
             private set
@@ -140,6 +145,7 @@ abstract class BaseReadAloudService : BaseService(),
          * 只在引擎自然读完一章（`nextChapter(syncView = false)`）时递减，用户显式跳章不消耗；
          * 归零时停止朗读且**不再推进到下一章**（即停在读完的那一章末尾）。
          */
+        @Volatile
         @JvmStatic
         var timeChapter: Int = 0
             private set
