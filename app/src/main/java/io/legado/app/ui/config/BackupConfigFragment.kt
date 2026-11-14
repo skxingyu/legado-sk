@@ -498,6 +498,8 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
         restoreJob = lifecycleScope.launch {
+            // 下载 / 解压 / 选项目都在 `backupPath` 上操作，而自动备份会把它整个删掉。
+            Restore.isRestoring = true
             try {
                 withContext(IO) {
                     AppWebDav.downloadBackupToLocal(
@@ -528,6 +530,7 @@ class BackupConfigFragment : PreferenceFragment(),
                 AppLog.put("WebDav恢复出错\n${e.localizedMessage}", e)
                 appCtx.toastOnUi("WebDav恢复出错\n${e.localizedMessage}")
             } finally {
+                Restore.isRestoring = false
                 progressDialog.dismiss()
             }
         }
@@ -573,6 +576,7 @@ class BackupConfigFragment : PreferenceFragment(),
         }
         waitDialog.show()
         restoreJob = lifecycleScope.launch {
+            Restore.isRestoring = true
             try {
                 withContext(IO) {
                     unzipRestoreFile(uri)
@@ -591,6 +595,7 @@ class BackupConfigFragment : PreferenceFragment(),
                 AppLog.put("恢复备份出错\n${e.localizedMessage}", e)
                 appCtx.toastOnUi("恢复备份出错\n${e.localizedMessage}")
             } finally {
+                Restore.isRestoring = false
                 waitDialog.dismiss()
                 waitDialog.hideCancelButton()
             }

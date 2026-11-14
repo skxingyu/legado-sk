@@ -246,6 +246,12 @@ object Backup {
      *    使窗口按云端事实推进，且避免每次退出都重复查询。
      */
     fun autoBack(context: Context) {
+        // 恢复的「下载 / 解压 / 选项目」阶段也会写入 `Backup.backupPath`，
+        // 而 `backup()` 开头会把它整个删掉 —— 必须与书架变动路径一样显式避让。
+        if (Restore.isRestoring) {
+            AppLog.put("自动备份已跳过：恢复流程进行中")
+            return
+        }
         if (shouldBackup()) {
             Coroutine.async {
                 mutex.withLock {
@@ -266,7 +272,17 @@ object Backup {
                         }
                         val backupZipFileName = getNowZipFileName()
                         if (!AppWebDav.hasBackUp(backupZipFileName)) {
-                            backup(context, AppConfig.backupPath)
+                            // 自动备份同样要遵守「备份项目」，但全不勾时必须中止，不能生成空包。
+                            when (
+                                val decision =
+                                    decideBackupScope(BackupTargetConfig.selectedTargetsOrNull())
+                            ) {
+                                BackupScopeDecision.Abort ->
+                                    AppLog.put("自动备份已跳过：备份项目一个都没勾选")
+
+                                is BackupScopeDecision.Proceed ->
+                                    backup(context, AppConfig.backupPath, targets = decision.targets)
+                            }
                         } else {
                             LocalConfig.lastBackup = System.currentTimeMillis()
                         }
@@ -348,7 +364,18 @@ object Backup {
                 if (encodeKeys(verified) == LocalConfig.lastShelfKeys) {
                     return@withLock
                 }
-                backup(context, localPath, targets = BackupTargetConfig.selectedTargetsOrNull())
+                // 与手动入口共用同一判据：全不勾必须中止，否则会生成空 zip 覆盖唯一的旧备份。
+                val targets = when (
+                    val decision = decideBackupScope(BackupTargetConfig.selectedTargetsOrNull())
+                ) {
+                    BackupScopeDecision.Abort -> {
+                        AppLog.put("书架变动自动备份已跳过：备份项目一个都没勾选")
+                        return@withLock
+                    }
+
+                    is BackupScopeDecision.Proceed -> decision.targets
+                }
+                backup(context, localPath, targets = targets)
                 // ⚠️ 记账必须放在**备份成功之后**：放在开头的话，备份中途被取消/进程被杀
                 // 会留下「标记已更新但备份没做成」，该次变动此后永不补备份。
                 LocalConfig.lastShelfKeys = encodeKeys(verified)
@@ -587,27 +614,48 @@ object Backup {
     @Suppress("SameParameterValue")
     private fun copyBackup(context: Context, uri: Uri, fileName: String) {
         val treeDoc = DocumentFile.fromTreeUri(context, uri)!!
+        // 先写 .part 再改名：中途失败最多留下一个残片，不会把上一份唯一备份删掉后写一半。
+        val partName = "$fileName.part"
+        treeDoc.findFile(partName)?.delete()
+        val partDoc = treeDoc.createFile("", partName)
+            ?: throw NoStackTraceException("创建文件失败")
+        val output = partDoc.openOutputStream()
+            ?: throw NoStackTraceException("打开OutputStream失败")
+        output.use { outputS ->
+            FileInputStream(zipFilePath).use { inputS -> inputS.copyTo(outputS) }
+        }
+        if (partDoc.renameTo(fileName)) return
         treeDoc.findFile(fileName)?.delete()
+        if (partDoc.renameTo(fileName)) return
+        // 个别 provider 不支持改名：退回逐字节复制，残片仍在，失败时数据不全丢。
         val fileDoc = treeDoc.createFile("", fileName)
             ?: throw NoStackTraceException("创建文件失败")
-        val outputS = fileDoc.openOutputStream()
+        val fileOutput = fileDoc.openOutputStream()
             ?: throw NoStackTraceException("打开OutputStream失败")
-        outputS.use {
-            FileInputStream(zipFilePath).use { inputS ->
+        fileOutput.use { outputS ->
+            context.contentResolver.openInputStream(partDoc.uri)?.use { inputS ->
                 inputS.copyTo(outputS)
-            }
+            } ?: throw NoStackTraceException("打开临时备份文件失败")
         }
+        partDoc.delete()
     }
 
     @Throws(Exception::class)
     @Suppress("SameParameterValue")
     private fun copyBackup(rootFile: File, fileName: String) {
+        if (!rootFile.exists()) rootFile.mkdirs()
+        val file = File(rootFile, fileName)
+        val part = File(rootFile, "$fileName.part")
         FileInputStream(File(zipFilePath)).use { inputS ->
-            val file = FileUtils.createFileIfNotExist(rootFile, fileName)
-            FileOutputStream(file).use { outputS ->
-                inputS.copyTo(outputS)
-            }
+            FileOutputStream(part).use { outputS -> inputS.copyTo(outputS) }
         }
+        if (part.renameTo(file)) return
+        file.delete()
+        if (part.renameTo(file)) return
+        FileOutputStream(file).use { outputS ->
+            FileInputStream(part).use { inputS -> inputS.copyTo(outputS) }
+        }
+        part.delete()
     }
 
     fun clearCache() {

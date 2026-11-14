@@ -102,7 +102,7 @@ object Restore {
      */
     @Volatile
     var isRestoring: Boolean = false
-        private set
+        internal set
 
     private const val TAG = "Restore"
 
@@ -116,6 +116,10 @@ object Restore {
         PreferKey.bookInfoBgImage,
         PreferKey.bookInfoBgImageN
     )
+
+    // 只参与目录恢复、不参与 prefs 归一化：`illustrations` 不是 pref key。
+    // 备份侧（Backup.kt）本来就打包它，漏掉这里会让配图/配图音视频恢复后永久丢失。
+    private val extraAssetDirNames = arrayOf("illustrations")
 
     suspend fun restore(context: Context, uri: Uri) {
         LogUtils.d(TAG, "开始恢复备份 uri:$uri")
@@ -754,7 +758,7 @@ object Restore {
     }
 
     private fun restoreBackgroundAssets(path: String) {
-        backgroundAssetDirNames.forEach { dirName ->
+        (backgroundAssetDirNames + extraAssetDirNames).forEach { dirName ->
             val sourceDir = File(path, dirName)
             if (!sourceDir.exists() || !sourceDir.isDirectory) return@forEach
             val targetDir = appCtx.externalFiles.getFile(dirName)

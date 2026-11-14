@@ -256,7 +256,16 @@ internal object BackupItems {
             BackupTargetItem(
                 "bookshelf",
                 "书架",
-                listOf("bookshelf.json", "bookmark.json", "bookGroup.json", "covers")
+                listOf(
+                    "bookshelf.json",
+                    "bookmark.json",
+                    "bookGroup.json",
+                    "covers",
+                    // 配图记录与配图/音视频目录必须跟书架同进同出：分开勾选会让
+                    // 「只备份书架」的设备丢掉 bookIllustration.json，恢复后记录与文件双双缺失。
+                    "bookIllustration.json",
+                    "illustrations"
+                )
             ),
             BackupTargetItem("bookSource", "书源", listOf("bookSource.json", "sourceSub.json")),
             BackupTargetItem(
