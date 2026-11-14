@@ -25,6 +25,7 @@ import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.dialogs.headerlessTitle
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.view.ThemeEditText
 import io.legado.app.model.ReadBook
@@ -133,7 +134,7 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
                     withContext(IO) {
                         chapter.update()
                     }
-                    binding.toolBar.title = chapter.getDisplayTitle()
+                    binding.toolBar.headerlessTitle = chapter.getDisplayTitle()
                     ReadBook.loadContent(ReadBook.durChapterIndex, resetPageOffset = false)
                 }
             }

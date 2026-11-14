@@ -15,9 +15,12 @@ import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.FlexboxLayout
 import com.google.android.flexbox.JustifyContent
 import io.legado.app.lib.theme.applyUiBodyTypeface
+import io.legado.app.lib.theme.applyUiTitleTypeface
+import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.widget.menu.SurfacePopupMenu
 import io.legado.app.ui.widget.text.AccentTextView
 import io.legado.app.utils.dpToPx
+import java.util.WeakHashMap
 
 /**
  * The common modal-content policy: a dialog has no title bar.
@@ -31,6 +34,8 @@ import io.legado.app.utils.dpToPx
 internal fun View.applyHeaderlessDialogChrome() {
     findToolbars().forEach(::moveToolbarActionsToBottom)
 }
+
+private const val TAG_HEADERLESS_TITLE = "headerless_dialog_title"
 
 private fun View.findToolbars(): List<Toolbar> {
     val result = mutableListOf<Toolbar>()
@@ -53,6 +58,7 @@ private fun moveToolbarActionsToBottom(toolbar: Toolbar) {
         toolbar.visibility = View.GONE
         return
     }
+    mirrorToolbarTitle(toolbar)
     val actions = mutableListOf<Pair<CharSequence, (View) -> Unit>>()
     toolbar.children.filterIsInstance<ImageButton>().firstOrNull()?.let { navigation ->
         val label = toolbar.navigationContentDescription?.takeIf { it.isNotBlank() }
@@ -119,6 +125,37 @@ private fun moveToolbarActionsToBottom(toolbar: Toolbar) {
     }
     host.addBottomActionRow(actionRow)
 }
+
+/**
+ * 无头规则要求标题有业务语义时必须作为正文首行（AGENTS §4），
+ * 因此隐藏 Toolbar 前先把 title 镜像成同一样式的文本行，占原 Toolbar 的槽位；
+ * 存量代码仍写 `toolBar.title`，经 [Toolbar.headerlessTitle] 同步到镜像，避免改名扩散。
+ */
+private val titleMirrors = WeakHashMap<Toolbar, TextView>()
+
+private fun mirrorToolbarTitle(toolbar: Toolbar) {
+    val titleText = toolbar.title?.takeIf { it.isNotBlank() } ?: return
+    val parent = toolbar.parent as? ViewGroup ?: return
+    val titleView = TextView(toolbar.context).apply {
+        text = titleText
+        applyUiTitleTypeface(toolbar.context)
+        setTextColor(toolbar.context.primaryTextColor)
+        textSize = 20f
+        includeFontPadding = false
+        setPadding(24.dpToPx(), 22.dpToPx(), 24.dpToPx(), 4.dpToPx())
+        tag = TAG_HEADERLESS_TITLE
+    }
+    parent.addView(titleView, parent.indexOfChild(toolbar), toolbar.layoutParams)
+    titleMirrors[toolbar] = titleView
+}
+
+/** 存量对话框在 chrome 安装后仍需更新标题时，用这个入口写，镜像同步可见。 */
+var Toolbar.headerlessTitle: CharSequence
+    get() = title
+    set(value) {
+        title = value
+        titleMirrors[this]?.text = value
+    }
 
 private fun findActionHost(toolbar: Toolbar): ViewGroup? {
     var current: View? = toolbar
