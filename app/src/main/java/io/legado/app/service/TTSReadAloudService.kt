@@ -855,8 +855,12 @@ class TTSReadAloudService : BaseReadAloudService() {
                 restoreOrRememberVoice(it)
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
+                retryingTtsInit = false
                 ttsInitWatchdogJob?.cancel()
-                play()
+                // 初始化可能发生在用户已暂停之后（重建引擎/冷启动），不能无条件续读。
+                if (!(isRun && pause)) {
+                    play()
+                }
             }
         } else {
             ttsInitWatchdogJob?.cancel()
@@ -1168,6 +1172,9 @@ class TTSReadAloudService : BaseReadAloudService() {
         override fun onStart(s: String) {
             runActiveUtteranceCallback(s) {
                 lastTtsCallbackAt = SystemClock.elapsedRealtime()
+                // 预加载队列中的段不会经过 speakCurrentParagraph，deadline 必须按本段长度重算，
+                // 否则紧跟长段的短段会按短段的阈值被误判无响应（回段首重读 → 二次超时跳段）。
+                armTtsStallWatchdog()
                 utteranceIndex(s)?.let { syncToUtteranceIndex(it) }
                 LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
                 textChapter?.let {

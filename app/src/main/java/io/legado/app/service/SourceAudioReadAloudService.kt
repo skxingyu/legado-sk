@@ -19,6 +19,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -121,6 +122,8 @@ class SourceAudioReadAloudService : BaseReadAloudService(), Player.Listener {
                 }
             }
             val resolved = result.getOrElse {
+                // 重入 play() 与 onDestroy 都会 cancel 本 job：取消不是播放失败。
+                if (it is CancellationException) return@launch
                 failPlayback(it)
                 return@launch
             }
