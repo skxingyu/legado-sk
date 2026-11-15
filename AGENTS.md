@@ -407,6 +407,10 @@ uiautomator2 / ADB
   - **webBook/导入**：并发分页取正文空 `res.body` 由 `!!` 改抛 `ContentEmptyException("并发分页获取正文失败：…")`；`legado://import/readConfig` 改为先 `alert` 确认再导入（新增字符串 `import_read_config`；⚠️ `alert` 的命名参数是 `message` 不是 `msg`）。
   - **验证**：`testAppReleaseUnitTest` 361 项 / 10 项既有失败同基线（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1）；`assembleAppRelease` 4m5s + `assembleAppSk2` 4m2s 成功（正式版 36,220,115 B、共存版 36,220,426 B；aapt `io.legado.app.c`/`io.legado.app.sk2` + 10125，apksigner 0）。
   - **模拟器回归（`emulator-5554`，10124→10125，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：BookmarkDialog（LinearLayout 根）标题「书签」+ 章节行正常；ContentEditDialog（ConstraintLayout 根）标题「星际：从清洁工开始」成为正文首行、内容不再盖住标题、底部动作行「保存/重置/拷贝所有」正常；中途无 FATAL。
+  - **真机回归（2026-11-15，两机均 10122→10125 跳版覆盖）**：
+    - 平板 `HA1KAPWG`：`firstInstallTime` 仍 `2026-10-30 14:00:50`；书签弹窗标题「书签」占首行 `[40,153][1560,290]`、章节名紧接其下；编辑内容弹窗（ConstraintLayout）标题在 `[0,98][1600,235]`、正文从 y=235 开始、底部 保存/重置/拷贝所有 齐全；离线缓存 Alert 标题为内容首行；朗读连读到 utterance 110、跨页 `跟随写显示 pos:4021`、速率校准 512 字/分，退桌面 12 秒仍在后台继续，点暂停后 `状态事件:3 isRun:true pause:true` + `act=pause` 且无新 utterance；`crash` buffer 本应用 0 条。
+    - 手机 `72a2b362`：`firstInstallTime` 仍 `2026-10-30 17:34:58`；书签弹窗标题「书签」`[44,138][1036,296]`、章节名紧接 y=296；`crash` 0 条，返回书架正常。
+    - ⚠️ 两机均**未跑**「退后台不杀当前章加载」的秒级卡点复现（时序修复，靠代码审查+模拟器覆盖）。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `60062bc718d3ce8c628fbce4561d918d`）+ 两个版本名包。10121–10124 旧包暂留，删前需作者确认（均从未发布）。
 
 - ✅ **10124（`3.26.111418c`）—— 历史交付，未发布**（review 的 P2 批次：朗读可见性 / MIME 判定 / 备份计时 / 网络重试 / zip 步进 / LIKE 转义）：
