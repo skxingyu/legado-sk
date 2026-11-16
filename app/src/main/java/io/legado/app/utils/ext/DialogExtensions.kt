@@ -429,13 +429,20 @@ fun Dialog.setLayoutWrapMaxHeight(
         val naturalPanelHeight = panelView.measuredHeight
         val maxContentHeight = maxPanelHeight - rootPadV
         if (naturalPanelHeight > maxContentHeight) {
-            val toolbar = panelView.getChildAt(0)
-            toolbar?.measure(
-                widthSpec,
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
-            val toolbarHeight = toolbar?.measuredHeight ?: 0
-            scrollLp.height = (maxContentHeight - toolbarHeight).coerceAtLeast(0)
+            // 内容区之外的部分 = 标题镜像 + 底部操作行等可见子项（GONE 的旧 Toolbar 不占位）。
+            // 不能假设 child0 就是 Toolbar：无头化后 child0 是标题镜像，按旧假设预留高度
+            // 会和实际布局差出一整行，末尾的操作行被挤出可视区域（10125 书源登录弹窗回归）。
+            val fixedHeight = panelView.children
+                .filter { it !== scrollView && it.visibility != View.GONE }
+                .sumOf { child ->
+                    child.measure(
+                        widthSpec,
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                    )
+                    val lp = child.layoutParams as? ViewGroup.MarginLayoutParams
+                    child.measuredHeight + (lp?.topMargin ?: 0) + (lp?.bottomMargin ?: 0)
+                }
+            scrollLp.height = (maxContentHeight - fixedHeight).coerceAtLeast(0)
             scrollView.layoutParams = scrollLp
             panelView.measure(
                 widthSpec,
