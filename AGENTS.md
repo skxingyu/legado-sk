@@ -207,6 +207,7 @@ $apk = 'C:\code\ai-code\legado-sk\app\build\outputs\apk\app\release\legado_sk_<v
 
 - 无头弹窗的统一策略只负责移除 `Toolbar` 并把菜单动作迁到标准底部操作区；不得以保留空白 Toolbar 伪装“无头”。移除 Toolbar 前必须核对布局测量：原来依赖 Toolbar 固定高度的 `0dp` / weight 内容区，要改成显式的“内容区 + 底部操作区”结构，否则 `wrap_content` Dialog 会塌缩。
 - 无头迁移器向 `ConstraintLayout` 加入底部操作区时，所有原先 `bottomToBottom=parent` 的内容必须统一改为约束到 footer 顶部；禁止仅增加 parent padding 伪造预留空间，否则滚动内容会与按钮重叠。`dialog_content_edit` 于 2026-08-15 以此规则完成回归。
+- ⚠️ **无头化改变了「面板第 0 个子项」的身份**：标题镜像插在 Toolbar 原槽位，任何按 `getChildAt(0)` / 固定 index 假设旧结构的代码都会错位（10126：`setLayoutWrapMaxHeight` 按第 0 项预留高度，结果把底部操作行挤出弹窗；改为累加所有可见固定子项）。给无头对话框改布局或改测量时，按「可见子项的实际职责」遍历，不要按位置下标猜。
 - 标准 `AlertDialog` 的标题不能直接追加到 `contentPanel`：该面板是叠放容器，会与选择列表重叠。统一表面路径应将标题和原内容重组为垂直内容列后再隐藏 `topPanel`，使标题成为同一玻璃面上的正文首行，而非独立顶栏。使用 `setCustomView` 时内容位于 `customPanel`；标题迁移后只能保持 `customPanel` 或 `contentPanel` 之一作为中段，禁止额外启用另一个面板挤占 `buttonPanel` 的测量空间。缺少相应面板属于结构错误，应直接暴露，不能悄悄丢弃标题或遮住首项。
 
 ### UI 内核与浮层规范
@@ -396,11 +397,19 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10126` 递增**。
+> **下一次交付 versionCode 从 `10127` 递增**。
 
 ---
 
-- ✅ **10125（`3.26.111419c`）—— 当前交付，未发布**（无头标题镜像落地 + 退后台不杀当前章加载 + 导入确认）：
+- ✅ **10126（`3.26.111611c`）—— 当前交付，未发布**（修复无头化把登录弹窗底部操作行挤出可视区域）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `92e21932`。
+  - **根因**：`DialogExtensions.resolveFloatingDialogWidth` 同文件的 `Dialog.setLayoutWrapMaxHeight` 假设「面板第 0 个子项就是 Toolbar」，用它的实测高度给内容区预留空间。10125 无头化把标题镜像插到 Toolbar 原槽位（仍是 index 0），于是预留高度按镜像算、而 GONE 的 Toolbar 实际不占位 —— 差出一整行，末尾的底部操作行（`确认 / 查看登录头 / 删除登录头 / 日志`）被推到弹窗可视区之外；平板完全看不见，手机只露半截。
+  - **修法**：改为累加「除滚动容器外、所有可见子项（标题镜像 + 底部操作行）的实测高度与 margin」后再给滚动区设高度，不再假设 index 0 是谁。`setLayoutWrapMaxHeight` 全库只有 `SourceLoginDialog` 一个调用点（`SourceLoginDialog.kt:302`），影响面收敛。
+  - **验证**：平板 `HA1KAPWG` 10125（复现：书源详情 → 更多菜单 → 登录，对话框止于「大小: text」、无操作行）→ 10126 修复后操作行回到 `[674,2169][1530,2289]`，滚动内容时固定不动；退出无 FATAL。模拟器 10125→10126 覆盖（`firstInstallTime` 仍 `2026-10-15 18:55:12`）启动/书架正常。
+  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `ddad888c17a08181e6e9dd2cca4d8193`）+ `legado_sk_3.26.111611c_10126_arm64-v8a.apk`（36,220,129 B）+ `…_（共存版）.apk`（36,220,246 B，md5 `de7476e3b675cd8cc1d47ee1b7e35667`）。apksigner 0、`io.legado.app.c`/10126 已核对。
+  - ⚠️ 手机 `72a2b362` 在本次安装时已断开 adb（`device not found`），未装 10126。
+
+- ✅ **10125（`3.26.111419c`）—— 历史交付，未发布**（无头标题镜像落地 + 退后台不杀当前章加载 + 导入确认）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。五个独立提交：`6bb7627e` 标题镜像、`92682bc6` 退后台、`4eb90b5a`+`ffe7e363` webBook/导入确认、`701128be`→`f56637f6`→`28ca3fc8`→`6b354e35` 标题镜像四轮修复（Device 实测逐步收敛）。
   - **无头标题镜像（HeaderlessDialogChrome）**：`applyHeaderlessDialogChrome` 隐藏 Toolbar 前把 `toolbar.title` 镜像成同样式 TextView（`createTitleMirror`，UiTitle 字体/20sp/primaryTextColor，占 Toolbar 原槽位）；新增扩展 `var Toolbar.headerlessTitle` 供 chrome 之后才拿到标题的对话框后补/同步（`ContentEditDialog` 章节内容异步就绪后 `upTitle()`）；ConstraintLayout 宿主额外执行 `reanchorToolbarChildren`——把原约束到 `tool_bar` 的子项（rv_content 等）重锚到镜像（AGENTS §4 同类规则）；⚠️ 两个必踩坑已有回归性结论：① 镜像 TextView 必须 `id = View.generateViewId()`，否则 `ConstraintSet.clone` 报「All children of ConstraintLayout must have ids」打开即 FATAL；② 不能复用 `toolbar.layoutParams` 实例挂到镜像——两个 child 共享同一 LayoutParams 会让 ConstraintLayout 把镜像解析到 toolbar 的（已 GONE 折叠）widget，镜像 0×0 且重锚定失效，必须 `titleLayoutParams()` 生成独立副本（`copyConstraintsFrom` 在 constraintlayout 2.2.1 不存在，改为逐字段拷贝锚点与 bias）。
   - **退后台不再杀当前章加载**：`ReadBook.cancelPreDownloadTask()` / `ReadManga.kt` 删掉 `downloadScope.coroutineContext.cancelChildren()`，只保留 `preDownloadTask?.cancel()`——当前章正文加载也跑在共享 `downloadScope`，切章后立刻退后台会把加载一起取消。
@@ -422,18 +431,6 @@ uiautomator2 / ADB
   - **验证**：`testAppReleaseUnitTest` 仍为 356 项 / 10 项既有失败（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1，见 10123 条），新增 `AudioMimeMatchTest` 5 项通过。`assembleAppRelease` 4m28s + `assembleAppSk2` 4m41s 成功（正式版 36,217,621 B、共存版 36,217,682 B；aapt `io.legado.app.c`/`io.legado.app.sk2` + 10124，apksigner 0）。
   - **模拟器回归（`emulator-5554`，10123→10124，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：启动无 FATAL；开书起播朗读、`onStart` 与位置发布正常推进（ch44 pos 0→9）；crash buffer 无本应用 FATAL。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `73b8c8f6823f3fd626d3f7b4e2440439`）+ `legado_sk_3.26.111418c_10124_arm64-v8a.apk` + `…_（共存版）.apk`。10121/10122/10123 旧包暂留，删前需作者确认（均从未发布或已被取代）。
-
-- ✅ **10123（`3.26.111418c`）—— 历史交付，未发布**（全库 review 后的四批修复：数据安全 / 密钥外泄 / 朗读状态 / 内核卡死）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。四个独立提交：`133f4488` 安全、`a9bf8001` 备份、`42e55c6b` 朗读、`cfbfe278` 内核。
-  - **起因**：作者要求对全库做一次充分 review（m02089），5 个只读子代理按朗读/TTS、脚本引擎、备份恢复、阅读内核、UI 表面五域并行审计，主代理逐条回源码复核后汇总到 `test-records/review-10122/汇总-10122.md`；作者全选修复（m02236）。
-  - **安全**：`BackupConfig.ignorePrefKeys` 加 `PreferKey.ttsEngineV2SettingsJson`（脚本引擎条目明文存 password 类型 API Key + 整段脚本，原来随备份 zip/WebDAV 外泄）；`defaultData/tts/next_edge_proxy.js` 由 `@enabled true` 改 `false`，描述改为「第三方明文 HTTP 中转调试模板」（存量已启用用户不受影响）。
-  - **数据安全**：恢复侧补 `illustrations` 目录（`Restore.backgroundAssetDirNames` 之外的 `extraAssetDirNames`）；书架备份项补 `bookIllustration.json` + `illustrations`；自动备份（定时与书架变动两条路径）统一走 `decideBackupScope`，全不勾时中止，不再用空 zip 覆盖唯一备份；`autoBack` 增加 `Restore.isRestoring` 守卫，`BackupConfigFragment` 的下载/解压/选项目阶段也置位；SAF 与本地 `copyBackup` 改「先写 `<name>.part` 再改名」，中断最多留残片（模拟器实测 rename 被 MediaProvider 拒绝后字节复制兜底，`backup.zip` 正常 4.2 MB、无 `.part` 残留）。
-  - **朗读**：`onTtsInit` 成功时清 `retryingTtsInit` 并在 `isRun && pause` 时跳过 `play()`（初始化回调落在暂停之后不再把朗读拉起）；`onStart` 重算看门狗 deadline（预加载段不走 `speakCurrentParagraph`，原来沿用前一段的短 deadline）；`SourceAudioReadAloudService` 把 `CancellationException` 当取消而非播放失败。
-  - **内核**：`WebBook.getChapterListAwait` 的 `chapterListJobs.remove` 移入 `finally`（取消/异常留下的失败 Deferred 曾让同一 key 永远命中「正在加载」）；`CacheManager` 内存层记录 deadline 并新增顶层判据 `cacheDeadlineExpired(deadline, now)`，与数据库层共用（带 `saveTime` 的条目过期后不再返回旧令牌），新增 `CacheDeadlineTest` 4 项。
-  - **验证**：`compileAppReleaseKotlin` 通过；`testAppReleaseUnitTest` 356 项中 10 项失败，全部位于未改动文件且为**既有失败**（`CacheTaskStoreTest` 9 项 `LiveEventBusCore` 初始化 `ExceptionInInitializerError`；`ReadBookConfigTest.sanitize_clampsUnsafeLineSpacing` 期望 10 实得 0，代码 `coerceIn(0, 20)` 自 2026-08-10 初始化基线起即如此）。新增 `CacheDeadlineTest` 4 项与 `TtsStallDeadlineTest` 5 项均通过。`assembleAppRelease` 4m45s + `assembleAppSk2` 4m17s 成功（正式版 36,217,031 B、共存版 36,216,979 B；aapt 包名/版本正确，apksigner 0）。
-  - **模拟器回归（`emulator-5554`，10122→10123，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：启动无 FATAL；手动备份成功；长按「恢复」走本地备份，恢复项目对话框正常、完成后无崩溃；朗读 `TTSReadAloudService` 起播、位置推进到 ch43 pos293、速率校准 452/min。
-  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `eae4b45e5f3a2cb1ce1024c1ba3546f4`）+ 两个版本名包；10121/10122 旧包暂留（10121 从未发布，删除需作者确认）。
-
 
 ### 7.1 环境快照（已逐项核对）
 
