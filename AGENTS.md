@@ -397,17 +397,28 @@ uiautomator2 / ADB
 > - ⚠️ **它的 versionCode 区间（10066–10072）不作为递增基线**，因为该分支未合并回 main。
 > - 若作者明确点名该分支并要求在其上工作，那是**本次对话的一次性例外**，做完仍回到「默认 main」。
 >
-> **下一次交付 versionCode 从 `10127` 递增**。
+> **下一次交付 versionCode 从 `10128` 递增**。
 
 ---
 
-- ✅ **10126（`3.26.111611c`）—— 当前交付，未发布**（修复无头化把登录弹窗底部操作行挤出可视区域）：
+- ✅ **10127（`3.26.111613c`）—— 当前交付，未发布**（书架标签行记住上次选中的分组）：
+  - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `d783babd`。
+  - **问题**：在「番茄」标签下退出阅读、重进书架仍停在「番茄」（同会话复现不了），但**冷启动**（force-stop 后重开）会跳回「全部」。`AppConfig.saveTabPosition` 只持久化主分类下标；`BookshelfFragment1.selectedSecondaryGroupId` 纯内存。`selectSavedGroup()` → `switchToPrimaryGroup()` 无条件 `selectSecondaryGroup(defaultSecondaryGroupId())`，无 `defaultShow` 分组时落到 `BookGroup.IdAll`（全部）。
+  - **修法**：`PreferKey.bookshelfSecondaryGroupId` + `AppConfig.bookshelfSecondaryGroupId: Long`（默认 `0L` = 从未保存，系统分组为负、自建分组从 1 起，0 不可能合法）；`selectedSecondaryGroupId` 改自定义 setter 统一落盘；`switchToPrimaryGroup(index, restoreSecondaryId: Long? = null)`，只在冷启动/分组列表变化（`selectSavedGroup`）传原始 pref 值，主动点主分类仍走默认，保住「默认显示」优先级。
+  - ⚠️ **必踩坑（审查发现，勿改回）**：可见性判定必须放在 `renderSecondaryGroups()` **之后**——它内部 `rebuildSecondaryGroupIds()` 才按新主分类重建 `secondaryGroupIds`；提前判定会用上一个主分类的列表，`selectSecondaryGroup` 对其不在列表的 id 直接 `return`，于是静默失效并顺手把兜底值写回 pref（等于永不恢复）。
+  - **单测**：`app/src/test/java/io/legado/app/ui/main/bookshelf/SecondaryGroupRestoreTest.kt` 4 项（顶层纯函数 `resolveSavedSecondaryGroupId(saved, visible, fallback)`，避开 `AppConfig` 初始化依赖 `appCtx`），全通过。
+  - ⚠️ **未修（pre-existing，已登记）**：`MainActivity.kt:852-853` 侧栏把 `show` 列表下标写进 `saveTabPosition`（该值在书架被当主分类下标用），侧栏点过分组后冷启动可能落到错误主分类。
+  - **验证**：`testAppReleaseUnitTest` 365 项 / 10 项既有失败（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1，与 10125 同基线，无新增）。平板 `HA1KAPWG` 10126→10127（`firstInstallTime` 仍 `2026-10-30 14:00:50`）：点「番茄」→ force-stop → 冷启动仍选中「番茄」✅；随后恢复原状「全部」。模拟器 `emulator-5554`（`firstInstallTime` 仍 `2026-10-15 18:55:12`，pref 未保存过）：冷启动落「全部」，crash 0 条。未跑：分组被隐藏/删除后的回退（由纯函数单测覆盖）。
+  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `ed0a94a6158df29fd91f97052294103e`）+ `legado_sk_3.26.111613c_10127_arm64-v8a.apk`（36,220,915 B）+ `…_（共存版）.apk`（36,220,708 B）。aapt `io.legado.app.c`/`io.legado.app.sk2` + 10127，apksigner 0。
+  - **手机 `72a2b362`**：10126 已于 2026-11-16 补装（`firstInstallTime` 仍 `2026-10-30 17:34:58`），10127 尚未装（作者要求装包时再装）。
+
+- ✅ **10126（`3.26.111611c`）—— 历史交付，未发布**（修复无头化把登录弹窗底部操作行挤出可视区域）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。提交 `92e21932`。
   - **根因**：`DialogExtensions.resolveFloatingDialogWidth` 同文件的 `Dialog.setLayoutWrapMaxHeight` 假设「面板第 0 个子项就是 Toolbar」，用它的实测高度给内容区预留空间。10125 无头化把标题镜像插到 Toolbar 原槽位（仍是 index 0），于是预留高度按镜像算、而 GONE 的 Toolbar 实际不占位 —— 差出一整行，末尾的底部操作行（`确认 / 查看登录头 / 删除登录头 / 日志`）被推到弹窗可视区之外；平板完全看不见，手机只露半截。
   - **修法**：改为累加「除滚动容器外、所有可见子项（标题镜像 + 底部操作行）的实测高度与 margin」后再给滚动区设高度，不再假设 index 0 是谁。`setLayoutWrapMaxHeight` 全库只有 `SourceLoginDialog` 一个调用点（`SourceLoginDialog.kt:302`），影响面收敛。
   - **验证**：平板 `HA1KAPWG` 10125（复现：书源详情 → 更多菜单 → 登录，对话框止于「大小: text」、无操作行）→ 10126 修复后操作行回到 `[674,2169][1530,2289]`，滚动内容时固定不动；退出无 FATAL。模拟器 10125→10126 覆盖（`firstInstallTime` 仍 `2026-10-15 18:55:12`）启动/书架正常。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `ddad888c17a08181e6e9dd2cca4d8193`）+ `legado_sk_3.26.111611c_10126_arm64-v8a.apk`（36,220,129 B）+ `…_（共存版）.apk`（36,220,246 B，md5 `de7476e3b675cd8cc1d47ee1b7e35667`）。apksigner 0、`io.legado.app.c`/10126 已核对。
-  - ⚠️ 手机 `72a2b362` 在本次安装时已断开 adb（`device not found`），未装 10126。
+  - 手机 `72a2b362`：本次安装时 adb 掉线，后于同日补装成功（`firstInstallTime` 仍 `2026-10-30 17:34:58`）。⚠️ 手机只做装包，不在真机上逐项翻界面验证（作者明确要求）。
 
 - ✅ **10125（`3.26.111419c`）—— 历史交付，未发布**（无头标题镜像落地 + 退后台不杀当前章加载 + 导入确认）：
   - 分支 **main**。**无 DB 迁移**（版本仍 117）。五个独立提交：`6bb7627e` 标题镜像、`92682bc6` 退后台、`4eb90b5a`+`ffe7e363` webBook/导入确认、`701128be`→`f56637f6`→`28ca3fc8`→`6b354e35` 标题镜像四轮修复（Device 实测逐步收敛）。
@@ -421,16 +432,6 @@ uiautomator2 / ADB
     - 手机 `72a2b362`：`firstInstallTime` 仍 `2026-10-30 17:34:58`；书签弹窗标题「书签」`[44,138][1036,296]`、章节名紧接 y=296；`crash` 0 条，返回书架正常。
     - ⚠️ 两机均**未跑**「退后台不杀当前章加载」的秒级卡点复现（时序修复，靠代码审查+模拟器覆盖）。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `60062bc718d3ce8c628fbce4561d918d`）+ 两个版本名包。10121–10124 旧包暂留，删前需作者确认（均从未发布）。
-
-- ✅ **10124（`3.26.111418c`）—— 历史交付，未发布**（review 的 P2 批次：朗读可见性 / MIME 判定 / 备份计时 / 网络重试 / zip 步进 / LIKE 转义）：
-  - 分支 **main**。**无 DB 迁移**（版本仍 117）。四个独立提交：`5da72029` 朗读可见性、`939f0f53` 脚本引擎、`19571044` 备份计时、`b1bca968` 网络与解析。⚠️ 与 10123 **同 versionName**（同一小时内编译，按 `MMddHH` 只能相同，靠 `versionCode` 区分）。
-  - **朗读**：`BaseReadAloudService` 的 `isRun` / `pause` / `loading` / `timeMinute` / `timeChapter` 加 `@Volatile`（IO 线程写、主线程读）；`TTSReadAloudService.pauseReadAloud()` 撤销 `ttsInitWatchdogJob`（暂停期间不再重建引擎、不再二次超时 toast）。
-  - **脚本引擎**：`requireAudioStream` 改按 MIME 等价类比对（忽略大小写与参数、`x-` 前缀、`mp3↔mpeg`、`wave↔wav`），不再用 `matches(Regex)` 把正常音频判成错误（新增 `AudioMimeMatchTest` 5 项）；`resolveActiveVoiceId` 的回退音色跳过 `disabledVoiceIds`，与 `activeVoice()` 状态一致。
-  - **备份**：`LocalConfig.lastBackup` 由「备份动作之前」移到「本地落盘 + WebDAV 上传成功之后」（失败一次不再让 24 小时内的自动备份全部停摆）；备份后的 `AppWebDav.upBgs` 用 `runCatching` 包裹，附带动作失败不再把已成功的备份报成「备份出错」。
-  - **网络/解析**：`OkHttpUtils.newCallResponse` 重试前 `close()` 上一个 Response，且只对 `5xx`/`408`/`429` 重试（4xx 与业务错误不再重放，避免放大副作用与计费）；`JsExtensions.getZipByteArrayContent` 删掉循环体里多余的 `entry = zis.nextEntry`（原来只检查奇数条目）；`CacheDao.deleteSourceVariables` 的 LIKE 加 `escape '\'` 并转义 `:key` 中的 `\`/`%`/`_`（URL 里的 `_` 曾是通配符，可能删到别的书源登录变量）；`AnalyzeUrl.setServerID` / `setWebViewDelayTime` 改 `toLongOrNull()`（规则里写错数字不再抛 `NumberFormatException`）。
-  - **验证**：`testAppReleaseUnitTest` 仍为 356 项 / 10 项既有失败（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1，见 10123 条），新增 `AudioMimeMatchTest` 5 项通过。`assembleAppRelease` 4m28s + `assembleAppSk2` 4m41s 成功（正式版 36,217,621 B、共存版 36,217,682 B；aapt `io.legado.app.c`/`io.legado.app.sk2` + 10124，apksigner 0）。
-  - **模拟器回归（`emulator-5554`，10123→10124，`firstInstallTime` 仍 `2026-10-15 18:55:12`）**：启动无 FATAL；开书起播朗读、`onStart` 与位置发布正常推进（ch44 pos 0→9）；crash buffer 无本应用 FATAL。
-  - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `73b8c8f6823f3fd626d3f7b4e2440439`）+ `legado_sk_3.26.111418c_10124_arm64-v8a.apk` + `…_（共存版）.apk`。10121/10122/10123 旧包暂留，删前需作者确认（均从未发布或已被取代）。
 
 ### 7.1 环境快照（已逐项核对）
 
