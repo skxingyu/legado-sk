@@ -410,6 +410,7 @@ uiautomator2 / ADB
   - ⚠️ **未修（pre-existing，已登记）**：`MainActivity.kt:852-853` 侧栏把 `show` 列表下标写进 `saveTabPosition`（该值在书架被当主分类下标用），侧栏点过分组后冷启动可能落到错误主分类。
   - **验证**：`testAppReleaseUnitTest` 365 项 / 10 项既有失败（`CacheTaskStoreTest` 9 + `ReadBookConfigTest` 1，与 10125 同基线，无新增）。平板 `HA1KAPWG` 10126→10127（`firstInstallTime` 仍 `2026-10-30 14:00:50`）：点「番茄」→ force-stop → 冷启动仍选中「番茄」✅；随后恢复原状「全部」。模拟器 `emulator-5554`（`firstInstallTime` 仍 `2026-10-15 18:55:12`，pref 未保存过）：冷启动落「全部」，crash 0 条。未跑：分组被隐藏/删除后的回退（由纯函数单测覆盖）。
   - **产物**：`release/legado-sk-arm64-v8a.apk`（md5 `ed0a94a6158df29fd91f97052294103e`）+ `legado_sk_3.26.111613c_10127_arm64-v8a.apk`（36,220,915 B）+ `…_（共存版）.apk`（36,220,708 B）。aapt `io.legado.app.c`/`io.legado.app.sk2` + 10127，apksigner 0。
+  - **`release/` 只留 10127**：2026-11-16 作者指示清理本地包，10121–10126 已删除（全部从未发布 Release，需回溯只能重编）。
   - **手机 `72a2b362`**：2026-11-16 13:47 覆盖安装 10127（`firstInstallTime` 仍 `2026-10-30 17:34:58`，`lastUpdateTime` 13:47:20），`crash` buffer 本应用 0 条。⚠️ 手机只装包、不翻界面验证（作者明确要求）。
 
 - ✅ **10126（`3.26.111611c`）—— 历史交付，未发布**（修复无头化把登录弹窗底部操作行挤出可视区域）：
