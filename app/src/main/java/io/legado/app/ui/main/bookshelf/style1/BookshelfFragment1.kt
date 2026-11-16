@@ -52,6 +52,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private val fragmentMap = hashMapOf<Long, BooksFragment>()
     private var secondaryGroupIds = emptyList<Long>()
     private var selectedSecondaryGroupId = 0L
+        set(value) {
+            field = value
+            // 0 不是有效分组 id（系统分组为负、自建分组从 1 起），跳过未初始化的赋值
+            if (value != 0L) AppConfig.bookshelfSecondaryGroupId = value
+        }
     private val groupBooksCache = hashMapOf<Long, List<Book>>()
     private var currentGroupIndex = 0
 
@@ -190,7 +195,10 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 return@post
             }
             val target = AppConfig.saveTabPosition.coerceIn(0, primaryGroups.lastIndex)
-            switchToPrimaryGroup(target)
+            switchToPrimaryGroup(
+                target,
+                restoreSecondaryId = AppConfig.bookshelfSecondaryGroupId
+            )
         }
     }
 
@@ -340,7 +348,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         anchor.showPopupMenu(actions)
     }
 
-    private fun switchToPrimaryGroup(index: Int) {
+    private fun switchToPrimaryGroup(index: Int, restoreSecondaryId: Long? = null) {
         if (index !in primaryGroups.indices) return
         currentGroupIndex = index
         AppConfig.saveTabPosition = index
@@ -348,7 +356,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         fragmentMap.entries.removeAll { it.value.groupId != newGroupId }
         adapter.notifyDataSetChanged()
         renderSecondaryGroups()
-        selectSecondaryGroup(defaultSecondaryGroupId(), smooth = false)
+        // 可见性必须等本主分类的标签列表重建之后再判，否则用的是上一个主分类的列表
+        val secondaryId = restoreSecondaryId
+            ?.let { resolveSavedSecondaryGroupId(it, secondaryGroupIds, defaultSecondaryGroupId()) }
+            ?: defaultSecondaryGroupId()
+        selectSecondaryGroup(secondaryId, smooth = false)
         updateHeaderTitle()
         updateSelectAllButtonVisibility()
     }
@@ -535,3 +547,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     }
 }
+
+/**
+ * 恢复上次选中的二级分组：保存的 id 在当前标签列表里就沿用，否则退回默认分组。
+ * 纯函数是为了能被 JVM 单测直接断言（[AppConfig] 初始化依赖 appCtx，测试里不可求值）。
+ */
+internal fun resolveSavedSecondaryGroupId(
+    saved: Long,
+    visible: List<Long>,
+    fallback: Long
+): Long = saved.takeIf { it in visible } ?: fallback

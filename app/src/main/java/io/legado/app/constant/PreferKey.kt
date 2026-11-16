@@ -224,6 +224,7 @@ object PreferKey {
     const val cleanCache = "cleanCache"
     const val cacheManage = "cacheManage"
     const val saveTabPosition = "saveTabPosition"
+    const val bookshelfSecondaryGroupId = "bookshelfSecondaryGroupId"
     const val fontFolder = "fontFolder"
     const val backupPath = "backupUri"
     const val restoreIgnore = "restoreIgnore"

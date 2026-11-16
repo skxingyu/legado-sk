@@ -314,6 +314,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.saveTabPosition, value)
         }
 
+    /** 书架标签行（二级分组）上次选中的分组 id；0 表示从未保存（系统分组为负、自建分组从 1 起）。 */
+    var bookshelfSecondaryGroupId: Long
+        get() = appCtx.getPrefLong(PreferKey.bookshelfSecondaryGroupId, 0L)
+        set(value) {
+            appCtx.putPrefLong(PreferKey.bookshelfSecondaryGroupId, value)
+        }
+
     var bookExportFileName: String?
         get() = appCtx.getPrefString(PreferKey.bookExportFileName)
         set(value) {
