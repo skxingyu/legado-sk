@@ -33,6 +33,7 @@ update.patch
 __pycache__/
 tools/android-dev/bin/
 test-records/
+.pi/
 .dsh-vision-toolkit/
 .dsh/
 # 外部 agent 工具在本机留下的工作目录（非本项目产物，不推送）
